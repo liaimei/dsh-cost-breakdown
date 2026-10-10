@@ -45,7 +45,7 @@ the sidebar panel and the overview page):
 | Section | Content |
 |---|---|
 | Figure strip | Total / today / session count / peak share, each with a secondary figure |
-| Daily spend | One stacked bar per day (**peak = red, off-peak = green**), scaled to the window's maximum; hover shows that day's amount |
+| Daily spend | **One column per day of the selected window** (7 for a 7-day window, 30 for a 30-day one), with days that have no spend left blank; each column is a peak/off-peak stack (**peak = red, off-peak = green**) read against the y-axis; hover shows that day's amount |
 | Sessions | Newest activity first: date, requests, tokens and cost per session; descendants are tagged |
 
 - **Range**: last 7 days / 30 days / all (default 30, capped at 365).

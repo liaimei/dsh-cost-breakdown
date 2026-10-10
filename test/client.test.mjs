@@ -41,9 +41,11 @@ function loadClient(data = {}, observers = {}) {
       calls.push(url);
       // A payload may be given directly or as a thunk, so a test can vary the
       // response over time (a period that flips mid-test, for instance).
-      const source_ = url.includes('/status')
-        ? (data.status ?? { ok: true, value: {} })
-        : (data.session ?? { ok: true, value: null });
+      const source_ = url.includes('/overview')
+        ? (data.overview ?? { ok: true, value: null })
+        : url.includes('/status')
+          ? (data.status ?? { ok: true, value: {} })
+          : (data.session ?? { ok: true, value: null });
       const body = typeof source_ === 'function' ? source_() : source_;
       return { ok: true, status: 200, json: async () => body };
     },
@@ -1435,4 +1437,158 @@ test('the child card shares the other cards chrome', () => {
     'the child card takes the descendant hue',
   );
   assert.ok(source.includes('.dcb-childRow{'), 'child rows stack as label + share bar');
+});
+
+// ---------------------------------------------------------------------------
+// Account overview page
+// ---------------------------------------------------------------------------
+
+/** One day of overview data. */
+const day = (date, cost, peakShare, requests = 10) => ({
+  date,
+  cost,
+  requests,
+  byPeriod: { peak: cost * peakShare, offPeak: cost * (1 - peakShare) },
+  tokens: { input: 1000, cacheRead: 9000, output: 100, reasoning: 0, total: 10100 },
+});
+
+/** An overview payload carrying only the given days. */
+const overviewWith = (days, sessions = []) => ({
+  ok: true,
+  value: {
+    days,
+    sessions,
+    totals: {
+      cost: days.reduce((sum, d) => sum + d.cost, 0),
+      requests: days.reduce((sum, d) => sum + d.requests, 0),
+      unpriced: 0,
+      byPeriod: {
+        peak: days.reduce((sum, d) => sum + d.byPeriod.peak, 0),
+        offPeak: days.reduce((sum, d) => sum + d.byPeriod.offPeak, 0),
+      },
+      tokens: { input: 1000, cacheRead: 9000, output: 100, reasoning: 0, total: 10100 },
+    },
+    windowDays: 30,
+    since: Date.now() - 30 * 86_400_000,
+    sessionsRead: sessions.length,
+    sessionsSkipped: 0,
+    truncated: false,
+    missing: 0,
+    elapsedMs: 12,
+  },
+});
+
+/** Render the account overview page from the bundle. */
+async function renderOverview(data) {
+  const client = loadClient(data);
+  const page = client.slots.find((slot) => slot.options.name === 'main');
+  assert.ok(page !== undefined, 'the overview page must register into `main`');
+  return client.renderComponent(page.component, { t: (key) => key });
+}
+
+/** Every host element of one class in a rendered tree. */
+function findByClass(client, tree, className) {
+  return client.findAllByType(tree, 'div').filter((node) => String(node.props?.className ?? '').includes(className));
+}
+
+test('the overview bar chart plots the whole window, not only days with data', async () => {
+  // The regression: rendering only the days the host returned made `flex:1` give
+  // two bars half the width each, so a 2-day history drew as two huge slabs and
+  // every empty day between them vanished instead of reading as zero.
+  const twoDays = [day('2026-10-09', 12, 0.96), day('2026-10-10', 25, 0)];
+  const client = loadClient({ overview: overviewWith(twoDays) });
+  const page = client.slots.find((slot) => slot.options.name === 'main');
+  const tree = await client.renderComponent(page.component, { t: (key) => key });
+
+  const wraps = findByClass(client, tree, 'dcb-ovBarWrap');
+  assert.ok(wraps.length > 2, `the chart must fill the window (got ${wraps.length} columns)`);
+  // Empty days keep their column but draw no bar, so the axis stays evenly spaced.
+  const empty = findByClass(client, tree, 'dcb-ovBarWrapEmpty');
+  assert.equal(empty.length, wraps.length - 2, 'exactly the days without data are marked empty');
+
+  // Axis ticks must match the columns one for one, or bars and labels drift apart.
+  const axis = findByClass(client, tree, 'dcb-ovAxis');
+  assert.equal(axis.length, 1, 'the axis exists');
+  assert.equal((axis[0].kids ?? []).length, wraps.length, 'one axis tick per bar column');
+});
+
+test('the overview chart labels every bar column so gaps read as zero', async () => {
+  // A single day of data in a 30-day window: the axis must still be dated, or the
+  // one bar would look like it belonged to an untitled span. The translate seat
+  // here is an identity function, so every label reads as its own key — assert on
+  // structure (one tick per column, ends named) rather than on translated text.
+  const client = loadClient({ overview: overviewWith([day('2026-10-10', 5, 1)]) });
+  const page = client.slots.find((slot) => slot.options.name === 'main');
+  const tree = await client.renderComponent(page.component, { t: (key) => key });
+
+  const wraps = findByClass(client, tree, 'dcb-ovBarWrap');
+  const axis = findByClass(client, tree, 'dcb-ovAxis');
+  assert.equal(axis.length, 1, 'the axis exists');
+  const ticks = axis[0].kids ?? [];
+  assert.equal(ticks.length, wraps.length, 'every column has an axis tick');
+
+  // Only some ticks carry text — a label per day is unreadable past a week — but
+  // the window's last day must always be named.
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  const lastDate = `${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+  const labelled = ticks.map((tick) => client.textsOf(tick).join('')).filter(Boolean);
+  assert.ok(labelled.length >= 2, `the axis is dated (saw ${labelled.length} labels)`);
+  assert.ok(labelled.includes(lastDate), `the last day is named (saw ${labelled.join(', ')})`);
+});
+
+test('the overview table headers describe their own columns', async () => {
+  // The bug this guards: the header row reused keys from other cards, so the
+  // columns read "current pricing period" / "cost breakdown" over date and cost.
+  const sessions = [{
+    sessionId: 's1', title: 'demo', createdAt: Date.now(), lastActivity: Date.now(),
+    cost: 1.5, requests: 3, unpriced: 0,
+    tokens: { input: 10, cacheRead: 20, output: 30, reasoning: 0, total: 60 },
+    byPeriod: { peak: 1, offPeak: 0.5 }, isChild: false,
+  }];
+  const client = loadClient({ overview: overviewWith([day('2026-10-10', 5, 1)], sessions) });
+  const page = client.slots.find((slot) => slot.options.name === 'main');
+  const tree = await client.renderComponent(page.component, { t: (key) => key });
+  const headers = client.findAllByType(tree, 'th').map((node) => client.textsOf(node).join(''));
+  assert.deepEqual(headers, [
+    'overview.colSession',
+    'overview.colWhen',
+    'overview.colRequests',
+    'overview.colTokens',
+    'overview.colCost',
+  ]);
+});
+
+test('the overview marks descendants and says when the read was partial', async () => {
+  const sessions = [
+    { sessionId: 'root', title: 'parent', createdAt: 1, lastActivity: 2, cost: 2, requests: 2, unpriced: 0, tokens: { input: 1, cacheRead: 1, output: 1, reasoning: 0, total: 3 }, byPeriod: { peak: 2, offPeak: 0 }, isChild: false },
+    { sessionId: 'kid', title: 'child', createdAt: 1, lastActivity: 2, cost: 1, requests: 1, unpriced: 0, tokens: { input: 1, cacheRead: 1, output: 1, reasoning: 0, total: 3 }, byPeriod: { peak: 0, offPeak: 1 }, isChild: true },
+  ];
+  const payload = overviewWith([day('2026-10-10', 3, 0.5)], sessions);
+  payload.value.truncated = true;
+  payload.value.missing = 1;
+  const client = loadClient({ overview: payload });
+  const page = client.slots.find((slot) => slot.options.name === 'main');
+  const tree = await client.renderComponent(page.component, { t: (key) => key });
+
+  const texts = client.textsOf(tree);
+  assert.ok(texts.includes('overview.child'), 'a descendant row carries its marker');
+  assert.ok(
+    texts.some((text) => text.startsWith('overview.truncated')),
+    'a capped read is disclosed',
+  );
+  assert.ok(
+    texts.some((text) => text.startsWith('overview.missing')),
+    'unreadable logs are disclosed',
+  );
+});
+
+test('the overview degrades to a neutral page when the read fails', async () => {
+  const client = loadClient({ overview: { ok: false, value: null } });
+  const page = client.slots.find((slot) => slot.options.name === 'main');
+  const tree = await client.renderComponent(page.component, { t: (key) => key });
+  // It must still render the frame (title, ranges) rather than throwing or blanking.
+  const texts = client.textsOf(tree);
+  assert.ok(texts.includes('overview.title'), 'the page keeps its frame');
+  assert.ok(texts.includes('common.error'), 'the failure is explained in-band');
 });
