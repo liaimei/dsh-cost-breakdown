@@ -139,6 +139,50 @@ interface SessionReport {
   lineageTruncated: boolean;
 }
 
+/** One calendar day in the account overview. */
+interface OverviewDay {
+  date: string;
+  cost: number;
+  requests: number;
+  byPeriod: { peak: number; offPeak: number };
+  tokens: TokenBuckets;
+}
+
+/** One session row in the account overview. */
+interface OverviewSessionRow {
+  sessionId: string;
+  title: string | null;
+  createdAt: number;
+  lastActivity: number;
+  cost: number;
+  requests: number;
+  unpriced: number;
+  tokens: TokenBuckets;
+  byPeriod: { peak: number; offPeak: number };
+  /** True when this session is another's descendant (its own spend still counts). */
+  isChild: boolean;
+}
+
+/** The account overview payload: per-day totals plus the per-session breakdown. */
+interface OverviewPayload {
+  days: OverviewDay[];
+  sessions: OverviewSessionRow[];
+  totals: {
+    cost: number;
+    requests: number;
+    unpriced: number;
+    byPeriod: { peak: number; offPeak: number };
+    tokens: TokenBuckets;
+  };
+  windowDays: number;
+  since: number;
+  sessionsRead: number;
+  sessionsSkipped: number;
+  truncated: boolean;
+  missing: number;
+  elapsedMs: number;
+}
+
 /** Where the floating detail card is pinned, in viewport coordinates. */
 interface Anchor {
   left: number;
@@ -233,6 +277,7 @@ window.__ModuleLoader__.load({
     /** Must match the host half's route table. */
     const ROUTE_STATUS = '/api/dsh-cost-breakdown/status';
     const ROUTE_SESSION = '/api/dsh-cost-breakdown/session';
+    const ROUTE_OVERVIEW = '/api/dsh-cost-breakdown/overview';
 
     /** The right Sidebar tab this plugin contributes. */
     const TAB_ID = 'dsh-cost-breakdown';
@@ -244,6 +289,13 @@ window.__ModuleLoader__.load({
      * id is added beside them, whereas reusing one would replace that cell.
      */
     const DOCK_ID = 'dsh-cost-breakdown/cost';
+
+    /**
+     * The account overview's panel id. The same value keys the `main` page and
+     * its `sidebar.panellist` nav entry — that pairing is what the shell uses to
+     * resolve which page a nav row selects.
+     */
+    const OVERVIEW_ID = 'dsh-cost-breakdown/overview';
 
     /** The locale namespace; the framework synthesizes `t` for it. */
     const NS = 'dsh-cost-breakdown';
@@ -331,6 +383,34 @@ window.__ModuleLoader__.load({
       'common.note': '费用按 DSH 记录的 token 用量与官方价目表估算，仅供参考；实际扣费以平台账单为准。',
       'common.currency': '元',
       'common.unknown': '未知',
+      'overview.title': '费用总览',
+      'overview.guide': '整账号的花费：每天消耗多少、每个会话花了多少',
+      'overview.total': '总计',
+      'overview.today': '今日',
+      'overview.days': '天',
+      'overview.sessions': '会话',
+      'overview.requests': '请求',
+      'overview.peakShare': '峰占比',
+      'overview.daily': '每日消耗',
+      'overview.sessionList': '会话明细',
+      'overview.noData': '所选时间范围内没有计费记录。',
+      'overview.loading': '统计中…',
+      'overview.range7': '近 7 天',
+      'overview.range30': '近 30 天',
+      'overview.rangeAll': '全部',
+      'overview.reload': '重新统计',
+      'overview.truncated': '会话过多，仅统计了最近 {count} 个',
+      'overview.missing': '{count} 个会话的日志不可读，未计入',
+      'overview.elapsed': '统计耗时 {ms} 毫秒',
+      'overview.child': '衍生',
+      'overview.untitled': '未命名会话',
+      'overview.tokens': '{total} tok · 缓存 {cache}',
+      'overview.unpriced': '{count} 次请求未计价',
+      'overview.colSession': '会话',
+      'overview.colWhen': '最近活动',
+      'overview.colRequests': '请求',
+      'overview.colTokens': 'Token 用量',
+      'overview.colCost': '费用',
     };
 
     const DICT_EN = {
@@ -394,6 +474,34 @@ window.__ModuleLoader__.load({
       'common.note': 'Costs are estimated from DSH-recorded token usage and the official price table. Platform billing is authoritative.',
       'common.currency': 'CNY',
       'common.unknown': 'unknown',
+      'overview.title': 'Usage overview',
+      'overview.guide': 'Account-wide spend: what each day cost and what each session cost',
+      'overview.total': 'Total',
+      'overview.today': 'Today',
+      'overview.days': 'd',
+      'overview.sessions': 'sessions',
+      'overview.requests': 'requests',
+      'overview.peakShare': 'peak share',
+      'overview.daily': 'Daily spend',
+      'overview.sessionList': 'Sessions',
+      'overview.noData': 'No billed activity in the selected range.',
+      'overview.loading': 'Aggregating…',
+      'overview.range7': 'Last 7 days',
+      'overview.range30': 'Last 30 days',
+      'overview.rangeAll': 'All',
+      'overview.reload': 'Recount',
+      'overview.truncated': 'Too many sessions — only the newest {count} were counted',
+      'overview.missing': '{count} session log(s) were unreadable and are excluded',
+      'overview.elapsed': 'Aggregated in {ms} ms',
+      'overview.child': 'child',
+      'overview.untitled': 'Untitled session',
+      'overview.tokens': '{total} tok · cache {cache}',
+      'overview.unpriced': '{count} requests unpriced',
+      'overview.colSession': 'Session',
+      'overview.colWhen': 'Last activity',
+      'overview.colRequests': 'Requests',
+      'overview.colTokens': 'Tokens',
+      'overview.colCost': 'Cost',
     };
     //#endregion
 
@@ -548,6 +656,51 @@ body:not([data-ds-dark-theme]){
 --dcb-purple:#7e22ce;
 --dcb-pink:#be185d;
 }
+/* The account-wide overview page. It fills the central panel, so unlike the
+   sidebar cards it gets a centred, width-capped column rather than 100%. */
+.dcb-ovRoot{height:100%;overflow-y:auto;box-sizing:border-box;padding:20px 24px 32px;color:var(--dsw-alias-label-primary);font-size:var(--dsl-g-font-title,13px)}
+.dcb-ovInner{max-width:960px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+.dcb-ovHead{display:flex;align-items:baseline;flex-wrap:wrap;gap:10px}
+.dcb-ovTitle{font-size:16px;font-weight:700}
+.dcb-ovRanges{display:flex;gap:6px;margin-left:auto}
+.dcb-ovRange{border:1px solid var(--dsw-alias-border-l1);background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:11.5px;border-radius:7px;padding:3px 10px;cursor:pointer}
+.dcb-ovRange[aria-pressed=true]{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary);border-color:var(--dsw-alias-border-l2)}
+/* Headline figures: one tile per number, sized to share the row. */
+.dcb-ovStats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.dcb-ovStat{background:color-mix(in srgb,var(--dcb-accent,var(--dcb-blue)) 10%,transparent);border:1px solid color-mix(in srgb,var(--dcb-accent,var(--dcb-blue)) 24%,transparent);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:3px;min-width:0}
+.dcb-ovStatK{font-size:11px;color:var(--dsw-alias-label-secondary)}
+.dcb-ovStatV{font-size:22px;font-weight:700;line-height:1.15;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dcb-ovStatS{font-size:11px;color:var(--dsw-alias-label-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dcb-ovCard{background:var(--dsw-alias-bg-layer-1);border:1px solid var(--dsw-alias-border-l1);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:10px}
+.dcb-ovCardH{display:flex;align-items:baseline;gap:8px}
+.dcb-ovCardT{font-weight:650;font-size:12.5px}
+.dcb-ovCardS{font-size:11px;color:var(--dsw-alias-label-secondary);margin-left:auto}
+/* The daily chart: one column per day, stacked peak (red) over off-peak (green)
+   so a day's make-up is visible, not just its height. */
+.dcb-ovChart{display:flex;align-items:flex-end;gap:3px;height:120px;padding-top:4px}
+.dcb-ovBarWrap{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:flex-end;height:100%;position:relative}
+.dcb-ovBar{display:flex;flex-direction:column;justify-content:flex-end;border-radius:3px 3px 0 0;overflow:hidden;min-height:2px}
+.dcb-ovBarPeak{background:var(--dcb-red)}
+.dcb-ovBarOff{background:var(--dcb-green)}
+.dcb-ovBarWrap:hover .dcb-ovBar{outline:1px solid var(--dsw-alias-border-l2);outline-offset:1px}
+.dcb-ovAxis{display:flex;gap:3px;font-size:10px;color:var(--dsw-alias-label-secondary)}
+/* Axis labels are wider than one bar column, so they must be allowed to spill
+   into the neighbouring cells. Combining overflow:hidden with a flex:1 child
+   clipped the label 09-26 down to 09-2; centring the text over its own column
+   and letting it overflow keeps every label readable without widening columns. */
+.dcb-ovAxis span{flex:1;min-width:0;text-align:center;white-space:nowrap;overflow:visible}
+/* Sessions table: date, title, requests, tokens, cost. */
+.dcb-ovTable{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+.dcb-ovTable th{text-align:right;font-size:11px;font-weight:600;color:var(--dsw-alias-label-secondary);padding:4px 6px;border-bottom:1px solid var(--dsw-alias-border-l1);white-space:nowrap}
+.dcb-ovTable th:first-child,.dcb-ovTable td:first-child{text-align:left;padding-right:14px}
+.dcb-ovTable td{text-align:right;padding:6px;border-bottom:1px solid color-mix(in srgb,var(--dsw-alias-border-l1) 45%,transparent);font-size:11.5px}
+.dcb-ovTable tr:last-child td{border-bottom:none}
+.dcb-ovName{text-align:left;max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dcb-ovDate{color:var(--dsw-alias-label-secondary);font-size:11px;white-space:nowrap}
+.dcb-ovCost{font-weight:650;color:var(--dcb-blue)}
+.dcb-ovChip{display:inline-block;font-size:10px;border-radius:5px;padding:0 5px;margin-right:6px;vertical-align:1px;color:var(--dcb-purple);background:color-mix(in srgb,var(--dcb-purple) 14%,transparent)}
+.dcb-ovNote{font-size:11px;color:var(--dsw-alias-label-secondary)}
+.dcb-ovScroll{max-height:420px;overflow-y:auto}
 `;
 
     /**
@@ -1260,6 +1413,277 @@ body:not([data-ds-dark-theme]){
     }
     //#endregion
 
+    //#region overview
+    /**
+     * The account-wide overview page.
+     *
+     * It owns its own read rather than reusing the per-session store: the query
+     * is account-scoped and its window is a page-level control, so it has
+     * nothing to share with a session's store. The read is fired on mount and on
+     * an explicit range change (a range switch is a deliberate action, and
+     * auto-refreshing a full-corpus fold on a timer would be wasteful).
+     */
+    function OverviewPage(props: SlotProps) {
+      const t = translateOf(props);
+      const [days, setDays] = react.useState<number>(30);
+      const [data, setData] = react.useState<OverviewPayload | null>(null);
+      const [busy, setBusy] = react.useState(false);
+      const [failed, setFailed] = react.useState(false);
+
+      const load = react.useCallback(async (window: number) => {
+        setBusy(true);
+        setFailed(false);
+        const next = (await post(ROUTE_OVERVIEW, { days: window })) as OverviewPayload | null;
+        if (next === null) setFailed(true);
+        else setData(next);
+        setBusy(false);
+      }, []);
+
+      react.useEffect(() => {
+        void load(days);
+      }, [load, days]);
+
+      const totals = data?.totals ?? null;
+      const dayRows: OverviewDay[] = data?.days ?? [];
+      const sessions: OverviewSessionRow[] = data?.sessions ?? [];
+
+      // The day chart is scaled to its own maximum, so a quiet week still shows
+      // shape instead of a flat line against an unrelated absolute scale.
+      const maxDay = dayRows.reduce((max, day) => Math.max(max, day.cost), 0);
+      const today = beijingDateLabel(Date.now());
+      const todayCost = dayRows.find((day) => day.date === today)?.cost ?? 0;
+      const peakShare = totals !== null && totals.cost > 0 ? (totals.byPeriod.peak / totals.cost) * 100 : 0;
+
+      const stat = (label: string, value: string, sub: string, accent: string): Rendered =>
+        react.createElement(
+          'div',
+          { className: 'dcb-ovStat', style: { '--dcb-accent': accent } },
+          react.createElement('span', { className: 'dcb-ovStatK' }, label),
+          react.createElement('span', { className: 'dcb-ovStatV' }, value),
+          react.createElement('span', { className: 'dcb-ovStatS' }, sub),
+        );
+
+      const head = react.createElement(
+        'div',
+        { className: 'dcb-ovHead' },
+        react.createElement('span', { className: 'dcb-ovTitle' }, t('overview.title')),
+        react.createElement(
+          'span',
+          { className: 'dcb-ovCardS' },
+          busy ? t('overview.loading') : (data === null ? '' : t('overview.elapsed').replace('{ms}', String(data.elapsedMs))),
+        ),
+        react.createElement(
+          'span',
+          { className: 'dcb-ovRanges' },
+          ...[
+            [7, t('overview.range7')],
+            [30, t('overview.range30')],
+            [365, t('overview.rangeAll')],
+          ].map(([value, label]) =>
+            react.createElement(
+              'button',
+              {
+                key: String(value),
+                type: 'button',
+                className: 'dcb-ovRange',
+                'aria-pressed': days === value,
+                onClick: () => setDays(value as number),
+              },
+              label as string,
+            ),
+          ),
+        ),
+      );
+
+      const stats = react.createElement(
+        'div',
+        { className: 'dcb-ovStats' },
+        stat(
+          t('overview.total'),
+          totals === null ? '—' : `¥${money(totals.cost)}`,
+          totals === null ? '' : `${totals.requests} ${t('overview.requests')}`,
+          'var(--dcb-blue)',
+        ),
+        stat(t('overview.today'), `¥${money(todayCost)}`, today, 'var(--dcb-green)'),
+        stat(
+          t('overview.sessions'),
+          String(sessions.length),
+          totals === null ? '' : `${data?.windowDays ?? 0} ${t('overview.days')}`,
+          'var(--dcb-purple)',
+        ),
+        stat(
+          t('overview.peakShare'),
+          `${peakShare.toFixed(1)}%`,
+          totals === null ? '' : `峰 ¥${money(totals.byPeriod.peak)}`,
+          'var(--dcb-red)',
+        ),
+      );
+
+      // Height is proportional to the day's cost against the window's maximum,
+      // split into peak and off-peak so the mix is visible.
+      const bars = react.createElement(
+        'div',
+        { className: 'dcb-ovChart' },
+        ...dayRows.map((day) => {
+          const height = maxDay > 0 ? Math.max(2, Math.round((day.cost / maxDay) * 100)) : 0;
+          const peakPart = day.cost > 0 ? (day.byPeriod.peak / day.cost) * 100 : 0;
+          return react.createElement(
+            'div',
+            { key: day.date, className: 'dcb-ovBarWrap', title: `${day.date}  ¥${money(day.cost)}` },
+            react.createElement(
+              'div',
+              { className: 'dcb-ovBar', style: { height: `${height}%` } },
+              react.createElement('div', { className: 'dcb-ovBarPeak', style: { height: `${peakPart}%` } }),
+              react.createElement('div', { className: 'dcb-ovBarOff', style: { height: `${100 - peakPart}%` } }),
+            ),
+          );
+        }),
+      );
+
+      // Only the ends and a couple of interior days get a label; a tick per day
+      // is unreadable once the window runs past a week or two.
+      const labelEvery = Math.max(1, Math.ceil(dayRows.length / 6));
+      const axis = react.createElement(
+        'div',
+        { className: 'dcb-ovAxis' },
+        ...dayRows.map((day) =>
+          react.createElement(
+            'span',
+            { key: day.date },
+            dayRows.indexOf(day) % labelEvery === 0 ? day.date.slice(5) : '',
+          ),
+        ),
+      );
+
+      const chart = react.createElement(
+        'div',
+        { className: 'dcb-ovCard' },
+        react.createElement(
+          'div',
+          { className: 'dcb-ovCardH' },
+          react.createElement('span', { className: 'dcb-ovCardT' }, t('overview.daily')),
+          react.createElement(
+            'span',
+            { className: 'dcb-ovCardS' },
+            `${dayRows.length} ${t('overview.days')}`,
+          ),
+        ),
+        dayRows.length === 0 ? react.createElement('div', { className: 'dcb-ovNote' }, t('overview.noData')) : bars,
+        dayRows.length === 0 ? null : axis,
+      );
+
+      const row = (session: OverviewSessionRow): Rendered =>
+        react.createElement(
+          'tr',
+          { key: session.sessionId },
+          react.createElement(
+            'td',
+            { className: 'dcb-ovName' },
+            session.isChild ? react.createElement('span', { className: 'dcb-ovChip' }, t('overview.child')) : null,
+            session.title ?? t('overview.untitled'),
+          ),
+          react.createElement('td', { className: 'dcb-ovDate' }, beijingDateLabel(session.lastActivity)),
+          react.createElement('td', null, String(session.requests)),
+          react.createElement(
+            'td',
+            { className: 'dcb-ovDate' },
+            t('overview.tokens')
+              .replace('{total}', compact(session.tokens.total))
+              .replace('{cache}', compact(session.tokens.cacheRead)),
+          ),
+          react.createElement('td', { className: 'dcb-ovCost' }, `¥${money(session.cost)}`),
+        );
+
+      const table = react.createElement(
+        'div',
+        { className: 'dcb-ovCard' },
+        react.createElement(
+          'div',
+          { className: 'dcb-ovCardH' },
+          react.createElement('span', { className: 'dcb-ovCardT' }, t('overview.sessionList')),
+          react.createElement('span', { className: 'dcb-ovCardS' }, `${sessions.length} ${t('overview.sessions')}`),
+        ),
+        sessions.length === 0
+          ? react.createElement('div', { className: 'dcb-ovNote' }, t('overview.noData'))
+          : react.createElement(
+              'div',
+              { className: 'dcb-ovScroll' },
+              react.createElement(
+                'table',
+                { className: 'dcb-ovTable' },
+                react.createElement(
+                  'thead',
+                  null,
+                  react.createElement(
+                    'tr',
+                    null,
+                    react.createElement('th', null, t('overview.colSession')),
+                    react.createElement('th', null, t('overview.colWhen')),
+                    react.createElement('th', null, t('overview.colRequests')),
+                    react.createElement('th', null, t('overview.colTokens')),
+                    react.createElement('th', null, t('overview.colCost')),
+                  ),
+                ),
+                react.createElement('tbody', null, ...sessions.map(row)),
+              ),
+            ),
+      );
+
+      const notes: Rendered[] = [];
+      if (failed) notes.push(react.createElement('div', { className: 'dcb-ovNote', key: 'err' }, t('common.error')));
+      if (data?.truncated === true) {
+        notes.push(
+          react.createElement(
+            'div',
+            { className: 'dcb-ovNote', key: 'trunc' },
+            t('overview.truncated').replace('{count}', String(data.sessionsRead)),
+          ),
+        );
+      }
+      if ((data?.missing ?? 0) > 0) {
+        notes.push(
+          react.createElement(
+            'div',
+            { className: 'dcb-ovNote', key: 'miss' },
+            t('overview.missing').replace('{count}', String(data?.missing ?? 0)),
+          ),
+        );
+      }
+      if ((totals?.unpriced ?? 0) > 0) {
+        notes.push(
+          react.createElement(
+            'div',
+            { className: 'dcb-ovNote', key: 'unpriced' },
+            t('overview.unpriced').replace('{count}', String(totals?.unpriced ?? 0)),
+          ),
+        );
+      }
+
+      return react.createElement(
+        'div',
+        { className: 'dcb-ovRoot' },
+        react.createElement(
+          'div',
+          { className: 'dcb-ovInner' },
+          head,
+          stats,
+          chart,
+          table,
+          ...notes,
+          react.createElement('div', { className: 'dcb-ovNote' }, t('common.note')),
+        ),
+      );
+    }
+
+    /** The `YYYY-MM-DD` Beijing label for one epoch instant. */
+    function beijingDateLabel(time: number): string {
+      const shifted = new Date((Number.isFinite(time) ? time : 0) + 8 * 60 * 60 * 1000);
+      const month = shifted.getUTCMonth() + 1;
+      const day = shifted.getUTCDate();
+      return `${shifted.getUTCFullYear()}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    }
+    //#endregion
+
     //#region bottom bar
     /**
      * The composer dock readout: this session's spend, sitting beside the shipped
@@ -1816,6 +2240,30 @@ body:not([data-ds-dark-theme]){
           slots.register(
             { name: 'conversation.composer.dock', id: DOCK_ID, order: 10, locale: NS },
             (props) => react.createElement(UsageDock, props),
+          ),
+        );
+
+        // The account overview is a full page in the central panel. It is
+        // contributed in TWO places under one id, which is the contract the
+        // shell expects: `main` supplies the page body, and `sidebar.panellist`
+        // supplies the glyph for the nav row whose click selects that page. The
+        // shell owns the row, its label and its active state.
+        slots.inject('main', () =>
+          slots.register(
+            { name: 'main', key: OVERVIEW_ID, locale: NS },
+            (props) => react.createElement(OverviewPage, props),
+          ),
+        );
+        slots.inject('sidebar.panellist', () =>
+          slots.register(
+            {
+              name: 'sidebar.panellist',
+              id: OVERVIEW_ID,
+              order: 30,
+              label: () => ctx.locale.bind(NS)('overview.title'),
+              locale: NS,
+            },
+            (props) => react.createElement(GaugeIcon, { size: props.size, className: props.className }),
           ),
         );
       });

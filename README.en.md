@@ -8,7 +8,7 @@
 > (peak/off-peak split, this session vs. its descendants, and the three token buckets:
 > cache hit / cache miss / output).
 
-## Two surfaces
+## Three surfaces
 
 **① A persistent readout under the composer** — one line while collapsed:
 
@@ -23,13 +23,40 @@ cards, always expanded and never folded):
 
 ![Right-sidebar panel](docs/assets/panel-dark.png)
 
-The light theme follows DSH's own tokens rather than a second hand-written palette:
+**③ A left-nav "Usage overview" page** — account-wide: what each day cost and what each
+session cost. Open it from the gauge icon in the left sidebar, beside Plugins, Scheduled
+tasks and Context insight:
 
-![Light theme](docs/assets/panel-light.png)
+![Account overview](docs/assets/overview-dark.png)
 
-> All four images are rendered by `npm run shots` from the plugin's **real components and
+The light theme follows DSH's own tokens rather than a second hand-written palette (both
+the sidebar panel and the overview page):
+
+![Light-theme overview](docs/assets/overview-light.png)
+
+![Light-theme sidebar](docs/assets/panel-light.png)
+
+> All six images are rendered by `npm run shots` from the plugin's **real components and
 > real stylesheet**, not hand-drawn: the script loads `lib/client.js`, applies DSH's real
 > theme tokens, and screenshots the result — so the images show what actually renders.
+
+### The overview page
+
+| Section | Content |
+|---|---|
+| Figure strip | Total / today / session count / peak share, each with a secondary figure |
+| Daily spend | One stacked bar per day (**peak = red, off-peak = green**), scaled to the window's maximum; hover shows that day's amount |
+| Sessions | Newest activity first: date, requests, tokens and cost per session; descendants are tagged |
+
+- **Range**: last 7 days / 30 days / all (default 30, capped at 365).
+- **Counted live, no on-disk cache**: every open (or range switch) replays the logs. At the
+  current scale (a dozen sessions) this lands in tens of milliseconds; at several hundred
+  it slows down and the page reports how long it took.
+- **At most 500 sessions per request**; beyond that the page says only the newest N were
+  counted.
+- **Descendants are counted**: the inherited prefix of a seeded session is already excluded,
+  so what remains is the child's **own** calls. This matches the single-session view's
+  `own + children` figure exactly, and a test asserts the two agree session by session.
 
 The period uses the short Chinese labels **峰 / 谷** with fixed colours: **peak = red**
 (the expensive window), **valley = green**.

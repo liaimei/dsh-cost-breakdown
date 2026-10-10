@@ -95,6 +95,9 @@ const shots = [
   { name: 'panel-light', file: 'panel-light.png', w: 670, h: 2600 },
   { name: 'dock-collapsed', file: 'dock-collapsed.png', w: 460, h: 200 },
   { name: 'dock-expanded', file: 'dock-expanded.png', w: 720, h: 1600 },
+  // The overview fills the central panel, so it renders at a panel-like width.
+  { name: 'overview-dark', file: 'overview-dark.png', w: 1000, h: 1500 },
+  { name: 'overview-light', file: 'overview-light.png', w: 1000, h: 1500 },
 ];
 
 console.log('');

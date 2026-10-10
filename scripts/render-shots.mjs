@@ -40,6 +40,75 @@ const STATUS = {
   },
 };
 
+/**
+ * The account-overview payload fixture.
+ *
+ * Days are derived from a fixed base so the chart has a believable shape; the
+ * session titles are synthetic (never a real workspace path).
+ */
+const DAY_MS = 24 * 60 * 60 * 1000;
+const at = (offsetDays) => {
+  const d = new Date(Date.now() - offsetDays * DAY_MS);
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+};
+const shape = [2.4, 6.1, 3.2, 0, 0, 8.4, 5.5, 1.1, 4.3, 7.7, 2.2, 0, 6.9, 9.3, 3.6, 1.4, 5.1, 4.8, 7.1, 2.6, 0.9, 3.3, 6.4, 8.8, 4.1, 1.8, 5.9, 7.3, 3.7, 2.1];
+const dayRows = shape.map((cost, i) => ({
+  date: at(shape.length - 1 - i),
+  cost,
+  requests: Math.round(cost * 34),
+  byPeriod: { peak: cost * 0.72, offPeak: cost * 0.28 },
+  tokens: { input: 2_100_000, cacheRead: 88_000_000, output: 420_000, reasoning: 60_000, total: 91_000_000 },
+}));
+const sessionRows = [
+  ['session-8234dc7b', '重构计价模块的缓存层', 6.4879, 602, false],
+  ['session-954575d7', '排查上传接口的超时', 9.2757, 377, false],
+  ['session-78d35f01', '设计插件市场收录流程', 17.7168, 1198, false],
+  ['654a7c8f-f7b1', '调研 DSH 会话日志结构', 0.9553, 148, true],
+  ['session-719ef8e9', '整理发布检查清单', 0.0433, 12, false],
+  ['session-1226c5e2', '修复峰谷边界的取整', 0.0951, 11, false],
+  ['01963a97-790c', '补齐衍生会话去重用例', 1.0993, 80, true],
+  ['56912216-5fcf', '校对价目表数值', 0.6707, 48, true],
+  ['53dbb2cd-ca58', '优化面板渲染性能', 0.4386, 40, true],
+  ['e7e0c015-ed06', '补充 README 截图脚本', 0.4788, 42, true],
+].map(([id, title, cost, requests, isChild]) => ({
+  sessionId: id,
+  title,
+  createdAt: Date.now() - 3 * DAY_MS,
+  lastActivity: Date.now() - DAY_MS,
+  cost,
+  requests,
+  unpriced: 0,
+  tokens: { input: 2_100_000, cacheRead: 88_000_000, output: 420_000, reasoning: 60_000, total: 91_000_000 },
+  byPeriod: { peak: cost * 0.7, offPeak: cost * 0.3 },
+  isChild,
+}));
+
+const OVERVIEW = {
+  ok: true,
+  value: {
+    days: dayRows,
+    sessions: sessionRows,
+    totals: {
+      cost: dayRows.reduce((sum, d) => sum + d.cost, 0),
+      requests: dayRows.reduce((sum, d) => sum + d.requests, 0),
+      unpriced: 0,
+      byPeriod: {
+        peak: dayRows.reduce((sum, d) => sum + d.byPeriod.peak, 0),
+        offPeak: dayRows.reduce((sum, d) => sum + d.byPeriod.offPeak, 0),
+      },
+      tokens: { input: 63_000_000, cacheRead: 2_640_000_000, output: 12_600_000, reasoning: 1_800_000, total: 2_730_000_000 },
+    },
+    windowDays: 30,
+    since: Date.now() - 30 * DAY_MS,
+    sessionsRead: sessionRows.length,
+    sessionsSkipped: 0,
+    truncated: false,
+    missing: 0,
+    elapsedMs: 42,
+  },
+};
+
 const SESSION = {
   ok: true,
   value: {
@@ -123,7 +192,13 @@ function toHtml(node) {
 async function buildClient(locale = 'zh') {
   const harness = createReact();
   const client = loadBundle(vm, bundle, async (url) => ({
-    ok: true, status: 200, json: async () => (url.includes('/status') ? STATUS : SESSION),
+    ok: true,
+    status: 200,
+    json: async () => {
+      if (url.includes('/overview')) return OVERVIEW;
+      if (url.includes('/status')) return STATUS;
+      return SESSION;
+    },
   }), 'react', harness.React);
   const slots = [];
   let dictionary = {};
@@ -177,6 +252,14 @@ async function renderPanel() {
   const { slots, t, render } = await buildClient();
   const panel = slots.find((s) => s.options.name === 'sidebar.right.pane.tab');
   const tree = await render(panel.component, { t, sessionId: 'session-demo' });
+  return tree;
+}
+
+/** The account overview page, rendered on its own. */
+async function renderOverview() {
+  const { slots, t, render } = await buildClient();
+  const found = slots.find((s) => s.options.name === 'main');
+  const tree = await render(found.component, { t });
   return tree;
 }
 
@@ -239,6 +322,18 @@ for (const open of [false, true]) {
       ? '.dcb-dock{display:flex;flex-direction:column;align-items:flex-start;gap:14px}'
         + '.dcb-detail{position:static !important;visibility:visible !important;max-height:none !important}'
       : '',
+  }));
+  shots.push(name);
+}
+
+// 3. The account overview page, in both themes. It fills the central panel, so
+// it is rendered a realistic width rather than the sidebar's.
+for (const dark of [true, false]) {
+  const tree = await renderOverview();
+  const name = `overview-${dark ? 'dark' : 'light'}.html`;
+  fs.writeFileSync(path.join(OUT, name), page({
+    html: `<div style="width:1000px">${toHtml(tree)}</div>`,
+    dark, width: 1000,
   }));
   shots.push(name);
 }

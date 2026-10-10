@@ -131,6 +131,21 @@ export interface FoldOptions {
   turnLimit?: number;
 }
 
+/**
+ * One calendar day's totals, in Beijing time.
+ *
+ * `date` is the `YYYY-MM-DD` label so the caller never has to re-derive the
+ * zone, and the per-period/per-model splits are carried through unchanged
+ * because a day can straddle the 09:00 and 18:00 peak boundaries.
+ */
+export interface DayTotals {
+  date: string;
+  cost: number;
+  requests: number;
+  byPeriod: { peak: number; offPeak: number };
+  tokens: { input: number; cacheRead: number; output: number; reasoning: number; total: number };
+}
+
 /** Every price in this module is quoted in CNY per million tokens. */
 export const CURRENCY = 'CNY';
 export const TOKEN_UNIT = 1_000_000;
@@ -484,4 +499,56 @@ export function priceTable(): ModelRow[] {
     offPeak: { ...row.offPeak },
     peak: { ...row.peak },
   }));
+}
+
+/**
+ * Fold one session's events into per-day totals, keyed by Beijing date.
+ *
+ * A separate pass from {@link foldEvents} on purpose: that function keeps only
+ * the most recent `turnLimit` turns, so a long session's earlier days would be
+ * dropped and the account view would silently under-report. This walks every
+ * billed event and buckets by the event's own Beijing date, and it prices each
+ * event's period the same way `foldEvents` does, so the two agree for any
+ * session whose turns were not truncated.
+ *
+ * @param events - the session's OWN events (caller must exclude any inherited prefix).
+ * @param options - holiday table override.
+ */
+export function foldEventsByDay(events: unknown, options: FoldOptions = {}): Map<string, DayTotals> {
+  const holidays = options.holidays ?? DEFAULT_HOLIDAYS;
+  const days = new Map<string, DayTotals>();
+  for (const event of Array.isArray(events) ? events : []) {
+    if (event === null || typeof event !== 'object' || event.type !== 'assistant/message') continue;
+    const data = event.data;
+    if (data === null || typeof data !== 'object') continue;
+    const usage = data.usage;
+    if (usage === null || typeof usage !== 'object') continue;
+
+    const time = Number.isFinite(event.time) ? event.time : 0;
+    const model = data.message?.source?.model ?? data.message?.source?.provider ?? '';
+    const peak = isPeak(time, holidays);
+    const priced = costOf(model, usage, peak);
+    const date = beijingParts(time).date;
+
+    let day = days.get(date);
+    if (day === undefined) {
+      day = {
+        date,
+        cost: 0,
+        requests: 0,
+        byPeriod: { peak: 0, offPeak: 0 },
+        tokens: { input: 0, cacheRead: 0, output: 0, reasoning: 0, total: 0 },
+      };
+      days.set(date, day);
+    }
+    day.cost += priced.cost;
+    day.requests += 1;
+    day.byPeriod[peak ? 'peak' : 'offPeak'] += priced.cost;
+    day.tokens.input += priced.buckets.input;
+    day.tokens.cacheRead += priced.buckets.cacheRead;
+    day.tokens.output += priced.buckets.output;
+    day.tokens.reasoning += priced.buckets.reasoning;
+    day.tokens.total += priced.buckets.total;
+  }
+  return days;
 }

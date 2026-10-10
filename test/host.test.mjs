@@ -95,9 +95,10 @@ test('the host half exports the plugin contract', async () => {
   assert.ok(Array.isArray(mod.inject), 'inject must be an array');
 });
 
-test('both routes register as POST buffered fetch routes', () => {
+test('every route registers as a POST buffered fetch route', () => {
   const routes = harness();
   assert.deepEqual([...routes.keys()].sort(), [
+    '/api/dsh-cost-breakdown/overview',
     '/api/dsh-cost-breakdown/session',
     '/api/dsh-cost-breakdown/status',
   ]);
@@ -402,4 +403,135 @@ test('a valid holidays config is accepted in full', async () => {
   );
   assert.equal(response.status, 200);
   assert.equal((await response.json()).ok, true);
+});
+
+// ---------------------------------------------------------------------------
+// Account overview
+// ---------------------------------------------------------------------------
+
+/** A query face serving canned per-session logs, with real parent links. */
+function overviewHarness(sessions) {
+  return harness({
+    sessionQuery: {
+      listSessions: async () => sessions.map((s) => ({ header: s.header, live: false, persisted: true })),
+      observeSession: async (id) => {
+        const hit = sessions.find((s) => s.header.id === id);
+        if (hit === undefined) throw new Error(`no session ${id}`);
+        return observationOf(hit.events, { source: 'log' }).make();
+      },
+    },
+  });
+}
+
+/** One billed event at a given Beijing instant. */
+function billed(seq, time, inputTokens = 1_000_000) {
+  return {
+    type: 'assistant/message', seq, time,
+    data: { usage: { inputTokens }, message: { source: { model: 'deepseek-flash' } } },
+  };
+}
+
+const overviewOf = async (routes, days = 30) => {
+  const response = await routes.get('/api/dsh-cost-breakdown/overview').fetch(
+    new Request('http://x/', { method: 'POST', body: JSON.stringify({ days }) }),
+  );
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.ok, true, 'the overview must answer the in-band envelope');
+  return body.value;
+};
+
+test('the overview buckets spend by Beijing day across sessions', async () => {
+  // Two sessions on different days, plus a third with two events on one day.
+  // Off-peak instants are used so the expected cost is exact (rate 1/1M input).
+  const routes = overviewHarness([
+    { header: { id: 's-a', createdAt: Date.UTC(2026, 9, 12, 0, 0) }, events: [billed(1, Date.UTC(2026, 9, 12, 12, 0))] },
+    { header: { id: 's-b', createdAt: Date.UTC(2026, 9, 13, 0, 0) }, events: [billed(1, Date.UTC(2026, 9, 13, 12, 0)), billed(2, Date.UTC(2026, 9, 13, 13, 0))] },
+  ]);
+  const value = await overviewOf(routes);
+  const byDate = Object.fromEntries(value.days.map((d) => [d.date, d]));
+  assert.equal(byDate['2026-10-12'].cost, 1, 'one request at the off-peak rate');
+  assert.equal(byDate['2026-10-13'].cost, 2, 'two requests on the second day');
+  assert.equal(byDate['2026-10-13'].requests, 2);
+  assert.deepEqual(value.days.map((d) => d.date), ['2026-10-12', '2026-10-13'], 'days ascend');
+
+  // The headline figure and the chart must agree: they are two views of one
+  // number, and a mismatch is the bug this guards.
+  const daySum = value.days.reduce((sum, d) => sum + d.cost, 0);
+  assert.ok(Math.abs(daySum - value.totals.cost) < 1e-9, `days (${daySum}) must sum to the total (${value.totals.cost})`);
+});
+
+test('the overview counts a descendant own spend, and marks it', async () => {
+  // A parent and its child. The child's log here holds only its OWN event (the
+  // host strips any inherited prefix before folding), so that spend is real and
+  // must be counted — the same way the single-session view adds `own + children`.
+  const routes = overviewHarness([
+    { header: { id: 'root-1', createdAt: Date.UTC(2026, 9, 12, 0, 0) }, events: [billed(1, Date.UTC(2026, 9, 12, 12, 0))] },
+    { header: { id: 'child-1', parentSession: 'root-1', createdAt: Date.UTC(2026, 9, 12, 1, 0) }, events: [billed(2, Date.UTC(2026, 9, 12, 13, 0))] },
+  ]);
+  const value = await overviewOf(routes);
+  const child = value.sessions.find((s) => s.sessionId === 'child-1');
+  const root = value.sessions.find((s) => s.sessionId === 'root-1');
+  assert.equal(child.isChild, true, 'a session whose parent is present is marked as a descendant');
+  assert.equal(root.isChild, false, 'a parent must NOT be marked as a descendant');
+  assert.equal(value.totals.cost, 2, 'both the parent and the descendant own spend count');
+  assert.equal(value.totals.requests, 2);
+});
+
+test('the overview omits sessions with no billed activity', async () => {
+  const routes = overviewHarness([
+    { header: { id: 'busy', createdAt: Date.UTC(2026, 9, 12, 0, 0) }, events: [billed(1, Date.UTC(2026, 9, 12, 12, 0))] },
+    { header: { id: 'idle', createdAt: Date.UTC(2026, 9, 12, 0, 0) }, events: [{ type: 'session/title', seq: 1, time: Date.UTC(2026, 9, 12, 1, 0), data: { title: 'nothing billed' } }] },
+  ]);
+  const value = await overviewOf(routes);
+  assert.deepEqual(value.sessions.map((s) => s.sessionId), ['busy'], 'an unbilled session is not listed');
+  assert.equal(value.totals.cost, 1);
+});
+
+test('the overview window excludes older sessions and clamps its input', async () => {
+  const now = Date.now();
+  const recent = { header: { id: 'recent', createdAt: now - 3600_000 }, events: [billed(1, now - 1800_000)] };
+  // 100 days old: inside the 365-day cap but well outside a 7-day window, so the
+  // two windows genuinely differ. (At 400 days it would fall outside both and
+  // the "wide window includes it" assertion below could never hold.)
+  const old = { header: { id: 'ancient', createdAt: now - 100 * 24 * 3600_000 }, events: [billed(1, now - 99 * 24 * 3600_000)] };
+  const routes = overviewHarness([recent, old]);
+
+  const narrow = await overviewOf(routes, 7);
+  assert.deepEqual(narrow.sessions.map((s) => s.sessionId), ['recent'], 'a 7-day window drops the old session');
+  assert.equal(narrow.windowDays, 7);
+
+  const wide = await overviewOf(routes, 365);
+  assert.equal(wide.sessions.length, 2, 'a wide window includes it again');
+
+  // A nonsensical window must not reach the aggregator as-is.
+  const clampHigh = await overviewOf(routes, 99_999);
+  assert.equal(clampHigh.windowDays, 365, 'the window is capped');
+  const clampLow = await overviewOf(routes, -5);
+  assert.equal(clampLow.windowDays, 1, 'a non-positive window falls back to the minimum');
+});
+
+test('the overview tolerates an absent query service and unreadable logs', async () => {
+  // No sessionQuery at all: the page must answer empty rather than throw.
+  const bare = harness({ sessionQuery: null });
+  const value = await overviewOf(bare);
+  assert.deepEqual(value.days, []);
+  assert.deepEqual(value.sessions, []);
+  assert.equal(value.totals.cost, 0);
+
+  // A corpus that lists a session whose log cannot be read counts it as missing.
+  const routes = overviewHarness([{ header: { id: 'ghost', createdAt: Date.now() }, events: [billed(1, Date.now())] }]);
+  const routesGhost = harness({
+    sessionQuery: {
+      listSessions: async () => [{ header: { id: 'ghost' } }, { header: { id: 'real', createdAt: Date.now() } }],
+      observeSession: async (id) => {
+        if (id === 'ghost') throw new Error('unreadable');
+        return observationOf([billed(1, Date.now())], { source: 'log' }).make();
+      },
+    },
+  });
+  const valueGhost = await overviewOf(routesGhost);
+  assert.equal(valueGhost.missing, 1, 'the unreadable session is reported, not fatal');
+  assert.equal(valueGhost.sessions.length, 1, 'the readable one still contributes');
+  assert.ok(routes.size > 0);
 });

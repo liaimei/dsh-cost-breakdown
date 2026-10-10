@@ -296,6 +296,10 @@ test('apply contributes the locale namespace, the dock cell, and the tab bodies'
   const names = client.slots.map((slot) => slot.options.name).sort();
   assert.deepEqual(names, [
     'conversation.composer.dock',
+    // The account overview: its page body plus the nav-row glyph that selects
+    // it. Both are contributed under ONE id, which is the shell's pairing.
+    'main',
+    'sidebar.panellist',
     'sidebar.right.pane.tab',
     'sidebar.right.pane.tab.title',
   ]);
@@ -307,10 +311,20 @@ test('apply contributes the locale namespace, the dock cell, and the tab bodies'
   assert.notEqual(dock.options.id, 'stats', 'must not take over the shipped stats cell');
   assert.equal(dock.options.locale, 'dsh-cost-breakdown');
 
-  for (const slot of client.slots.filter((entry) => entry.options.key !== undefined)) {
+  // Tab bodies register under the tab TYPE id. The `main` page is keyed by its
+  // own panel id instead (that is what selects which panel the nav row opens),
+  // so this contract covers only the sidebar-right tab slots.
+  for (const slot of client.slots.filter((entry) => entry.options.key !== undefined && entry.options.name.startsWith('sidebar.'))) {
     assert.equal(slot.options.key, 'dsh-cost-breakdown', 'each tab body registers under the tab type id');
     assert.equal(slot.options.locale, 'dsh-cost-breakdown');
   }
+
+  // The overview pairs one id across the page body and its nav glyph; if those
+  // two ever diverge, the nav row would open nothing.
+  const page = client.slots.find((slot) => slot.options.name === 'main');
+  const nav = client.slots.find((slot) => slot.options.name === 'sidebar.panellist');
+  assert.equal(typeof page.options.key, 'string');
+  assert.equal(page.options.key, nav.options.id, 'the page key and the nav id must match');
 });
 
 test('the tab title renders without a live session', () => {
