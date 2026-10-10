@@ -12,3 +12,10 @@ node_modules/
 
 # The npm tarball produced by `npm pack`.
 *.tgz
+
+# Intermediate HTML the screenshot script writes before rasterizing; only the
+# final PNGs under docs/assets belong in the repository.
+docs/assets/.render/
+
+# Generated from the installed DSH theme to render docs images; not ours to ship.
+scripts/theme-tokens.css

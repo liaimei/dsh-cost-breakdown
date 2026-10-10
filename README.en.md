@@ -8,22 +8,31 @@
 > (peak/off-peak split, this session vs. its descendants, and the three token buckets:
 > cache hit / cache miss / output).
 
-A DeepSeek Harness plugin. Two surfaces read the same data:
+## Two surfaces
 
-**① A persistent readout under the composer** — three figures while collapsed:
+**① A persistent readout under the composer** — one line while collapsed:
 
-```
-◔ ¥7.05 · ¥38.12 · [valley] ▴
-   ↑session  ↑balance    ↑period
-```
+![Collapsed readout](docs/assets/dock-collapsed.png)
+
+Click to expand the detail card (balance and period as compact rows, then three titled
+cards, always expanded and never folded):
+
+![Expanded detail card](docs/assets/dock-expanded.png)
+
+**② A right-sidebar "Usage & Cost" tab** — the same figures, for keeping open:
+
+![Right-sidebar panel](docs/assets/panel-dark.png)
+
+The light theme follows DSH's own tokens rather than a second hand-written palette:
+
+![Light theme](docs/assets/panel-light.png)
+
+> All four images are rendered by `npm run shots` from the plugin's **real components and
+> real stylesheet**, not hand-drawn: the script loads `lib/client.js`, applies DSH's real
+> theme tokens, and screenshots the result — so the images show what actually renders.
 
 The period uses the short Chinese labels **峰 / 谷** with fixed colours: **peak = red**
 (the expensive window), **valley = green**.
-
-Click it to expand the detail card: balance and period as compact rows, then three
-titled cards (always expanded, never folded) — Token usage, Cost breakdown, Price list.
-
-**② A right-sidebar "Usage & Cost" tab** — the same figures, for keeping open.
 
 Both surfaces share **one per-session store**, so they can never disagree and the
 expensive session fold never runs twice.

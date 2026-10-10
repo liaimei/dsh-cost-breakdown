@@ -19,7 +19,8 @@
     "cordis.patch.yml",
     "README.md",
     "README.en.md",
-    "LICENSE"
+    "LICENSE",
+    "docs"
   ],
   "engines": {
     "node": "^22.19.0 || >=24.0.0"
@@ -32,7 +33,8 @@
     "test:e2e": "node test/e2e/pipeline.mjs && node test/e2e/peak-rendering.mjs && node test/e2e/lineage.mjs",
     "test:live": "node test/e2e/live.mjs",
     "verify": "npm run typecheck && npm test && npm run test:e2e && npm run test:live && npm run test:accept",
-    "prepack": "npm run build"
+    "prepack": "npm run build",
+    "shots": "node scripts/extract-theme-tokens.mjs && node scripts/make-screenshots.mjs"
   },
   "keywords": [
     "dsh-plugin",
