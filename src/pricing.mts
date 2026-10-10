@@ -96,6 +96,12 @@ export interface ModelTotals {
   label: string;
   known: boolean;
   cost: number;
+  /**
+   * The prompt-side part of `cost`: cache-read plus cache-miss spend. Output is
+   * excluded, because the context card attributes this to parts of the WINDOW.
+   * Accumulated per event, where the peak/off-peak rate is still known.
+   */
+  promptCost: number;
   requests: number;
   tokens: { input: number; cacheRead: number; output: number; total: number };
 }
@@ -116,6 +122,8 @@ export interface TurnRecord {
 /** The complete cost picture of one session (or of a summed lineage). */
 export interface Totals {
   cost: number;
+  /** Prompt-side spend: cache-read plus cache-miss, excluding output. */
+  promptCost: number;
   requests: number;
   unpriced: number;
   unpricedModels: string[];
@@ -344,6 +352,8 @@ export function costOf(model: unknown, usage: unknown, peak: boolean): PricedReq
  */
 export interface Workspace {
   cost: number;
+  /** Prompt-side spend: cache-read plus cache-miss, excluding output. */
+  promptCost: number;
   requests: number;
   unpriced: number;
   unpricedModels: string[];
@@ -357,6 +367,7 @@ export interface Workspace {
 function emptyTotals(): Workspace {
   return {
     cost: 0,
+    promptCost: 0,
     requests: 0,
     unpriced: 0,
     unpricedModels: [],
@@ -404,10 +415,11 @@ export function foldEvents(events: unknown, options: FoldOptions = {}): Totals {
     const priced = costOf(model, usage, peak);
 
     const label = priced.model ?? (typeof model === 'string' && model !== '' ? model : 'unknown');
-    const bucket = totals.byModel[label] ?? { model: label, label, known: priced.known, cost: 0, requests: 0, tokens: { input: 0, cacheRead: 0, output: 0, total: 0 } };
+    const bucket = totals.byModel[label] ?? { model: label, label, known: priced.known, cost: 0, promptCost: 0, requests: 0, tokens: { input: 0, cacheRead: 0, output: 0, total: 0 } };
     if (totals.byModel[label] === undefined) totals.byModel[label] = bucket;
 
     totals.cost += priced.cost;
+    totals.promptCost += priced.parts.cacheHit + priced.parts.cacheMiss;
     totals.requests += 1;
     totals.byPeriod[peak ? 'peak' : 'offPeak'] += priced.cost;
     totals.tokens.input += priced.buckets.input;
@@ -417,6 +429,7 @@ export function foldEvents(events: unknown, options: FoldOptions = {}): Totals {
     totals.tokens.total += priced.buckets.total;
 
     bucket.cost += priced.cost;
+    bucket.promptCost += priced.parts.cacheHit + priced.parts.cacheMiss;
     bucket.requests += 1;
     bucket.tokens.input += priced.buckets.input;
     bucket.tokens.cacheRead += priced.buckets.cacheRead;
@@ -452,6 +465,7 @@ export function combine(totalsList: unknown): Totals {
   for (const totals of Array.isArray(totalsList) ? totalsList : []) {
     if (totals === null || typeof totals !== 'object') continue;
     out.cost += amountOf(totals.cost);
+    out.promptCost += amountOf(totals.promptCost);
     out.requests += amountOf(totals.requests);
     out.unpriced += amountOf(totals.unpriced);
     for (const name of totals.unpricedModels ?? []) if (!out.unpricedModels.includes(name)) out.unpricedModels.push(name);
@@ -470,6 +484,7 @@ export function combine(totalsList: unknown): Totals {
           label: typeof row.label === 'string' ? row.label : row.model,
           known: row.known !== false,
           cost: amountOf(row.cost),
+          promptCost: amountOf(row.promptCost),
           requests: amountOf(row.requests),
           tokens: {
             input: amountOf(row.tokens?.input),
@@ -481,6 +496,7 @@ export function combine(totalsList: unknown): Totals {
         continue;
       }
       found.cost += amountOf(row.cost);
+      found.promptCost += amountOf(row.promptCost);
       found.requests += amountOf(row.requests);
       for (const key of MODEL_TOKEN_KEYS) {
         found.tokens[key] += amountOf(row.tokens?.[key]);

@@ -3,8 +3,14 @@
     "target": "ES2023",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "lib": ["ES2023", "DOM", "DOM.Iterable"],
-    "types": ["node"],
+    "lib": [
+      "ES2023",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "types": [
+      "node"
+    ],
     "strict": true,
     "noImplicitOverride": true,
     "noUncheckedIndexedAccess": false,
@@ -19,5 +25,9 @@
     "outDir": "lib",
     "rootDir": "src"
   },
-  "include": ["src/index.ts", "src/pricing.mts"]
+  "include": [
+    "src/index.ts",
+    "src/pricing.mts",
+    "src/context.mts"
+  ]
 }

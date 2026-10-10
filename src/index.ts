@@ -11,11 +11,13 @@
  */
 
 import { combine, foldEvents, foldEventsByDay, periodAt, priceTable } from './pricing.mjs';
+import { contextComposition } from './context.mjs';
 
 /** Every route this plugin owns, under the connection service's `/api` fence. */
 const ROUTE_STATUS = '/api/dsh-cost-breakdown/status';
 const ROUTE_SESSION = '/api/dsh-cost-breakdown/session';
 const ROUTE_OVERVIEW = '/api/dsh-cost-breakdown/overview';
+const ROUTE_CONTEXT = '/api/dsh-cost-breakdown/context';
 
 /** How many sessions one descendant walk may touch before it gives up. */
 const MAX_WALK_SESSIONS = 400;
@@ -651,6 +653,11 @@ interface OverviewSession {
   activity: ActivityCounts;
   /** Percentage of prompt tokens served from cache. */
   cacheHitRate: number;
+  /**
+   * What fills this session's context window, and the prompt-side cost attributed
+   * to each part. Anchored to the provider's own prompt count (see context.mts).
+   */
+  context: ReturnType<typeof contextComposition>;
   /** Set when this session is one of another's descendants (already counted under its ancestor). */
   isChild: boolean;
 }
@@ -862,6 +869,13 @@ async function overviewReport(
       byPeriod: folded.byPeriod,
       activity,
       cacheHitRate: cacheHitRate(folded.tokens),
+      // Composed from the whole owned log, not the window slice: the context
+      // window is a property of the session's tail, and slicing it to a date
+      // range would describe a window that never existed.
+      context: contextComposition(owned, {
+        // Prompt-side spend only: output tokens are not context.
+        promptCost: folded.promptCost,
+      }),
       isChild: childIds.has(header.id),
     });
   }

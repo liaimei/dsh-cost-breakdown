@@ -294,3 +294,88 @@ test('every off-peak rate is exactly half its peak rate', () => {
     }
   }
 });
+
+// ---------------------------------------------------------------------------
+// Context composition (src/context.mts -> lib/context.mjs)
+// ---------------------------------------------------------------------------
+
+test('contextComposition anchors its split to the provider prompt count', async () => {
+  // The card claims "of the N prompt tokens billed, this is the split", so the
+  // categories must sum to the provider's own number rather than to an estimate.
+  const { contextComposition } = await import('../lib/context.mjs');
+  const at = Date.UTC(2026, 9, 12, 12, 0); // 20:00 Beijing, off-peak
+  const events = [
+    { type: 'request/context', seq: 1, time: at, data: { contextWindow: 1_000_000 } },
+    { type: 'request/header', seq: 2, time: at, data: { header: { tools: [{ name: 'read', description: 'x'.repeat(400) }] } } },
+    { type: 'system/message', seq: 3, time: at, surfaceOp: 'append', data: { message: { role: 'system', content: [{ type: 'text', text: 'y'.repeat(2000) }] } } },
+    { type: 'user/message', seq: 4, time: at, surfaceOp: 'append', data: { message: { role: 'user', content: [{ type: 'text', text: 'z'.repeat(1000) }] } } },
+    {
+      type: 'assistant/message', seq: 5, time: at, surfaceOp: 'append',
+      data: {
+        usage: { inputTokens: 400, cacheReadTokens: 1600, outputTokens: 50 },
+        message: { role: 'assistant', source: { model: 'deepseek-flash' }, content: [{ type: 'text', text: 'w'.repeat(500) }] },
+      },
+    },
+  ];
+  const composition = contextComposition(events, { promptCost: 10 });
+
+  assert.equal(composition.anchor, 2000, 'the anchor is prompt = cache-miss + cache-read');
+  assert.equal(composition.anchored, true);
+  assert.equal(composition.total, 2000, 'the anchored total is the provider count');
+  assert.equal(
+    composition.categories.reduce((sum, c) => sum + c.tokens, 0),
+    2000,
+    'the categories sum to the anchored total',
+  );
+  assert.equal(composition.window, 1_000_000);
+  assert.ok(Math.abs(composition.occupancy - 0.2) < 1e-9, `occupancy is 0.2% (was ${composition.occupancy})`);
+
+  // Cost is attributed across the categories and must not exceed the prompt cost.
+  const cost = composition.categories.reduce((sum, c) => sum + c.cost, 0);
+  assert.ok(Math.abs(cost - 10) < 1e-6, `attributed cost sums to the prompt cost (was ${cost})`);
+  const share = composition.categories.reduce((sum, c) => sum + c.share, 0);
+  assert.ok(Math.abs(share - 100) < 1e-6, `shares sum to 100% (was ${share})`);
+  // Largest first: the card answers "what is eating the window".
+  for (let i = 1; i < composition.categories.length; i += 1) {
+    assert.ok(composition.categories[i - 1].tokens >= composition.categories[i].tokens, 'sorted desc');
+  }
+});
+
+test('contextComposition records a rewrite once, not once per half', async () => {
+  // Real logs record ONE rewrite twice: a `compaction/prune` carrying
+  // `data.shadowedRange`, then a `surfaceOp: {op:'replace'}` event on the next
+  // seq naming the same range. Counting both reported twice the rewrites that
+  // happened, and the replace half alone would still double it.
+  const { contextComposition } = await import('../lib/context.mjs');
+  const at = Date.UTC(2026, 9, 12, 12, 0);
+  const base = [
+    { type: 'system/message', seq: 1, time: at, surfaceOp: 'append', data: { message: { content: [{ type: 'text', text: 's'.repeat(400) }] } } },
+    { type: 'user/message', seq: 2, time: at, surfaceOp: 'append', data: { message: { content: [{ type: 'text', text: 'u'.repeat(400) }] } } },
+    { type: 'assistant/message', seq: 3, time: at, surfaceOp: 'append', data: { message: { content: [{ type: 'text', text: 'a'.repeat(400) }] } } },
+    // One rewrite, logged as the prune half then the replace half.
+    { type: 'compaction/prune', seq: 4, time: at, data: { shadowedRange: { start: 2, end: 2 }, shadowedSeqs: [2], shadowedTokenCount: 100 } },
+    { type: 'tool/result', seq: 5, time: at, surfaceOp: { op: 'replace', startSeq: 2, endSeq: 2 }, data: { message: { content: [{ type: 'text', text: 'r'.repeat(400) }] } } },
+    // A second, standalone replace (no prune twin) must still be counted.
+    { type: 'tool/result', seq: 6, time: at, surfaceOp: { op: 'replace', startSeq: 3, endSeq: 3 }, data: { message: { content: [{ type: 'text', text: 'r'.repeat(400) }] } } },
+    { type: 'assistant/message', seq: 7, time: at, data: { usage: { inputTokens: 100, cacheReadTokens: 900 } } },
+  ];
+  const composition = contextComposition(base);
+  assert.equal(composition.compactions, 2, 'one paired rewrite plus one standalone replace');
+  assert.equal(composition.anchor, 1000);
+  // The pruned and replaced nodes are gone; only the surviving ones are counted.
+  assert.ok(composition.total > 0);
+});
+
+test('contextComposition reports an unanchored estimate rather than pretending', async () => {
+  // Without a billed request there is no provider count to anchor to. The
+  // estimate still renders, but `anchored` says so.
+  const { contextComposition } = await import('../lib/context.mjs');
+  const at = Date.UTC(2026, 9, 12, 12, 0);
+  const composition = contextComposition([
+    { type: 'system/message', seq: 1, time: at, surfaceOp: 'append', data: { message: { content: [{ type: 'text', text: 'x'.repeat(1980) }] } } },
+  ]);
+  assert.equal(composition.anchor, null);
+  assert.equal(composition.anchored, false);
+  assert.ok(composition.total > 0, 'an estimate is still produced');
+  assert.equal(composition.occupancy, null, 'occupancy needs a recorded window');
+});
