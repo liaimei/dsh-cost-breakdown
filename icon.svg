@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="Usage meter">
+  <!--
+    dsh-cost-breakdown
+
+    A three-segment gauge, reading left (cheap) to right (expensive) in the same
+    green / amber / red the panel itself uses for its cache-hit, cache-miss and
+    peak segments. The needle sits high and to the right: this plugin is about
+    watching what has been spent, not about reporting a healthy idle state.
+
+    Colours are the hex forms of the plugin's own OKLCH palette, so the icon and
+    the panel it opens cannot drift apart:
+      green  #00C950   amber #FE9A00   red   #FB2C36
+  -->
+  <g>
+    <path d="M222.7 679.0 A334 334 0 0 1 297.3 256.1" fill="none" stroke="#00C950" stroke-width="140" stroke-linecap="butt"/>
+    <path d="M297.3 256.1 A334 334 0 0 1 726.7 256.1" fill="none" stroke="#FE9A00" stroke-width="140" stroke-linecap="butt"/>
+    <path d="M726.7 256.1 A334 334 0 0 1 801.3 679.0" fill="none" stroke="#FB2C36" stroke-width="140" stroke-linecap="butt"/>
+  </g>
+  <g>
+    <line x1="512" y1="512" x2="630" y2="307.6" stroke="#F4F5F7" stroke-width="58" stroke-linecap="round"/>
+    <circle cx="512" cy="512" r="62" fill="#F4F5F7"/>
+    <circle cx="512" cy="512" r="30" fill="#1A1B1E"/>
+  </g>
+</svg>

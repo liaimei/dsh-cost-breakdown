@@ -1,0 +1,79 @@
+{
+  "name": "dsh-cost-breakdown",
+  "version": "0.1.0",
+  "displayName": "DSH Cost Breakdown",
+  "description": "DSH 会话费用账单：账号余额 + DeepSeek 峰谷计价 + 每个会话（含子代理衍生会话）的消耗构成，输入框下方读数与右侧栏面板双入口。",
+  "icon": "icon.svg",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "icon.svg",
+    "lib",
+    "cordis.patch.yml",
+    "README.md",
+    "README.en.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && tsc -p tsconfig.client.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.client.json",
+    "test": "node --test \"test/*.test.mjs\"",
+    "test:accept": "node test/e2e/acceptance.mjs",
+    "test:e2e": "node test/e2e/pipeline.mjs && node test/e2e/peak-rendering.mjs && node test/e2e/lineage.mjs",
+    "test:live": "node test/e2e/live.mjs",
+    "verify": "npm run typecheck && npm test && npm run test:e2e && npm run test:live && npm run test:accept",
+    "prepack": "npm run build"
+  },
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "deepseek",
+    "dsh",
+    "cordis",
+    "plugin",
+    "usage",
+    "cost",
+    "balance",
+    "billing",
+    "pricing",
+    "peak-offpeak",
+    "token",
+    "session"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/liaimei/dsh-cost-breakdown.git"
+  },
+  "homepage": "https://github.com/liaimei/dsh-cost-breakdown",
+  "bugs": {
+    "url": "https://github.com/liaimei/dsh-cost-breakdown/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [],
+      "platform": "web"
+    },
+    "manifestVersion": 1
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "typescript": "^5.9.3"
+  }
+}

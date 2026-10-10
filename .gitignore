@@ -1,0 +1,14 @@
+# Dependencies — reproducible from package-lock.json.
+node_modules/
+
+# Local editor / OS noise.
+.DS_Store
+*.log
+*.tsbuildinfo
+
+# `lib/` is deliberately NOT ignored. The browser half is served straight from
+# `lib/client.js`, and a `github:` install runs no build step, so the compiled
+# artifacts have to be committed or the plugin installs broken.
+
+# The npm tarball produced by `npm pack`.
+*.tgz

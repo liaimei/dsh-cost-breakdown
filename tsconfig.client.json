@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    // The browser half is a SINGLE file that the DSH loader wraps itself: its
+    // source already contains the `window.__ModuleLoader__.load({ id, factory })`
+    // call, so there is nothing to bundle and no import graph to resolve. `ESNext`
+    // keeps it a script, so tsc emits the body as written instead of adding
+    // CommonJS interop or `export {}`.
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    // No `@types/node` here: the browser half must see the DOM's `setTimeout`
+    // (returns number) rather than Node's `Timeout`, or `clearInterval` breaks.
+    "types": [],
+    "strict": true,
+    // The bundled output is injected as a script body; a stray top-level
+    // "use strict" is not part of the contract the shell's loader expects.
+    "alwaysStrict": false,
+    "removeComments": false,
+    "verbatimModuleSyntax": false,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "declaration": false,
+    "sourceMap": false,
+    "outDir": "lib",
+    "rootDir": "src"
+  },
+  "include": ["src/client.ts"]
+}

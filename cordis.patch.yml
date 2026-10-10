@@ -1,0 +1,7 @@
+# Bundle patch layer: the row loads this package's main entry as the host half
+# (a plain Cordis plugin serving the balance/period/session routes); the
+# `dsh.client` declaration in package.json makes the web app load ./client.js
+# as the browser half, which contributes the Usage & Cost right-Sidebar tab.
+- insert:
+    - id: dsh-cost-breakdown
+      name: dsh-cost-breakdown
