@@ -428,7 +428,7 @@ window.__ModuleLoader__.load({
 .dcb-row{display:flex;align-items:baseline;justify-content:space-between;gap:10px;font-variant-numeric:tabular-nums;flex:0 0 auto}
 .dcb-k{display:inline-flex;align-items:center;gap:5px;color:var(--dsw-alias-label-secondary);font-size:var(--dsl-g-font-meta,11px)}
 .dcb-v{font-family:var(--dsl-g-font-mono,ui-monospace,monospace);font-weight:600}
-.dcb-badge{display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:2px 9px;font-size:11px;font-weight:650;border:1px solid transparent}
+.dcb-badge{display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:2px 9px;font-size:11px;font-weight:650;line-height:14px;border:1px solid transparent}
 .dcb-badge-peak{color:var(--dsw-alias-state-error-primary);background:color-mix(in srgb,var(--dsw-alias-state-error-primary) 14%,transparent);border-color:color-mix(in srgb,var(--dsw-alias-state-error-primary) 32%,transparent)}
 .dcb-badge-off{color:var(--dsw-alias-state-success-primary);background:color-mix(in srgb,var(--dsw-alias-state-success-primary) 14%,transparent);border-color:color-mix(in srgb,var(--dsw-alias-state-success-primary) 32%,transparent)}
 .dcb-table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;flex:0 0 auto}

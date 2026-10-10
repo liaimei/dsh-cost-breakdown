@@ -753,6 +753,31 @@ test('the pricing period reads 峰/谷, with peak red and valley green', async (
   assert.ok(badge[1].includes('state-error-primary'), 'the peak badge is the error (red) tone');
 });
 
+test('the period badge does not inherit the composer row height', async () => {
+  // The regression: `.dcb-badge` set its own 11px font but no line-height, so it
+  // inherited `.dcb-dockTrigger`'s 20px line-height (that rule is sized for 13px
+  // text). The pill then measured 20 + 2*2 + 2*1 = 26px tall inside a 20px row —
+  // taller than the row it sits in, and visibly oversized beside 9px digits.
+  const source = fs.readFileSync(BUNDLE, 'utf8');
+  const badge = /\.dcb-badge\{([^}]*)\}/.exec(source);
+  assert.ok(badge !== null, 'the badge rule exists');
+  const css = badge[1];
+  assert.ok(css.includes('line-height:'), 'the badge declares its own line-height');
+
+  const lineHeight = Number(/(?:^|;)line-height:(\d+(?:\.\d+)?)px/.exec(css)?.[1] ?? NaN);
+  const padding = /(?:^|;)padding:(\d+(?:\.\d+)?)px (\d+(?:\.\d+)?)px/.exec(css);
+  assert.ok(Number.isFinite(lineHeight), `parsable badge line-height (got ${css})`);
+  assert.ok(padding !== null, 'the badge padding is parsable');
+  // One 1px border per side is part of the box.
+  const height = lineHeight + Number(padding[1]) * 2 + 2;
+  const rowLineHeight = Number(/\.dcb-dockTrigger\{[^}]*line-height:calc\((\d+)px/.exec(source)?.[1] ?? NaN);
+  assert.ok(Number.isFinite(rowLineHeight), 'the composer row line-height is parsable');
+  assert.ok(
+    height <= rowLineHeight,
+    `the badge (${height}px) must not exceed the composer row (${rowLineHeight}px)`,
+  );
+});
+
 test('the period badge and legend colours agree in both periods', async () => {
   const withPeriod = (peak) => ({
     ok: true,
