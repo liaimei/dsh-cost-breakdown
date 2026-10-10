@@ -448,6 +448,89 @@ function messageCountOf(events: readonly unknown[]): number {
   return count;
 }
 
+/**
+ * Activity counters a session's log already records, so they are READ rather
+ * than inferred: `turn/start` and `step/start` are the authoritative markers
+ * DSH writes, and counting them cannot drift from what the agent really did.
+ * (Deriving turns from distinct `data.turn` values happens to agree on today's
+ * logs, but it would silently disagree on any log that replays a turn.)
+ */
+interface ActivityCounts {
+  turns: number;
+  steps: number;
+  toolCalls: number;
+  userMessages: number;
+  compactions: number;
+}
+
+/** Read one session's activity counters off its own events. */
+function activityOf(events: readonly unknown[]): ActivityCounts {
+  const counts: ActivityCounts = { turns: 0, steps: 0, toolCalls: 0, userMessages: 0, compactions: 0 };
+  for (const event of events) {
+    switch (asRecord(event)?.type) {
+      case 'turn/start': counts.turns += 1; break;
+      case 'step/start': counts.steps += 1; break;
+      case 'tool/call': counts.toolCalls += 1; break;
+      case 'user/message': counts.userMessages += 1; break;
+      case 'compaction/start': counts.compactions += 1; break;
+      default: break;
+    }
+  }
+  return counts;
+}
+
+/**
+ * Bucket a session's activity by Beijing day, using each event's OWN timestamp.
+ *
+ * Kept here rather than in `pricing.mts`: that module prices tokens, and turns
+ * and steps are not money. A turn that starts at 23:59 and a step that runs past
+ * midnight land on their own days, which is the same rule the billing fold uses.
+ */
+function activityByDay(events: readonly unknown[]): Map<string, ActivityCounts> {
+  const days = new Map<string, ActivityCounts>();
+  for (const event of events) {
+    const record = asRecord(event);
+    const type = record?.type;
+    let field: keyof ActivityCounts | null = null;
+    if (type === 'turn/start') field = 'turns';
+    else if (type === 'step/start') field = 'steps';
+    else if (type === 'tool/call') field = 'toolCalls';
+    else if (type === 'user/message') field = 'userMessages';
+    else if (type === 'compaction/start') field = 'compactions';
+    if (field === null) continue;
+
+    const time = record?.time;
+    const date = beijingDateOf(Number.isFinite(time) ? (time as number) : 0);
+    let bucket = days.get(date);
+    if (bucket === undefined) {
+      bucket = { turns: 0, steps: 0, toolCalls: 0, userMessages: 0, compactions: 0 };
+      days.set(date, bucket);
+    }
+    bucket[field] += 1;
+  }
+  return days;
+}
+
+/** The `YYYY-MM-DD` Beijing date of one epoch instant. */
+function beijingDateOf(time: number): string {
+  const shifted = new Date((Number.isFinite(time) ? time : 0) + 8 * 60 * 60 * 1000);
+  const month = shifted.getUTCMonth() + 1;
+  const day = shifted.getUTCDate();
+  return `${shifted.getUTCFullYear()}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+/**
+ * The share of prompt tokens served from cache, as a percentage.
+ *
+ * Cache reads and misses together are the whole prompt, so the rate is
+ * `cacheRead / (cacheRead + input)`. It answers "how much did caching save",
+ * which is why the account view leads with it.
+ */
+function cacheHitRate(tokens: { input: number; cacheRead: number }): number {
+  const prompt = tokens.cacheRead + tokens.input;
+  return prompt > 0 ? (tokens.cacheRead / prompt) * 100 : 0;
+}
+
 /** One session's contribution to the walk, before it is reshaped for the wire. */
 interface SessionEntry {
   sessionId: string;
@@ -564,6 +647,10 @@ interface OverviewSession {
   unpriced: number;
   tokens: { input: number; cacheRead: number; output: number; reasoning: number; total: number };
   byPeriod: { peak: number; offPeak: number };
+  /** Turn / step / tool-call counters read off the session's own events. */
+  activity: ActivityCounts;
+  /** Percentage of prompt tokens served from cache. */
+  cacheHitRate: number;
   /** Set when this session is one of another's descendants (already counted under its ancestor). */
   isChild: boolean;
 }
@@ -576,6 +663,10 @@ interface OverviewReport {
     requests: number;
     byPeriod: { peak: number; offPeak: number };
     tokens: { input: number; cacheRead: number; output: number; reasoning: number; total: number };
+    /** Turns and steps that STARTED on this day, plus the tool calls they made. */
+    activity: ActivityCounts;
+    /** Sessions with at least one billed request on this day. */
+    sessions: number;
   }>;
   sessions: OverviewSession[];
   totals: {
@@ -584,6 +675,11 @@ interface OverviewReport {
     unpriced: number;
     byPeriod: { peak: number; offPeak: number };
     tokens: { input: number; cacheRead: number; output: number; reasoning: number; total: number };
+    activity: ActivityCounts;
+    /** Percentage of prompt tokens served from cache across the whole window. */
+    cacheHitRate: number;
+    /** Distinct sessions with any billed activity in the window. */
+    sessions: number;
   };
   windowDays: number;
   since: number;
@@ -682,14 +778,51 @@ async function overviewReport(
       continue;
     }
     const owned = ownedEventsOf(read);
-    const folded = foldEvents(owned, { holidays });
-    // Skip a session with no billed activity entirely: listing thousands of
+
+    const lastEvent = owned.length > 0 ? ownLastTime(owned) : header.createdAt;
+    const activity = activityOf(owned);
+
+    // The window filters EVENTS, not just which sessions are read.
+    //
+    // Selecting sessions by recency and then summing each one's whole log leaks
+    // out-of-window spend into the window: a session active today but started
+    // months ago would contribute those months to a 7-day total, and the
+    // headline would disagree with the day buckets the chart draws (a real
+    // 7-day request reported dates from two months back). Both figures are
+    // therefore computed from the same in-window slice.
+    const windowDates = new Set<string>();
+    for (let offset = 0; offset < windowDays; offset += 1) {
+      windowDates.add(beijingDateOf(started - offset * 24 * 60 * 60 * 1000));
+    }
+    const inWindow = owned.filter((event) => {
+      const time = asRecord(event)?.time;
+      return windowDates.has(beijingDateOf(Number.isFinite(time) ? (time as number) : 0));
+    });
+
+    const folded = foldEvents(inWindow, { holidays });
+    // Skip a session with no billed activity in the window: listing thousands of
     // zero-cost rows would drown the ones the reader is looking for.
     if (folded.requests === 0) continue;
 
-    const lastEvent = owned.length > 0 ? ownLastTime(owned) : header.createdAt;
-    // Sessions whose newest event predates the window contribute nothing.
-    if (lastEvent < since) continue;
+    // A day can carry activity without any billing (a turn that only ran local
+    // tools), so the activity counters seed the day buckets too — otherwise a
+    // quiet-but-busy day would be missing from the chart entirely.
+    const perDayActivity = activityByDay(inWindow);
+    const ensureDay = (date: string): OverviewReport['days'][number] => {
+      const at = days.get(date);
+      if (at !== undefined) return at;
+      const fresh: OverviewReport['days'][number] = {
+        date,
+        cost: 0,
+        requests: 0,
+        byPeriod: { peak: 0, offPeak: 0 },
+        tokens: { input: 0, cacheRead: 0, output: 0, reasoning: 0, total: 0 },
+        activity: { turns: 0, steps: 0, toolCalls: 0, userMessages: 0, compactions: 0 },
+        sessions: 0,
+      };
+      days.set(date, fresh);
+      return fresh;
+    };
 
     // Descendants are counted, not skipped.
     //
@@ -699,22 +832,23 @@ async function overviewReport(
     // `combined` (asserted by the lineage e2e). De-duplication happens once, in
     // `ownedEventsOf`; excluding descendants here as well would drop genuine
     // cost and disagree with the per-session numbers.
-    for (const [date, day] of foldEventsByDay(owned, { holidays })) {
-      const at = days.get(date);
-      if (at === undefined) {
-        days.set(date, { ...day, byPeriod: { ...day.byPeriod }, tokens: { ...day.tokens } });
-      } else {
-        at.cost += day.cost;
-        at.requests += day.requests;
-        at.byPeriod.peak += day.byPeriod.peak;
-        at.byPeriod.offPeak += day.byPeriod.offPeak;
-        at.tokens.input += day.tokens.input;
-        at.tokens.cacheRead += day.tokens.cacheRead;
-        at.tokens.output += day.tokens.output;
-        at.tokens.reasoning += day.tokens.reasoning;
-        at.tokens.total += day.tokens.total;
-      }
+    for (const [date, day] of foldEventsByDay(inWindow, { holidays })) {
+      const at = ensureDay(date);
+      at.cost += day.cost;
+      at.requests += day.requests;
+      at.byPeriod.peak += day.byPeriod.peak;
+      at.byPeriod.offPeak += day.byPeriod.offPeak;
+      at.tokens.input += day.tokens.input;
+      at.tokens.cacheRead += day.tokens.cacheRead;
+      at.tokens.output += day.tokens.output;
+      at.tokens.reasoning += day.tokens.reasoning;
+      at.tokens.total += day.tokens.total;
     }
+    for (const [date, counts] of perDayActivity) {
+      addActivity(ensureDay(date).activity, counts);
+    }
+    // A session counts once per day it was active, not once per event.
+    for (const date of perDayActivity.keys()) ensureDay(date).sessions += 1;
 
     sessions.push({
       sessionId: header.id,
@@ -726,6 +860,8 @@ async function overviewReport(
       unpriced: folded.unpriced,
       tokens: folded.tokens,
       byPeriod: folded.byPeriod,
+      activity,
+      cacheHitRate: cacheHitRate(folded.tokens),
       isChild: childIds.has(header.id),
     });
   }
@@ -741,10 +877,16 @@ async function overviewReport(
     totals.unpriced += session.unpriced;
     totals.byPeriod.peak += session.byPeriod.peak;
     totals.byPeriod.offPeak += session.byPeriod.offPeak;
+    addActivity(totals.activity, session.activity);
     for (const key of ['input', 'cacheRead', 'output', 'reasoning', 'total'] as const) {
       totals.tokens[key] += session.tokens[key];
     }
   }
+  totals.sessions = sessions.length;
+  // The window-wide hit rate is computed from the summed buckets, not averaged
+  // from the per-session rates: an average of percentages would let one small
+  // session with a high rate outweigh a large one with a low rate.
+  totals.cacheHitRate = cacheHitRate(totals.tokens);
 
   sessions.sort((a, b) => b.lastActivity - a.lastActivity);
   return {
@@ -769,7 +911,19 @@ function emptyOverviewTotals(): OverviewReport['totals'] {
     unpriced: 0,
     byPeriod: { peak: 0, offPeak: 0 },
     tokens: { input: 0, cacheRead: 0, output: 0, reasoning: 0, total: 0 },
+    activity: { turns: 0, steps: 0, toolCalls: 0, userMessages: 0, compactions: 0 },
+    cacheHitRate: 0,
+    sessions: 0,
   };
+}
+
+/** Add one session's activity counters into an accumulator. */
+function addActivity(into: ActivityCounts, from: ActivityCounts): void {
+  into.turns += from.turns;
+  into.steps += from.steps;
+  into.toolCalls += from.toolCalls;
+  into.userMessages += from.userMessages;
+  into.compactions += from.compactions;
 }
 
 /** The newest event timestamp in one session's own events. */

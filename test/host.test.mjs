@@ -441,19 +441,38 @@ const overviewOf = async (routes, days = 30) => {
   return body.value;
 };
 
+/** Epoch ms for `daysAgo` at Beijing midnight. */
+function agoBeijing(daysAgo) {
+  const now = new Date(Date.now() + 8 * 3600_000);
+  const midnight = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) - 8 * 3600_000;
+  return midnight - daysAgo * 86_400_000;
+}
+
+/** The `YYYY-MM-DD` Beijing label of an epoch instant. */
+function beijingDay(time) {
+  const d = new Date(time + 8 * 3600_000);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+}
+
 test('the overview buckets spend by Beijing day across sessions', async () => {
   // Two sessions on different days, plus a third with two events on one day.
   // Off-peak instants are used so the expected cost is exact (rate 1/1M input).
+  // Dates are relative to now on purpose: the window filter works from today, so
+  // an absolute date would drift out of every window as time passes and the test
+  // would fail for a reason unrelated to what it checks.
+  const dayA = agoBeijing(2);
+  const dayB = agoBeijing(1);
   const routes = overviewHarness([
-    { header: { id: 's-a', createdAt: Date.UTC(2026, 9, 12, 0, 0) }, events: [billed(1, Date.UTC(2026, 9, 12, 12, 0))] },
-    { header: { id: 's-b', createdAt: Date.UTC(2026, 9, 13, 0, 0) }, events: [billed(1, Date.UTC(2026, 9, 13, 12, 0)), billed(2, Date.UTC(2026, 9, 13, 13, 0))] },
+    { header: { id: 's-a', createdAt: dayA }, events: [billed(1, dayA + 12 * 3600_000)] },
+    { header: { id: 's-b', createdAt: dayB }, events: [billed(1, dayB + 12 * 3600_000), billed(2, dayB + 13 * 3600_000)] },
   ]);
   const value = await overviewOf(routes);
   const byDate = Object.fromEntries(value.days.map((d) => [d.date, d]));
-  assert.equal(byDate['2026-10-12'].cost, 1, 'one request at the off-peak rate');
-  assert.equal(byDate['2026-10-13'].cost, 2, 'two requests on the second day');
-  assert.equal(byDate['2026-10-13'].requests, 2);
-  assert.deepEqual(value.days.map((d) => d.date), ['2026-10-12', '2026-10-13'], 'days ascend');
+  assert.equal(byDate[beijingDay(dayA)].cost, 1, 'one request at the off-peak rate');
+  assert.equal(byDate[beijingDay(dayB)].cost, 2, 'two requests on the second day');
+  assert.equal(byDate[beijingDay(dayB)].requests, 2);
+  assert.deepEqual(value.days.map((d) => d.date), [beijingDay(dayA), beijingDay(dayB)], 'days ascend');
 
   // The headline figure and the chart must agree: they are two views of one
   // number, and a mismatch is the bug this guards.
@@ -465,9 +484,10 @@ test('the overview counts a descendant own spend, and marks it', async () => {
   // A parent and its child. The child's log here holds only its OWN event (the
   // host strips any inherited prefix before folding), so that spend is real and
   // must be counted — the same way the single-session view adds `own + children`.
+  const when = agoBeijing(1);
   const routes = overviewHarness([
-    { header: { id: 'root-1', createdAt: Date.UTC(2026, 9, 12, 0, 0) }, events: [billed(1, Date.UTC(2026, 9, 12, 12, 0))] },
-    { header: { id: 'child-1', parentSession: 'root-1', createdAt: Date.UTC(2026, 9, 12, 1, 0) }, events: [billed(2, Date.UTC(2026, 9, 12, 13, 0))] },
+    { header: { id: 'root-1', createdAt: when }, events: [billed(1, when + 12 * 3600_000)] },
+    { header: { id: 'child-1', parentSession: 'root-1', createdAt: when + 3600_000 }, events: [billed(2, when + 13 * 3600_000)] },
   ]);
   const value = await overviewOf(routes);
   const child = value.sessions.find((s) => s.sessionId === 'child-1');
@@ -479,9 +499,10 @@ test('the overview counts a descendant own spend, and marks it', async () => {
 });
 
 test('the overview omits sessions with no billed activity', async () => {
+  const when = agoBeijing(1);
   const routes = overviewHarness([
-    { header: { id: 'busy', createdAt: Date.UTC(2026, 9, 12, 0, 0) }, events: [billed(1, Date.UTC(2026, 9, 12, 12, 0))] },
-    { header: { id: 'idle', createdAt: Date.UTC(2026, 9, 12, 0, 0) }, events: [{ type: 'session/title', seq: 1, time: Date.UTC(2026, 9, 12, 1, 0), data: { title: 'nothing billed' } }] },
+    { header: { id: 'busy', createdAt: when }, events: [billed(1, when + 12 * 3600_000)] },
+    { header: { id: 'idle', createdAt: when }, events: [{ type: 'session/title', seq: 1, time: when + 3600_000, data: { title: 'nothing billed' } }] },
   ]);
   const value = await overviewOf(routes);
   assert.deepEqual(value.sessions.map((s) => s.sessionId), ['busy'], 'an unbilled session is not listed');
@@ -534,4 +555,73 @@ test('the overview tolerates an absent query service and unreadable logs', async
   assert.equal(valueGhost.missing, 1, 'the unreadable session is reported, not fatal');
   assert.equal(valueGhost.sessions.length, 1, 'the readable one still contributes');
   assert.ok(routes.size > 0);
+});
+
+test('the window filters events, not just which sessions are read', async () => {
+  // The bug this guards: the window selected sessions by recency and then summed
+  // each one's WHOLE log, so a session active today but started months ago leaked
+  // its out-of-window spend into a 7-day total, and the headline disagreed with
+  // the day buckets the chart draws. A real 7-day request reported dates from two
+  // months back.
+  const old3 = agoBeijing(60);
+  const old30 = agoBeijing(30);
+  const recent = agoBeijing(1);
+  const routes = overviewHarness([
+    {
+      header: { id: 'straddler', createdAt: old3 },
+      events: [billed(1, old3 + 3600_000), billed(2, old30 + 3600_000), billed(3, recent + 3600_000)],
+    },
+  ]);
+
+  const narrow = await overviewOf(routes, 7);
+  // Only the recent event may count, and only its day may be listed.
+  assert.equal(narrow.totals.requests, 1, 'only the in-window request is billed');
+  assert.deepEqual(narrow.days.map((d) => d.date), [beijingDay(recent)], 'only in-window days appear');
+  const daySum = narrow.days.reduce((sum, d) => sum + d.cost, 0);
+  assert.ok(
+    Math.abs(daySum - narrow.totals.cost) < 1e-9,
+    `the chart must agree with the headline (days=${daySum}, total=${narrow.totals.cost})`,
+  );
+
+  // A window wide enough to cover every event must include them all.
+  const wide = await overviewOf(routes, 90);
+  assert.equal(wide.totals.requests, 3, 'a 90-day window includes all three events');
+  assert.equal(wide.days.length, 3, 'and lists all three days');
+});
+
+test('the overview reports activity counters and a window-wide cache rate', async () => {
+  // Turns and steps are read off the log's own markers rather than inferred, and
+  // the hit rate is computed from the summed buckets (averaging per-session rates
+  // would let a small high-rate session outweigh a large low-rate one).
+  const when = agoBeijing(1);
+  const withActivity = (id) => ({
+    header: { id, createdAt: when },
+    events: [
+      { type: 'turn/start', seq: 1, time: when + 3600_000 },
+      { type: 'step/start', seq: 2, time: when + 3600_000 },
+      { type: 'tool/call', seq: 3, time: when + 3600_000 },
+      {
+        type: 'assistant/message', seq: 4, time: when + 3700_000,
+        data: {
+          turn: 1, step: 1,
+          // 9M cached against 1M miss = 90% for this session.
+          usage: { inputTokens: 1_000_000, cacheReadTokens: 9_000_000, outputTokens: 0 },
+          message: { source: { model: 'deepseek-flash' } },
+        },
+      },
+    ],
+  });
+  const routes = overviewHarness([withActivity('a'), withActivity('b')]);
+  const value = await overviewOf(routes);
+
+  assert.equal(value.totals.activity.turns, 2, 'one turn per session');
+  assert.equal(value.totals.activity.steps, 2, 'one step per session');
+  assert.equal(value.totals.activity.toolCalls, 2, 'one tool call per session');
+  assert.equal(value.totals.sessions, 2, 'both sessions are counted');
+  // 18M cached of 20M prompt = 90%.
+  assert.ok(Math.abs(value.totals.cacheHitRate - 90) < 1e-6, `hit rate was ${value.totals.cacheHitRate}`);
+  assert.equal(value.sessions.length, 2);
+  assert.ok(Math.abs(value.sessions[0].cacheHitRate - 90) < 1e-6, 'per-session rate matches');
+  assert.equal(value.days[0].activity.turns, 2, 'day buckets carry the activity too');
+  assert.equal(value.days[0].sessions, 2, 'a day counts each active session once');
 });

@@ -59,6 +59,7 @@ const dayRows = shape.map((cost, i) => ({
   requests: Math.round(cost * 34),
   byPeriod: { peak: cost * 0.72, offPeak: cost * 0.28 },
   tokens: { input: 2_100_000, cacheRead: 88_000_000, output: 420_000, reasoning: 60_000, total: 91_000_000 },
+  activity: { turns: Math.round(cost * 3), steps: Math.round(cost * 11), toolCalls: Math.round(cost * 6), userMessages: Math.round(cost * 2), compactions: Math.round(cost / 4) },
 }));
 const sessionRows = [
   ['session-8234dc7b', '重构计价模块的缓存层', 6.4879, 602, false],
@@ -81,6 +82,8 @@ const sessionRows = [
   unpriced: 0,
   tokens: { input: 2_100_000, cacheRead: 88_000_000, output: 420_000, reasoning: 60_000, total: 91_000_000 },
   byPeriod: { peak: cost * 0.7, offPeak: cost * 0.3 },
+  activity: { turns: Math.round(cost * 3), steps: Math.round(cost * 11), toolCalls: Math.round(cost * 6), userMessages: Math.round(cost * 2), compactions: Math.round(cost / 4) },
+  cacheHitRate: 97.7,
   isChild,
 }));
 
@@ -98,6 +101,17 @@ const OVERVIEW = {
         offPeak: dayRows.reduce((sum, d) => sum + d.byPeriod.offPeak, 0),
       },
       tokens: { input: 63_000_000, cacheRead: 2_640_000_000, output: 12_600_000, reasoning: 1_800_000, total: 2_730_000_000 },
+      // Summed from the day rows so the KPI band agrees with the chart beneath it.
+      activity: dayRows.reduce((acc, d) => ({
+        turns: acc.turns + d.activity.turns,
+        steps: acc.steps + d.activity.steps,
+        toolCalls: acc.toolCalls + d.activity.toolCalls,
+        userMessages: acc.userMessages + d.activity.userMessages,
+        compactions: acc.compactions + d.activity.compactions,
+      }), { turns: 0, steps: 0, toolCalls: 0, userMessages: 0, compactions: 0 }),
+      // 2.64G cached of (2.64G + 63M) prompt.
+      cacheHitRate: (2_640_000_000 / (2_640_000_000 + 63_000_000)) * 100,
+      sessions: sessionRows.length,
     },
     windowDays: 30,
     since: Date.now() - 30 * DAY_MS,

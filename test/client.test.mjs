@@ -1450,6 +1450,8 @@ const day = (date, cost, peakShare, requests = 10) => ({
   requests,
   byPeriod: { peak: cost * peakShare, offPeak: cost * (1 - peakShare) },
   tokens: { input: 1000, cacheRead: 9000, output: 100, reasoning: 0, total: 10100 },
+  activity: { turns: 1, steps: 2, toolCalls: 3, userMessages: 1, compactions: 0 },
+  sessions: 1,
 });
 
 /** An overview payload carrying only the given days. */
@@ -1466,7 +1468,31 @@ const overviewWith = (days, sessions = []) => ({
         peak: days.reduce((sum, d) => sum + d.byPeriod.peak, 0),
         offPeak: days.reduce((sum, d) => sum + d.byPeriod.offPeak, 0),
       },
-      tokens: { input: 1000, cacheRead: 9000, output: 100, reasoning: 0, total: 10100 },
+      // Sum the sessions when there are any, so the band's figures agree with the
+      // rows beneath it; fall back to the day fixtures' own token shape otherwise.
+      tokens: sessions.length > 0
+        ? sessions.reduce((acc, s) => ({
+            input: acc.input + s.tokens.input,
+            cacheRead: acc.cacheRead + s.tokens.cacheRead,
+            output: acc.output + s.tokens.output,
+            reasoning: acc.reasoning + s.tokens.reasoning,
+            total: acc.total + s.tokens.total,
+          }), { input: 0, cacheRead: 0, output: 0, reasoning: 0, total: 0 })
+        : { input: 1000, cacheRead: 9000, output: 100, reasoning: 0, total: 10100 },
+      activity: sessions.length > 0
+        ? sessions.reduce((acc, s) => ({
+            turns: acc.turns + s.activity.turns,
+            steps: acc.steps + s.activity.steps,
+            toolCalls: acc.toolCalls + s.activity.toolCalls,
+            userMessages: acc.userMessages + s.activity.userMessages,
+            compactions: acc.compactions + s.activity.compactions,
+          }), { turns: 0, steps: 0, toolCalls: 0, userMessages: 0, compactions: 0 })
+        : { turns: days.length, steps: days.length * 2, toolCalls: 0, userMessages: 0, compactions: 0 },
+      cacheHitRate: sessions.length > 0
+        ? (sessions.reduce((a, s) => a + s.tokens.cacheRead, 0)
+          / Math.max(1, sessions.reduce((a, s) => a + s.tokens.cacheRead + s.tokens.input, 0))) * 100
+        : 90,
+      sessions: sessions.length,
     },
     windowDays: 30,
     since: Date.now() - 30 * 86_400_000,
@@ -1544,7 +1570,9 @@ test('the overview table headers describe their own columns', async () => {
     sessionId: 's1', title: 'demo', createdAt: Date.now(), lastActivity: Date.now(),
     cost: 1.5, requests: 3, unpriced: 0,
     tokens: { input: 10, cacheRead: 20, output: 30, reasoning: 0, total: 60 },
-    byPeriod: { peak: 1, offPeak: 0.5 }, isChild: false,
+    byPeriod: { peak: 1, offPeak: 0.5 },
+    activity: { turns: 1, steps: 1, toolCalls: 1, userMessages: 1, compactions: 0 },
+    cacheHitRate: 66.7, isChild: false,
   }];
   const client = loadClient({ overview: overviewWith([day('2026-10-10', 5, 1)], sessions) });
   const page = client.slots.find((slot) => slot.options.name === 'main');
@@ -1554,15 +1582,17 @@ test('the overview table headers describe their own columns', async () => {
     'overview.colSession',
     'overview.colWhen',
     'overview.colRequests',
+    'overview.colActivity',
     'overview.colTokens',
+    'overview.colCache',
     'overview.colCost',
   ]);
 });
 
 test('the overview marks descendants and says when the read was partial', async () => {
   const sessions = [
-    { sessionId: 'root', title: 'parent', createdAt: 1, lastActivity: 2, cost: 2, requests: 2, unpriced: 0, tokens: { input: 1, cacheRead: 1, output: 1, reasoning: 0, total: 3 }, byPeriod: { peak: 2, offPeak: 0 }, isChild: false },
-    { sessionId: 'kid', title: 'child', createdAt: 1, lastActivity: 2, cost: 1, requests: 1, unpriced: 0, tokens: { input: 1, cacheRead: 1, output: 1, reasoning: 0, total: 3 }, byPeriod: { peak: 0, offPeak: 1 }, isChild: true },
+    { sessionId: 'root', title: 'parent', createdAt: 1, lastActivity: 2, cost: 2, requests: 2, unpriced: 0, tokens: { input: 1, cacheRead: 1, output: 1, reasoning: 0, total: 3 }, byPeriod: { peak: 2, offPeak: 0 }, activity: { turns: 1, steps: 1, toolCalls: 0, userMessages: 1, compactions: 0 }, cacheHitRate: 50, isChild: false },
+    { sessionId: 'kid', title: 'child', createdAt: 1, lastActivity: 2, cost: 1, requests: 1, unpriced: 0, tokens: { input: 1, cacheRead: 1, output: 1, reasoning: 0, total: 3 }, byPeriod: { peak: 0, offPeak: 1 }, activity: { turns: 1, steps: 1, toolCalls: 0, userMessages: 1, compactions: 0 }, cacheHitRate: 50, isChild: true },
   ];
   const payload = overviewWith([day('2026-10-10', 3, 0.5)], sessions);
   payload.value.truncated = true;
@@ -1591,4 +1621,115 @@ test('the overview degrades to a neutral page when the read fails', async () => 
   const texts = client.textsOf(tree);
   assert.ok(texts.includes('overview.title'), 'the page keeps its frame');
   assert.ok(texts.includes('common.error'), 'the failure is explained in-band');
+});
+
+test('the overview KPI band reports tokens, sessions, turns and the cache rate', async () => {
+  // The band used to lead with cost/today/sessions/peak-share, which never
+  // answered "how much am I using". These are the four figures that do.
+  const sessions = [{
+    sessionId: 's1', title: 'demo', createdAt: 1, lastActivity: 2,
+    cost: 4, requests: 10, unpriced: 0,
+    tokens: { input: 1_000_000, cacheRead: 9_000_000, output: 500_000, reasoning: 0, total: 10_500_000 },
+    byPeriod: { peak: 4, offPeak: 0 },
+    activity: { turns: 7, steps: 21, toolCalls: 5, userMessages: 3, compactions: 1 },
+    cacheHitRate: 90, isChild: false,
+  }];
+  const client = loadClient({ overview: overviewWith([day('2026-10-10', 4, 1)], sessions) });
+  const page = client.slots.find((slot) => slot.options.name === 'main');
+  const tree = await client.renderComponent(page.component, { t: (key) => key });
+  const texts = client.textsOf(tree);
+
+  assert.ok(texts.includes('overview.billed'), 'the billed-token figure is labelled');
+  // `compact` renders 10_500_000 as 10.50M; the band prints it with a `tok` suffix.
+  assert.ok(texts.some((x) => x === '10.50M tok'), `billed tokens render (saw ${texts.filter((x) => /M|K/.test(x)).join(', ')})`);
+  assert.ok(texts.includes('overview.cacheRate'), 'the cache rate is labelled');
+  assert.ok(texts.some((x) => x === '90.0%'), 'the cache rate renders');
+  // Turns and steps come from the counters, not from the request count.
+  const turnsText = texts.find((x) => x.startsWith('overview.turnsShort'));
+  assert.ok(turnsText !== undefined, `the turns/steps line renders (saw ${texts.join(' | ')})`);
+});
+
+test('the overview table shows each session turns, steps and cache rate', async () => {
+  const sessions = [{
+    sessionId: 's1', title: 'demo', createdAt: 1, lastActivity: 2,
+    cost: 4, requests: 10, unpriced: 0,
+    tokens: { input: 1_000_000, cacheRead: 9_000_000, output: 0, reasoning: 0, total: 10_000_000 },
+    byPeriod: { peak: 4, offPeak: 0 },
+    activity: { turns: 7, steps: 21, toolCalls: 5, userMessages: 3, compactions: 1 },
+    cacheHitRate: 90, isChild: false,
+  }];
+  const client = loadClient({ overview: overviewWith([day('2026-10-10', 4, 1)], sessions) });
+  const page = client.slots.find((slot) => slot.options.name === 'main');
+  const tree = await client.renderComponent(page.component, { t: (key) => key });
+  const cells = client.findAllByType(tree, 'td').map((node) => client.textsOf(node).join(''));
+  assert.ok(cells.some((c) => c.startsWith('overview.turnsShort')), 'the row carries turns and steps');
+  assert.ok(cells.includes('90.0%'), `the row carries the cache rate (saw ${cells.join(' | ')})`);
+});
+
+test('the daily chart can be read as money or as tokens', async () => {
+  // Both are per-day sums, so one toggle covers it; the axis must rescale and the
+  // legend must stop claiming a peak/off-peak split that is not on screen.
+  const client = loadClient({ overview: overviewWith([day('2026-10-10', 4, 0.75)]) });
+  const page = client.slots.find((slot) => slot.options.name === 'main');
+  const tree = await client.renderComponent(page.component, { t: (key) => key });
+
+  // Scope to the chart's own toggle: the page-level range buttons carry the same
+  // `dcb-ovRange` class, so an unscoped query matches both groups.
+  const container = (node) => {
+    let found = null;
+    (function walk(n) {
+      if (found !== null || n === null || typeof n !== 'object') return;
+      if (Array.isArray(n)) return n.forEach(walk);
+      if (String(n.props?.className ?? '') === 'dcb-ovMetricToggle') { found = n; return; }
+      if (Array.isArray(n.kids)) n.kids.forEach(walk);
+    })(node);
+    return found;
+  };
+  const toggleRoot = container(tree);
+  assert.ok(toggleRoot !== null, 'the chart exposes a money/token toggle');
+  const toggle = (toggleRoot.kids ?? []).filter((b) => b.__el === true);
+  const labels = toggle.map((b) => client.textsOf(b).join(''));
+  assert.ok(labels.includes('overview.metricCost'), 'the money view is offered');
+  assert.ok(labels.includes('overview.metricTokens'), 'the token view is offered');
+  assert.equal(toggle.filter((b) => b.props['aria-pressed'] === true).length, 1, 'exactly one view is active');
+
+  // Money view leads with the cost legend; the token hint is not shown yet.
+  const texts = client.textsOf(tree);
+  assert.ok(texts.includes('overview.legendHint'), 'the money legend is the default');
+
+  // Clicking the token button swaps the legend hint.
+  const tokenButton = toggle.find((b) => client.textsOf(b).join('') === 'overview.metricTokens');
+  tokenButton.props.onClick();
+  const next = await client.renderComponent(page.component, { t: (key) => key });
+  const nextTexts = client.textsOf(next);
+  assert.ok(nextTexts.includes('overview.legendHintTokens'), 'the token legend replaces the money one');
+});
+
+test('the overview survives a payload from an older host half', async () => {
+  // The host half reloads only on a DSH restart while the client half reloads on
+  // a page refresh, so refreshing after an update runs the new client against the
+  // previous payload shape — which has no `activity` or `cacheHitRate`. Reading
+  // those directly threw and blanked the page.
+  const stale = {
+    ok: true,
+    value: {
+      days: [{ date: '2026-10-10', cost: 5, requests: 3, byPeriod: { peak: 1, offPeak: 4 }, tokens: { input: 10, cacheRead: 20, output: 30, reasoning: 0, total: 60 } }],
+      sessions: [{ sessionId: 's', title: 'demo', createdAt: 1, lastActivity: 2, cost: 5, requests: 3, unpriced: 0, tokens: { input: 10, cacheRead: 20, output: 30, reasoning: 0, total: 60 }, byPeriod: { peak: 1, offPeak: 4 }, isChild: false }],
+      totals: { cost: 5, requests: 3, unpriced: 0, byPeriod: { peak: 1, offPeak: 4 }, tokens: { input: 10, cacheRead: 20, output: 30, reasoning: 0, total: 60 } },
+      windowDays: 30,
+      since: Date.now() - 30 * 86_400_000,
+      sessionsRead: 1, sessionsSkipped: 0, truncated: false, missing: 0, elapsedMs: 5,
+    },
+  };
+  const client = loadClient({ overview: stale });
+  const page = client.slots.find((slot) => slot.options.name === 'main');
+  const tree = await client.renderComponent(page.component, { t: (key) => key });
+  const texts = client.textsOf(tree);
+  assert.ok(texts.includes('overview.title'), 'the page still renders its frame');
+  assert.ok(texts.includes('overview.billed'), 'figures that do exist still render');
+  // The hit rate is recomputed from the buckets the old payload does carry:
+  // 20 cached of 30 prompt = 66.7%.
+  assert.ok(texts.some((x) => x === '66.7%'), `the hit rate is recomputed (saw ${texts.join(' | ')})`);
+  // Missing counters read as zero rather than throwing.
+  assert.ok(texts.some((x) => x.startsWith('overview.turnsShort')), 'the turns line renders with zeros');
 });

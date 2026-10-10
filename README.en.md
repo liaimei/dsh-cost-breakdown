@@ -44,11 +44,18 @@ the sidebar panel and the overview page):
 
 | Section | Content |
 |---|---|
-| Figure strip | Total / today / session count / peak share, each with a secondary figure |
+| Figure strip | **Billed tokens** (cache / miss / out split) / **total cost** / **sessions (turns · steps)** / **cache-hit rate** |
 | Daily spend | **One column per day of the selected window** (7 for a 7-day window, 30 for a 30-day one), with days that have no spend left blank; each column is a peak/off-peak stack (**peak = red, off-peak = green**) read against the y-axis; hover shows that day's amount |
-| Sessions | Newest activity first: date, requests, tokens and cost per session; descendants are tagged |
+| Sessions | Newest activity first: date, requests, **turns / steps**, tokens, **cache-hit rate** and cost per session; descendants are tagged |
 
-- **Range**: last 7 days / 30 days / all (default 30, capped at 365).
+- **Range**: last 7 days / 30 days / all (default 30, capped at 365); the daily chart
+  **toggles between cost and tokens** (cost stacks peak/off-peak, tokens is a single total).
+- **Turns and steps are READ, not inferred**: the counters come from the log's own
+  `turn/start` and `step/start` events, so they cannot drift from what the agent did.
+- **The window filters events, not just sessions**: selecting sessions by recency and then
+  summing each one's whole log leaked out-of-window spend into the window (a real 7-day
+  request reported dates from two months back). Totals, the daily chart and the session
+  table now all read the same in-window slice.
 - **Counted live, no on-disk cache**: every open (or range switch) replays the logs. At the
   current scale (a dozen sessions) this lands in tens of milliseconds; at several hundred
   it slows down and the page reports how long it took.
