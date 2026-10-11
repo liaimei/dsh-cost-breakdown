@@ -6,9 +6,7 @@ import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
 import {
   beijingParts,
-  CNY_TOKEN_UNIT,
   DEFAULT_HOLIDAYS,
-  fmtCountdown,
   holidaysFrom,
   isPeakBeijing,
   matchOfficialModel,
@@ -26,7 +24,6 @@ function beijing(year: number, month: number, day: number, hour: number, minute 
 describe('the official price book', () => {
   test('carries the two DeepSeek rows with off-peak exactly half of peak', () => {
     assert.deepEqual(OFFICIAL_MODELS.map(r => r.id), ['deepseek-flash', 'deepseek-v4-pro'])
-    assert.equal(CNY_TOKEN_UNIT, 1_000_000)
     for (const row of OFFICIAL_MODELS) {
       for (const key of ['hit', 'miss', 'out'] as const) {
         assert.equal(row.peak[key], row.offPeak[key] * 2, `${row.id}.${key}`)
@@ -187,20 +184,6 @@ describe('periodAt (the current period and its next flip)', () => {
   test('a non-finite instant reads as the epoch instead of throwing', () => {
     const period = periodAt(Number.NaN)
     assert.equal(typeof period.peak, 'boolean')
-  })
-})
-
-describe('fmtCountdown', () => {
-  test('renders hours, minutes+seconds, and bare seconds', () => {
-    assert.equal(fmtCountdown(2 * 3_600_000 + 5 * 60_000), '2 小时 5 分')
-    assert.equal(fmtCountdown(3 * 60_000 + 7_000), '3 分 7 秒')
-    assert.equal(fmtCountdown(9_000), '9 秒')
-  })
-
-  test('a non-positive or unreadable span has no countdown', () => {
-    for (const ms of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
-      assert.equal(fmtCountdown(ms), null, String(ms))
-    }
   })
 })
 

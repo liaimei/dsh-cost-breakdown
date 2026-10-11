@@ -55,7 +55,7 @@ balance · current peak/off-peak**. Click to expand a detail card carrying the t
 token buckets (cache hit / miss / output), the cost split by period, and the official
 rate table for the period in force. The card is `position: fixed` and measured from the
 trigger so it escapes the composer's own `overflow` clipping, flipping below the trigger
-when there is no room above. The period badge and its countdown flip on the local clock.
+when there is no room above. The period badge flips on the local clock.
 
 The balance comes from **two sources**, tried in order: (1) DSH's own account sign-in (the
 `deepseekAccount` service, which needs **no API key** — this is what a signed-in desktop user has),

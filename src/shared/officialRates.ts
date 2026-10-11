@@ -25,9 +25,6 @@ export interface OfficialModelRow {
   peak: OfficialRate
 }
 
-/** 每个计价单位的 token 数：表中费率是「元 / 1M token」，因此所有成本都除以它。 */
-export const CNY_TOKEN_UNIT = 1_000_000
-
 /** 官方价目行。每一列上谷时价都恰好是峰时价的一半。 */
 export const OFFICIAL_MODELS: readonly OfficialModelRow[] = [
   {
@@ -166,18 +163,6 @@ export function periodAt(time: number, holidays: readonly string[] = DEFAULT_HOL
     if (isPeakBeijing(t, holidays) !== peak) return { peak, next: { at: t, peak: !peak } }
   }
   return { peak, next: null }
-}
-
-/** 距时段翻转的倒计时：`H 小时 M 分` / `M 分 S 秒` / `S 秒`；目标不在未来时返回 null。 */
-export function fmtCountdown(ms: number): string | null {
-  if (!Number.isFinite(ms) || ms <= 0) return null
-  const total = Math.floor(ms / 1000)
-  const h = Math.floor(total / 3600)
-  const m = Math.floor((total % 3600) / 60)
-  const s = total % 60
-  if (h > 0) return `${h} 小时 ${m} 分`
-  if (m > 0) return `${m} 分 ${s} 秒`
-  return `${s} 秒`
 }
 
 /**
