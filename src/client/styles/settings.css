@@ -1,0 +1,8 @@
+/* 「插件」页负责画分区外框；这些行在其块内以平面样式渲染。 */
+.lc-settings-prefs { padding: 4px 0; }
+.lc-settings-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; }
+/* `flex: 1` 加 `min-width: 0`，让过长的偏好项标签被截断，而不是把控件挤出该行。 */
+.lc-settings-label { flex: 1; min-width: 0; font-size: 14px; color: var(--dsw-alias-label-primary); }
+/* 药丸外形与 harness 自身的设置控件一致；36px 高度加上 `font: inherit` 复位让它与它们齐平。 */
+.lc-settings-select { display: inline-flex; align-items: center; gap: 12px; height: 36px; padding: 0 14px; border: none; border-radius: 18px; background: var(--dsw-alias-bg-module-platform); font: inherit; font-size: 14px; line-height: 22px; color: var(--dsw-alias-label-primary); cursor: pointer; transition: background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+.lc-settings-note { color: var(--dsw-alias-label-tertiary); font-size: 12px; line-height: 1.5; margin: 12px 0 4px; }

@@ -1,0 +1,58 @@
+.lc-dp { position: relative; flex: none; }
+.lc-dp-trigger { display: inline-flex; align-items: center; gap: 6px; box-sizing: border-box; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-2); border-radius: 999px; padding: 3px 12px; font: inherit; font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-secondary); white-space: nowrap; cursor: pointer; transition: border-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out), color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+.lc-dp-trigger:hover { border-color: var(--dsw-alias-label-secondary); color: var(--dsw-alias-label-primary); }
+/** 生效中的范围沿用 chip 自己的语言：页面给余额胶囊用的那种品牌色描边药丸，
+ * 让头部一眼读出「这个范围是自定义的」，而无需再加一个控件。 */
+.lc-dp-trigger-on { border-color: color-mix(in srgb, var(--dsw-alias-brand-primary) 45%, transparent); color: var(--dsw-alias-brand-primary); }
+/* 两端始终可见：起点显示在终点左侧，不必打开面板
+   就能从头部读出范围。两个半边都不收缩 ——
+   chip 是 nowrap 的，日期绝不会被省略成看不懂的样子。 */
+.lc-dp-half { flex: none; text-align: center; font-variant-numeric: tabular-nums; }
+.lc-dp-half-empty { color: var(--dsw-alias-label-tertiary); font-variant-numeric: normal; }
+.lc-dp-sep { flex: none; color: var(--dsw-alias-label-tertiary); }
+
+/* ---- 面板：`.lc-tip` 的面孔，本表给它固定的座位 ---- */
+/* portal 到 <body> 并设 `position: fixed`：页面本身是 `lc-ov` 查询容器，留在树内的弹出层会被其包含块捕获，并被页面唯一的滚动容器裁掉。 */
+.lc-dp-panel { position: fixed; z-index: 300; left: 0; top: 0; width: max-content; max-width: calc(100vw - 16px); padding: 8px; pointer-events: auto; opacity: 1; }
+
+/* 月份自身的导航 —— 网格之上唯一的一层 chrome。 */
+.lc-dp-nav { display: flex; align-items: center; gap: 4px; margin-bottom: 4px; }
+.lc-dp-month { flex: 1 1 auto; text-align: center; font-size: 12px; line-height: 20px; font-weight: 500; white-space: nowrap; }
+.lc-dp-navbtn { flex: none; width: 22px; height: 22px; border: 0; border-radius: 5px; background: transparent; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 14px; line-height: 1; cursor: pointer; }
+.lc-dp-navbtn:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
+.lc-dp-navbtn:disabled { opacity: 0.35; cursor: not-allowed; }
+.lc-dp-navbtn:disabled:hover { background: transparent; color: var(--dsw-alias-label-secondary); }
+
+/** ---- 月份网格 ---- 固定 28px 的单元：若日历随内容自适应宽度，
+ * 逐月都会变宽（五周的二月对六周的二月），面板就会在光标下跳动。
+ * 网格同时决定了面板自身的宽度，于是月份标题与底部提示
+ * 都排在一个稳定的度量上。 */
+.lc-dp-wds, .lc-dp-week { display: flex; }
+.lc-dp-wd { flex: 0 0 28px; text-align: center; font-size: 10px; line-height: 18px; color: var(--dsw-alias-label-tertiary); }
+.lc-dp-grid { display: flex; flex-direction: column; outline: none; }
+.lc-dp-grid:focus-visible { outline: 1px solid var(--dsw-alias-brand-primary); border-radius: 6px; }
+.lc-dp-cell { flex: 0 0 28px; height: 26px; display: flex; align-items: center; justify-content: center; box-sizing: border-box; border-radius: 5px; font-size: 11px; line-height: 1; color: var(--dsw-alias-label-primary); font-variant-numeric: tabular-nums; user-select: none; cursor: pointer; }
+.lc-dp-cell:hover { background: var(--dsw-alias-interactive-bg-hover); }
+/* 选中的区间带：两端之间连续的一整段，只在区间两端切齐直角，
+   好让连续的日子读成一个区间。 */
+.lc-dp-in { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 16%, transparent); border-radius: 0; }
+.lc-dp-in:hover { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 24%, transparent); }
+/* 两端本身用页面的主填充色，就像范围组自己点亮的 chip ——
+   区间带的规则写在前面，所以这里在两处都胜出。 */
+.lc-dp-edge { background: var(--dsw-alias-button-primary-fill); color: var(--dsw-alias-label-primary-foreground); border-radius: 5px; font-weight: 500; }
+.lc-dp-edge:hover { background: var(--dsw-alias-button-primary-fill); }
+/* 键盘光标：一圈永远不会挤动单元布局的描边。 */
+.lc-dp-cursor { box-shadow: inset 0 0 0 1px var(--dsw-alias-label-secondary); }
+.lc-dp-today { font-weight: 600; }
+/* 没有会话的日子仍可选中：未来日期看着可选实则不响应，
+   这样误点一下也不会落成一个空范围。 */
+.lc-dp-future { color: var(--dsw-alias-label-tertiary); opacity: 0.4; cursor: not-allowed; }
+.lc-dp-future:hover { background: transparent; }
+.lc-dp-blank { cursor: default; }
+.lc-dp-blank:hover { background: transparent; }
+
+/* ---- 底部：下一个要选哪一端，以及回到预设的入口 ---- */
+.lc-dp-foot { display: flex; align-items: center; gap: 8px; margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--dsw-alias-border-l2); }
+.lc-dp-hint { flex: 1 1 auto; min-width: 0; font-size: 11px; line-height: 18px; color: var(--dsw-alias-label-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lc-dp-clear { flex: none; border: 0; background: transparent; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 11px; line-height: 18px; cursor: pointer; }
+.lc-dp-clear:hover { color: var(--dsw-alias-label-primary); text-decoration: underline; }

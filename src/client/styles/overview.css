@@ -1,0 +1,211 @@
+/* 页面本身是 `lc-ov` 查询容器；inline-size 包含使其成为 `position: fixed` 后代的包含块，所以 hoverTip.tsx 把气泡 portal 到 <body>。 */
+.lc-ov-page { display: flex; flex-direction: column; width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden; box-sizing: border-box; background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-primary); font-size: 13px; container: lc-ov / inline-size; }
+.lc-ov-pagescroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; }
+/* 不设宽度上限：出厂的一级页面在 960px 处取景，本页则随面板自适应。 */
+.lc-ov-pagecontent { padding: 0 clamp(24px, 4vw, 48px) 48px; }
+.lc-ov-pagehead { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; padding-top: 28px; margin-bottom: 24px; }
+/* 为 macOS `hiddenInset` 标题栏留出净空，让一级页面的头部与框架对齐。 */
+[data-platform='darwin'] .lc-ov-pagehead { padding-top: calc(28px + var(--dsh-frame-top-clearance, 0px)); }
+.lc-ov-pagetitle { flex: 0 1 auto; min-width: 0; margin: 0; font-size: 20px; line-height: 28px; font-weight: 500; }
+.lc-ov-settings { flex: none; display: inline-flex; align-items: center; gap: 6px; box-sizing: border-box; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-2); border-radius: 999px; padding: 3px 12px; font: inherit; font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-secondary); white-space: nowrap; cursor: pointer; transition: border-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out), color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+/* 用一个外层包住选择器与范围组，让头部只保留一次自动外边距推挤。 */
+.lc-ov-headctl { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.lc-ov-settings:hover { border-color: var(--dsw-alias-label-secondary); color: var(--dsw-alias-label-primary); }
+.lc-ov-balance { flex: none; display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 2px 10px; border-radius: 999px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l2); font-size: 12px; line-height: 18px; text-decoration: none; color: inherit; }
+.lc-ov-balance:hover .lc-ov-balance-value { text-decoration: underline; }
+.lc-ov-balance-label { color: var(--dsw-alias-label-secondary); white-space: nowrap; }
+.lc-ov-balance-value { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
+
+.lc-hovertip { position: fixed; z-index: 300; max-width: min(320px, 50vw); white-space: pre-line; }
+
+/* 这一对在容器 932px 处折成一列，再窄下去半宽图表的七个日分组就会挤作一团。 */
+.lc-ov-first { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 10px; }
+.lc-ov-kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.lc-ov-kpi { align-items: center; padding: 8px; }
+.lc-ov-kpi .lc-stat-value { font-size: 20px; }
+@container lc-ov (max-width: 932px) {
+  .lc-ov-first { grid-template-columns: minmax(0, 1fr); }
+}
+@container lc-ov (max-width: 640px) {
+  .lc-ov-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* 两条柱都按各自的窗口最大值缩放：2 美元的一周不该在 1.69 亿 token 的一周旁边被压平。 */
+.lc-ov-usage { flex: 1 1 auto; display: flex; flex-direction: column; margin-bottom: 0; min-width: 0; box-sizing: border-box; }
+/* 网格列：刻度轨 | 图表 | 刻度轨，日期条作为图表列的第 2 行，标签因此居中于各自列下。 */
+.lc-ov-usage-plot { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 42px minmax(0, 1fr) 42px; grid-template-rows: minmax(56px, 1fr) auto; gap: 6px; }
+.lc-ov-usage-rail-l { grid-area: 1 / 1; }
+.lc-ov-usage-grid { grid-area: 1 / 2; position: relative; min-width: 0; display: flex; }
+.lc-ov-usage-rail-r { grid-area: 1 / 3; }
+/* 固定宽度让两条轨在刻度宽度不同时仍保持对称（“169.2M” 对 “$0.0075”）。 */
+.lc-ov-usage-rail { position: relative; width: 42px; font-size: 9px; line-height: 1.2; color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; }
+.lc-ov-usage-rail-l .lc-ov-usage-tick { right: 0; }
+.lc-ov-usage-rail-r .lc-ov-usage-tick { left: 0; }
+.lc-ov-usage-tick { position: absolute; transform: translateY(-50%); white-space: nowrap; }
+/* 网格只覆盖柱形区域，网格线因此不会穿过标签；行模板 56px 的下限让百分比高度的柱在折行后仍然存活。 */
+.lc-ov-usage-line { position: absolute; left: 0; right: 0; height: 1px; background: color-mix(in srgb, var(--dsw-alias-border-l2) 70%, transparent); }
+.lc-ov-usage-line-0 { background: var(--dsw-alias-border-l2); }
+.lc-ov-usage-cols { position: relative; flex: 1 1 auto; min-width: 0; display: flex; align-items: stretch; gap: 6px; }
+.lc-ov-usage-col { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; }
+.lc-ov-usage-bars { flex: 1 1 auto; width: 100%; display: flex; align-items: flex-end; justify-content: center; gap: 3px; }
+.lc-ov-usage-bar { flex: none; width: 10px; border-radius: 3px 3px 0 0; }
+.lc-ov-usage-tokens { background: color-mix(in srgb, var(--color-blue-500) 72%, transparent); }
+.lc-ov-usage-cost { background: color-mix(in srgb, var(--color-green-500) 72%, transparent); }
+.lc-ov-usage-days { grid-area: 2 / 2; display: flex; gap: 6px; }
+.lc-ov-usage-day { flex: 1 1 0; min-width: 0; text-align: center; font-size: 9px; line-height: 1.2; color: var(--dsw-alias-label-secondary); white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* 窄于约 400px 时七个标签的整条日期条会挤成一团；用 `visibility` 让每个槽位仍占住列的几何位置。 */
+@container lc-ov (max-width: 400px) {
+  .lc-ov-usage-day:nth-child(even) { visibility: hidden; }
+}
+.lc-ov-usage-key { flex: none; display: flex; align-items: center; justify-content: flex-end; gap: 5px; padding-top: 5px; }
+.lc-ov-usage-swatch { flex: none; width: 10px; height: 8px; border-radius: 2px; }
+.lc-ov-usage-key-label { font-size: 9px; color: var(--dsw-alias-label-secondary); }
+
+/* 三张统计卡共占一行；面板再也放不下两张时，各自折成整宽。 */
+.lc-ov-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 10px; }
+.lc-ov-stats > .lc-card { margin-bottom: 0; min-width: 0; box-sizing: border-box; }
+@container lc-ov (max-width: 1100px) {
+  .lc-ov-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@container lc-ov (max-width: 700px) {
+  .lc-ov-stats { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* 计费卡的峰时 / 谷时费用拆分，位于其分桶环图之下。 */
+.lc-ov-billed-periods { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--dsw-alias-border-l1); font-size: 12px; color: var(--dsw-alias-label-secondary); }
+.lc-ov-billed-period { display: inline-flex; align-items: center; gap: 5px; }
+.lc-ov-billed-period i { flex: none; width: 8px; height: 8px; border-radius: 2px; }
+.lc-ov-billed-period b { color: var(--dsw-alias-label-primary); font-variant-numeric: tabular-nums; }
+.lc-ov-billed-period em { font-style: normal; color: var(--dsw-alias-label-tertiary); font-variant-numeric: tabular-nums; }
+
+/* `align-items: start` 让热力卡保持自然高度，而不被拉伸到分页网格的高度。 */
+.lc-ov-body { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 7fr); gap: 10px; align-items: start; }
+.lc-ov-left { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.lc-ov-right { min-width: 0; }
+@container lc-ov (max-width: 932px) {
+  .lc-ov-body { display: block; }
+  .lc-ov-left { margin-bottom: 12px; }
+}
+.lc-ov-left > .lc-card { margin-bottom: 0; min-width: 0; box-sizing: border-box; }
+.lc-ov-heat-card { display: flex; flex-direction: column; }
+
+/* 固定 20px 的单元在卡片内居中，卡片高度因此跟随 7 行单元，而不是让单元拉伸到卡片宽度。 */
+.lc-heat-wrap { display: flex; flex-direction: column; flex: 1; }
+.lc-heat { display: flex; gap: 8px; flex: 1; align-items: center; justify-content: center; }
+/* 各列与星期竖栏都为月份标签预留同一条 18px 行，居中的单元行因此保持对齐。 */
+.lc-heat-wds, .lc-heat-col { padding-top: 18px; }
+.lc-heat-wds { display: flex; flex-direction: column; gap: 3px; }
+/* 竖栏按最宽的星期标签自行定宽，而 zh 语言环境下这个标签最宽。 */
+.lc-heat-wd { flex: none; height: 20px; display: flex; align-items: center; justify-content: center; font-size: 9px; color: var(--dsw-alias-label-secondary); text-align: center; white-space: nowrap; }
+.lc-heat-cols { display: flex; gap: 3px; }
+/* 用绝对定位让标签宽度不占 20px 的列，也就无法把网格挤歪。 */
+.lc-heat-col { position: relative; display: flex; flex-direction: column; gap: 3px; }
+.lc-heat-mon { position: absolute; top: 0; left: 0; font-size: 9px; line-height: 18px; color: var(--dsw-alias-label-secondary); white-space: nowrap; }
+.lc-heat-cell { width: 20px; height: 20px; box-sizing: border-box; border: 0; border-radius: 20%; padding: 0; background: var(--dsw-alias-bg-layer-2); cursor: default; }
+button.lc-heat-cell { cursor: pointer; }
+button.lc-heat-cell:hover { box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--color-blue-500) 70%, transparent); }
+.lc-heat-future { background: transparent; }
+/* 没有计费活动的日子保留一层可见的灰底（浅色主题下 layer-2 就是卡片自身的白色）。 */
+.lc-heat-0 { background: color-mix(in srgb, var(--dsw-alias-label-secondary) 16%, transparent); }
+.lc-heat-1 { background: color-mix(in srgb, var(--color-blue-500) 28%, transparent); }
+.lc-heat-2 { background: color-mix(in srgb, var(--color-blue-500) 50%, transparent); }
+.lc-heat-3 { background: color-mix(in srgb, var(--color-blue-500) 72%, transparent); }
+.lc-heat-4 { background: color-mix(in srgb, var(--color-blue-500) 92%, transparent); }
+/* 钉住的那一天：网格筛选的来源。 */
+.lc-heat-on { box-shadow: 0 0 0 1.5px var(--color-blue-500); }
+/* 色块取网格单元的一半大小：与单元同尺寸时，图例读起来像第二行单元。 */
+.lc-heat-legend { display: flex; align-items: center; justify-content: flex-end; gap: 2px; padding-top: 6px; }
+.lc-heat-legend .lc-heat-cell { width: 10px; height: 10px; }
+.lc-heat-key { font-size: 9px; color: var(--dsw-alias-label-secondary); margin: 0 2px; }
+
+/* 每条柱是最重那一行计数的占比，因此任何排序都不会把它顶出卡片边缘。 */
+.lc-ov-skills { display: flex; flex-direction: column; gap: 2px; }
+/* 收进标题的下外边距里，让总计与标题读成一个头部。 */
+.lc-ov-skills-sub { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: -4px 0 8px; }
+.lc-ov-skills-sub-n { margin-left: 0; }
+.lc-ov-skills-search { flex: 0 1 170px; margin-left: auto; }
+.lc-ov-skill { position: relative; display: flex; align-items: baseline; gap: 7px; min-width: 0; width: 100%; border: 0; border-radius: 6px; padding: 2px 6px 4px; background: transparent; font: inherit; font-size: 12px; line-height: 1.7; color: inherit; text-align: left; cursor: pointer; transition: background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+.lc-ov-skill:hover { background: var(--dsw-alias-bg-layer-2); }
+/* 钉住的行与其明细读成一个整体：填充底色和唯一那道描边都留在外层容器上。 */
+.lc-ov-skill-unit { background: var(--dsw-alias-bg-layer-2); border-radius: 8px; box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--color-blue-500) 45%, transparent); }
+.lc-ov-skill-unit .lc-ov-skill-detail { margin-top: 0; padding: 4px 6px 8px; background: transparent; }
+.lc-ov-skill-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; align-self: center; }
+.lc-ov-skill-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--ds-font-family-code, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 11px; color: var(--dsw-alias-label-primary); }
+.lc-ov-skill-count { flex: none; font-variant-numeric: tabular-nums; color: var(--dsw-alias-label-primary); }
+.lc-ov-skill-last { flex: none; min-width: 56px; text-align: right; font-size: 11px; color: var(--dsw-alias-label-secondary); white-space: nowrap; }
+/* 绝对定位在行的下内边距之上，细线因此永不影响文字基线；JS 里的宽度会减去行的 6px 内缩。 */
+.lc-ov-skill-bar { position: absolute; left: 6px; bottom: 1px; height: 2px; border-radius: 1px; opacity: 0.45; pointer-events: none; }
+.lc-ov-skill-more { padding-top: 4px; font-size: 11px; color: var(--dsw-alias-label-secondary); }
+.lc-skilltip { position: fixed; z-index: 300; max-width: min(300px, 60vw); padding: 10px 12px; border-radius: 10px; white-space: normal; line-height: 1.5; }
+.lc-skilld-head { display: flex; align-items: center; gap: 7px; }
+.lc-skilld-name { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; font-family: var(--ds-font-family-code, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 12px; font-weight: 600; color: var(--dsw-alias-label-primary); }
+.lc-skilld-chip { flex: none; font-size: 10px; line-height: 1.5; color: var(--dsw-alias-label-secondary); border: 1px solid var(--dsw-alias-border-l2); border-radius: 4px; padding: 0 5px; white-space: nowrap; }
+.lc-skilld-desc { margin: 6px 0 0; font-size: 11.5px; line-height: 1.55; color: var(--dsw-alias-label-secondary); overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
+.lc-skilld-path { margin-top: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--ds-font-family-code, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 11px; color: var(--dsw-alias-label-tertiary); }
+/* 气泡 portal 到 <body>，位于 lc-ov 容器之外，所以用弹性折行而不是容器查询。 */
+.lc-skilld-foot { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; margin-top: 8px; padding-top: 7px; border-top: 1px solid var(--dsw-alias-border-l2); font-size: 11px; color: var(--dsw-alias-label-secondary); }
+.lc-skilld-foot > span:first-child { white-space: nowrap; }
+.lc-skilld-hint { margin-left: auto; flex: none; color: var(--color-blue-500); white-space: nowrap; }
+/* 位于其钉住行之下；当那一行不在范围内时，则脱离并落在卡片底部。 */
+.lc-ov-skill-detail { margin: 4px 0 2px; padding: 8px 10px 9px; background: var(--dsw-alias-bg-layer-2); border-radius: 8px; }
+.lc-ov-skill-detail > :first-child { margin-top: 0; }
+/* 标签列对值列；路径值本身就是复制按钮。 */
+.lc-skilld-grid { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 12px; margin-top: 7px; font-size: 11px; line-height: 1.6; }
+.lc-skilld-k { color: var(--dsw-alias-label-tertiary); white-space: nowrap; }
+.lc-skilld-v { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dsw-alias-label-secondary); }
+.lc-skilld-pathv { display: flex; align-items: center; gap: 5px; border: 0; padding: 0; background: transparent; font: inherit; cursor: copy; text-align: left; }
+.lc-skilld-pathv-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--ds-font-family-code, ui-monospace, SFMono-Regular, Menlo, monospace); }
+.lc-skilld-pathv svg { flex: none; color: var(--dsw-alias-label-tertiary); transition: color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+.lc-skilld-pathv:hover .lc-skilld-pathv-text, .lc-skilld-pathv:hover svg { color: var(--dsw-alias-label-primary); }
+
+.lc-ov-list-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+.lc-ov-list-title { font-weight: 600; white-space: nowrap; }
+.lc-ov-list-count { color: var(--dsw-alias-label-secondary); font-size: 11px; font-variant-numeric: tabular-nums; background: var(--dsw-alias-bg-layer-2); border-radius: 8px; padding: 1px 7px; }
+.lc-ov-day-chip { border: 1px solid color-mix(in srgb, var(--color-blue-500) 45%, transparent); color: var(--color-blue-500); background: color-mix(in srgb, var(--color-blue-500) 10%, transparent); border-radius: 999px; font-size: 11px; line-height: 1.4; padding: 1px 10px; cursor: pointer; font-family: inherit; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.lc-ov-search { flex: 1 1 150px; min-width: 110px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-2); border-radius: 6px; padding: 4px 10px; font: inherit; font-size: 12px; color: var(--dsw-alias-label-primary); outline: none; transition: border-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+.lc-ov-search:focus { border-color: var(--dsw-alias-label-secondary); }
+.lc-ov-search::placeholder { color: var(--dsw-alias-label-secondary); }
+
+.lc-ov-groups { display: flex; gap: 6px; flex-wrap: wrap; margin: -2px 0 10px; }
+.lc-ov-chip { display: inline-flex; align-items: baseline; gap: 5px; border: 1px solid var(--dsw-alias-border-l2); background: transparent; color: var(--dsw-alias-label-secondary); border-radius: 999px; font: inherit; font-size: 11px; line-height: 1.5; padding: 2px 10px; cursor: pointer; max-width: 220px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out), border-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out), background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+.lc-ov-chip:hover { color: var(--dsw-alias-label-primary); border-color: var(--dsw-alias-label-secondary); }
+.lc-ov-chip-on, .lc-ov-chip-on:hover { background: var(--dsw-alias-button-primary-fill); border-color: transparent; color: var(--dsw-alias-label-primary-foreground); }
+.lc-ov-chip-n { font-variant-numeric: tabular-nums; opacity: 0.65; font-size: 10px; }
+.lc-ov-chip-on .lc-ov-chip-n { opacity: 0.85; }
+
+/* auto-fill 让三列网格随面板变窄而逐级减少列数。 */
+.lc-ov-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; }
+/* 网格把每一行撑到该行最高卡片的高度。 */
+.lc-ov-session { display: flex; flex-direction: column; gap: 6px; text-align: left; background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l2); border-radius: 10px; padding: 10px 12px; cursor: pointer; font: inherit; color: inherit; transition: border-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out), background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+.lc-ov-session:hover { border-color: var(--dsw-alias-label-secondary); background: var(--dsw-alias-bg-layer-2); }
+.lc-ov-session-current { border-color: color-mix(in srgb, var(--color-blue-500) 65%, transparent); }
+.lc-ov-session-head { display: flex; align-items: flex-start; gap: 6px; min-width: 0; }
+.lc-ov-running { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--color-green-500); }
+/* 两行截断防止过长的标题把所在行撑大；完整文本留在 tooltip 上。 */
+.lc-ov-session-title { flex: 1 1 auto; min-width: 0; font-weight: 600; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere; }
+.lc-ov-current { flex: none; font-size: 10px; line-height: 1.5; color: var(--color-blue-500); border: 1px solid color-mix(in srgb, var(--color-blue-500) 45%, transparent); border-radius: 4px; padding: 0 4px; }
+.lc-ov-session-times { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 1px; }
+.lc-ov-session-time { color: var(--dsw-alias-label-secondary); font-size: 11px; white-space: nowrap; }
+.lc-ov-session-created { color: var(--dsw-alias-label-secondary); font-size: 10px; line-height: 1.4; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.lc-ov-session-crumb { display: flex; align-items: center; gap: 5px; min-width: 0; font-size: 11px; color: var(--dsw-alias-label-secondary); white-space: nowrap; overflow: hidden; }
+.lc-ov-crumb-group { flex: none; max-width: 55%; overflow: hidden; text-overflow: ellipsis; }
+.lc-ov-crumb-sep { flex: none; opacity: 0.55; }
+/* 混入标签灰而不是 layer-2：浅色主题下 layer-2 就是卡片自身的白色，会让药丸不可见。 */
+.lc-ov-crumb-project { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-family: var(--ds-font-family-code, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 10px; line-height: 1.6; color: var(--dsw-alias-label-primary); background: color-mix(in srgb, var(--dsw-alias-label-secondary) 16%, transparent); border-radius: 999px; padding: 0 8px; }
+.lc-ov-session-body { display: flex; gap: 14px; align-items: center; min-width: 0; }
+.lc-ov-mini-stats { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+/* 标签与值分别拉向卡片两侧，与头部右对齐的时间呼应。 */
+.lc-ov-mini-stat { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 11px; }
+.lc-ov-mini-label { flex: none; color: var(--dsw-alias-label-secondary); white-space: nowrap; }
+.lc-ov-mini-value { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.lc-ov-session-empty { color: var(--dsw-alias-label-secondary); font-size: 11px; line-height: 1.5; padding: 6px 0; }
+/* 同级元素更高把行撑开时，`margin-top: auto` 把副标题钉在底边。 */
+.lc-ov-session-preview { display: flex; align-items: baseline; gap: 6px; margin-top: auto; padding-top: 6px; border-top: 1px solid color-mix(in srgb, var(--dsw-alias-border-l2) 60%, transparent); min-width: 0; }
+.lc-ov-session-preview-label { flex: none; color: var(--dsw-alias-label-secondary); font-size: 10px; }
+.lc-ov-session-preview-text { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dsw-alias-label-primary); font-size: 11px; line-height: 1.5; }
+
+.lc-ov-pager { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 12px; }
+.lc-ov-pager-btn { flex: none; width: 26px; height: 22px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--dsw-alias-border-l2); background: transparent; color: var(--dsw-alias-label-primary); border-radius: 6px; font: inherit; line-height: 1; cursor: pointer; transition: border-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+.lc-ov-pager-btn:hover:enabled { border-color: var(--dsw-alias-label-secondary); }
+.lc-ov-pager-btn:disabled { opacity: 0.4; cursor: default; }
+.lc-ov-pager-n { color: var(--dsw-alias-label-secondary); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }

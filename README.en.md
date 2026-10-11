@@ -1,176 +1,240 @@
-# dsh-cost-breakdown
+# dsh-cost-breakdown — official CNY cost metering
 
-[![Listed on dsh-plugin.org](https://dsh-plugin.org/badges/listed.svg)](https://dsh-plugin.org/plugins/liaimei/dsh-cost-breakdown)
+> This plugin is a refactor on top of [dsh-context](https://github.com/bowenliang123/dsh-context)
+> (`main@209169d`, the `main` line just after v0.66.1): **`src/` is upstream
+> dsh-context verbatim**, so its 2000+ tests pass unmodified, and this repository
+> **adds** two features on top — an **official CNY price table with peak/off-peak
+> windows and Chinese public holidays**, and a **persistent cost readout under the
+> composer**.
 
-> **In one line**: install it and DSH shows a persistent **cost breakdown** — under the
-> composer and in the right sidebar: what this session has cost, what is left in the
-> account, whether you are billing at peak or off-peak, and **how that number is made up**
-> (peak/off-peak split, this session vs. its descendants, and the three token buckets:
-> cache hit / cache miss / output).
+## What the base keeps
 
-## Three surfaces
+Because `src/` is upstream unchanged (apart from the wiring files listed below),
+every context-insight surface is preserved:
 
-**① A persistent readout under the composer** — one line while collapsed:
+- **Context dashboard**: composition (system / tools / user / assistant / tool results),
+  trend chart, context browser, event list, file activity, agent network;
+- **Cost Statistics page** (left nav, the renamed Context Insights page): cross-session KPI
+  band, billed tokens split by the platform's own four buckets, context-composition donut,
+  7-day usage chart, activity heatmap, skill loads, per-session cards, account-balance capsule;
+- **the `/context` command** and its modal;
+- **the per-session token and cost cards** (subagent costs folded in).
 
-![Collapsed readout](docs/assets/dock-collapsed.png)
+## What this fork adds
 
-Click to expand the detail card (balance and period as compact rows, then three titled
-cards, always expanded and never folded):
+### ① The official CNY price table (`src/shared/officialRates.ts`)
 
-![Expanded detail card](docs/assets/dock-expanded.png)
+Upstream prices only from the models.dev **USD** book, doubling a DeepSeek `peak`
+bucket by a flat `PEAK_FACTOR = 2`, and it has **no holiday table**. This plugin
+prices from the **official CNY list instead**:
 
-**② A right-sidebar "Usage & Cost" tab** — the same figures, for keeping open:
-
-![Right-sidebar panel](docs/assets/panel-dark.png)
-
-**③ A left-nav "Usage overview" page** — account-wide: what each day cost and what each
-session cost. Open it from the gauge icon in the left sidebar, beside Plugins, Scheduled
-tasks and Context insight:
-
-![Account overview](docs/assets/overview-dark.png)
-
-The light theme follows DSH's own tokens rather than a second hand-written palette (both
-the sidebar panel and the overview page):
-
-![Light-theme overview](docs/assets/overview-light.png)
-
-![Light-theme sidebar](docs/assets/panel-light.png)
-
-> All six images are rendered by `npm run shots` from the plugin's **real components and
-> real stylesheet**, not hand-drawn: the script loads `lib/client.js`, applies DSH's real
-> theme tokens, and screenshots the result — so the images show what actually renders.
-
-### The overview page
-
-| Section | Content |
-|---|---|
-| Figure strip | **Billed tokens** (cache / miss / out split) / **total cost** / **sessions (turns · steps)** / **cache-hit rate** |
-| Daily spend | **One column per day of the selected window** (7 for a 7-day window, 30 for a 30-day one), with days that have no spend left blank; each column is a peak/off-peak stack (**peak = red, off-peak = green**) read against the y-axis; hover shows that day's amount |
-| Sessions | Newest activity first: date, requests, **turns / steps**, tokens, **cache-hit rate** and cost per session; descendants are tagged |
-
-- **Range**: last 7 days / 30 days / all (default 30, capped at 365); the daily chart
-  **toggles between cost and tokens** (cost stacks peak/off-peak, tokens is a single total).
-- **Turns and steps are READ, not inferred**: the counters come from the log's own
-  `turn/start` and `step/start` events, so they cannot drift from what the agent did.
-- **The window filters events, not just sessions**: selecting sessions by recency and then
-  summing each one's whole log leaked out-of-window spend into the window (a real 7-day
-  request reported dates from two months back). Totals, the daily chart and the session
-  table now all read the same in-window slice.
-- **Counted live, no on-disk cache**: every open (or range switch) replays the logs. At the
-  current scale (a dozen sessions) this lands in tens of milliseconds; at several hundred
-  it slows down and the page reports how long it took.
-- **At most 500 sessions per request**; beyond that the page says only the newest N were
-  counted.
-- **Descendants are counted**: the inherited prefix of a seeded session is already excluded,
-  so what remains is the child's **own** calls. This matches the single-session view's
-  `own + children` figure exactly, and a test asserts the two agree session by session.
-
-The period uses the short Chinese labels **峰 / 谷** with fixed colours: **peak = red**
-(the expensive window), **valley = green**.
-
-Both surfaces share **one per-session store**, so they can never disagree and the
-expensive session fold never runs twice.
-
-## Why this one: three details that avoid over-billing
-
-Plenty of usage plugins exist. This one spends its effort on **billing correctly**
-rather than billing more:
-
-| Detail | What happens if you ignore it | What this plugin does |
+| Model | Off-peak (cache hit / miss / output, CNY per 1M tokens) | Peak |
 |---|---|---|
-| **Descendant de-duplication** | A forked / summarized session's log opens with a **copy of its ancestor's events**; summing both bills the same money twice | Bills only the events each session **owns** (skips the `inheritedEventCount` prefix, falls back to the `session/end-seed` marker) and reports the skipped count as `inheritedEventsSkipped` |
-| **Three-bucket token pricing** | DSH's `inputTokens` is **cache-miss input only**; treating it as the whole prompt bills the cached prefix at the miss rate and **overstates cost by roughly an order of magnitude** | Prices cacheRead / input / output as three separate buckets |
-| **Safe holiday fallback** | If a config yields no usable dates and is read as "no holidays", every holiday bills at the **peak** rate — silently doubling it | Falls back to the built-in holiday table and never silently changes the billing rule |
+| DeepSeek-V4.1-Flash | 0.02 / 1 / 4 | 0.04 / 2 / 8 |
+| DeepSeek-V4-Pro | 0.15 / 4.5 / 13.5 | 0.3 / 9 / 27 |
 
-## Install
+- **Peak windows**: Beijing time, Monday–Friday, 09:00–12:00 and 14:00–18:00.
+  Everything else is off-peak, and off-peak is exactly half of peak.
+- **Chinese public holidays**: the 2026 State Council arrangement (31 days) is built in.
+  A holiday bills **off-peak all day**, exactly like a weekend. Override through the host
+  config `holidays: ['2026-10-01', ...]` (Beijing dates).
+- **Safe fallback**: a config value that yields no usable date falls back to the built-in
+  table rather than being read as "no holidays" — the latter would bill every holiday at
+  the peak rate and silently double those days.
+- **The official table wins for the models it lists** (its peak column is the off-peak
+  rate doubled); every other model still prices through upstream's models.dev tiers. So
+  **DeepSeek costs show up even when the models.dev book never loads**.
+- The period is resolved **host-side** (`src/host/foldMetering.ts`, `isPeakAt`), so the
+  persisted buckets carry the rate that was **actually charged**, and a holiday really
+  does land in the off-peak bucket.
 
-From the marketplace or the CLI (the publish profile is `web`):
+### ② The persistent readout under the composer (`src/client/components/composerDock.tsx`)
 
-```bash
-dsh plugin --profile web add dsh-cost-breakdown
-```
+Upstream has no such surface. Collapsed it is one line: **this session's cost ·
+balance · current peak/off-peak**. Click to expand a detail card carrying the three
+token buckets (cache hit / miss / output), the cost split by period, and the official
+rate table for the period in force. The card is `position: fixed` and measured from the
+trigger so it escapes the composer's own `overflow` clipping, flipping below the trigger
+when there is no room above. The period badge and its countdown flip on the local clock.
 
-Or straight from the GitHub source — the repository ships the compiled artifacts, so a
-source install needs **no build step**:
+The balance comes from **two sources**, tried in order: (1) DSH's own account sign-in (the
+`deepseekAccount` service, which needs **no API key** — this is what a signed-in desktop user has),
+and (2) the API-key provider when no account service exists. The remembered figure paints
+immediately and the readout re-reads it on a **60-second** cadence: the number moves with every
+billed request, so a long-lived mount that read once would show a stale figure.
 
-```bash
-dsh plugin --profile web add github:liaimei/dsh-cost-breakdown
-```
+### ③ The Cost Statistics page: the platform's own billing buckets (`src/client/components/overviewBilled.tsx`)
 
-Then **restart** `dsh web`:
+The left-nav page, the right-sidebar tab and the conversation tab are all named **Cost Statistics**
+now (renamed from Context Insights), and the page gains a
+**Billed Tokens** card: the four buckets the platform actually bills, all **provider-reported and
+exact** (never estimated).
 
-- a persistent **readout appears under the composer** (one cost figure when collapsed;
-  click to expand the detail card);
-- a **"Usage & Cost" tab appears in the right sidebar's tab strip**.
+| Bucket | Meaning |
+|---|---|
+| Cache input | `cacheReadTokens`, the cached part of the input |
+| Uncached input | `inputTokens` (cache writes included), billed at the miss rate |
+| Output | `outputTokens`, reasoning included |
 
-> **Desktop app note**: the DSH desktop app reads the `desktop` profile, and the
-> `dsh plugin` CLI refuses to operate on it by design. On desktop, install this
-> directory through the built-in `plugin_manager` tool instead.
+Under the ring sits the **peak / off-peak cost split**, answering "how much of this rode the peak
+rate". It complements the **context-composition donut** beside it — the same tokens, split by what
+they were (system / tools / user / assistant / tool results): one says when the money was spent,
+the other says what the tokens contained.
 
-### Working on this repository
+## Relationship to upstream
 
-```bash
-npm install
-npm run build      # sources are src/*.ts, artifacts are lib/; tsc compiles both halves
-```
+| This repository | Upstream |
+|---|---|
+| Official CNY table + peak/off-peak + Chinese holidays | models.dev USD book + flat `PEAK_FACTOR = 2`, no holiday table |
+| Persistent composer-dock readout | none |
+| `holidays` field in `host/config.ts` | none |
+| `contextTimeline` stateVersion 28, `contextActivity` 5 | 27 / 4 |
+
+The full change list is in `NOTICE`; fork notes are in `FORK.md`.
 
 ## Data sources
 
 | Data | Source |
 |---|---|
-| Balance | Prefers DSH's built-in `deepseekAccount` service (the plugin never touches a token); falls back to `DEEPSEEK_API_KEY` against `api.deepseek.com/user/balance` |
-| Usage | The `usage` on `assistant/message` events in DSH session logs (`inputTokens` / `cacheReadTokens` / `outputTokens`), read via `ctx.sessionQuery.observeSession` |
-| Prices | The plugin's built-in official price table (`src/pricing.mts` → `lib/pricing.mjs`), because **DSH itself ships no pricing model** |
-| Period | Beijing time Mon–Fri 09:00–12:00 and 14:00–18:00 are peak (excluding public holidays); everything else is off-peak, at exactly half the peak rate |
+| Balance | upstream `host/balance.ts`: reads `settings` + `credentials`, then `api.deepseek.com/user/balance` (the plugin never touches your token) |
+| Usage | the `usage` on each `assistant/message` in the session log, folded by the host into cumulative per-(provider, model, period) buckets |
+| Price | this plugin's official CNY table (`src/shared/officialRates.ts`); models it does not list price from models.dev |
+| Period | Beijing time Monday–Friday 09:00–12:00 and 14:00–18:00 (excluding weekends and Chinese public holidays) |
 
 ## Billing semantics (important)
 
-DSH's `inputTokens` is the **cache-miss** input; `cacheReadTokens` is the **cache-hit**
-input, and `totalTokens` is the sum of all three. A real record:
+DSH records `inputTokens` as **cache-miss** input and `cacheReadTokens` as
+**cache-hit** input; those and `outputTokens` are **disjoint** buckets. A real record:
 
 ```
 {inputTokens: 192, outputTokens: 238, totalTokens: 13102, cacheReadTokens: 12672}
-      192 +         12672      +        238      = 13102
+      192 +        12672       +        238      = 13102
 ```
 
-Reading `inputTokens` as the whole prompt would bill the cached 12672 tokens at the miss
-rate and **overstate the cost by roughly an order of magnitude**. This plugin prices the
-three buckets separately.
+Treating `inputTokens` as the whole prompt would bill the 12672 cached tokens at the
+miss rate and **overstate the cost by roughly an order of magnitude**. This plugin
+prices the three buckets separately (cache writes are not billed separately; they price
+at the miss rate).
 
-Costs are **estimates**, computed from DSH-recorded token usage against the official
-price table; actual billing is authoritative. Unlisted models still count as requests but
-are **not priced**, and the UI says so — they are never quietly treated as free.
+Costs are **estimates**, computed from the tokens DSH recorded against the official
+price table; the platform invoice is authoritative. A model neither table lists counts
+toward requests but is **not priced**, and the UI says so — it is never treated as free.
 
-## Permissions & external services
+### Seeded sessions are counted once
 
-What it touches, before you install:
+This part is upstream behaviour, kept as-is: a forked or summary-rebuilt session is
+**seeded** — its log opens with a copy of its ancestor's events, and those requests were
+already billed in the ancestor. The host fold cuts the inherited prefix at the
+`session/end-seed { inherited: true }` marker, so a child counts only what it really did.
 
-| Item | Detail |
-|---|---|
-| **Session logs** | Read-only observation of local session events via `ctx.sessionQuery.observeSession(...)`; the lease is released immediately |
-| **Account balance** | Prefers DSH's built-in `deepseekAccount` service (**no token touched**); only falls back to a direct `DEEPSEEK_API_KEY` call when signed out |
-| **Network** | Exactly two: balance queries against `api.deepseek.com` (official domain). Everything else is local computation — **nothing is reported anywhere** |
-| **Local storage** | None. No files written, no database, no cache |
-| **Telemetry** | None. No analytics or reporting of any kind |
-| **Writes** | None. The plugin is strictly read-only: it never modifies your sessions, config, or code |
+## Install
+
+This repository's package name is `dsh-cost-breakdown`, distinct from upstream's
+`dsh-context`, so the two can coexist (though enabling both duplicates the context
+surfaces in the UI — pick one).
+
+From the GitHub source (the repository ships its build output, so no build step):
+
+```bash
+dsh plugin --profile web add github:liaimei/dsh-cost-breakdown
+```
+
+From a local checkout (for development; `link:` means a rebuilt `lib/` takes effect on
+a page refresh):
+
+```bash
+dsh plugin --profile web add "dsh-cost-breakdown@link:/path/to/dsh-usage-meter"
+```
+
+Then **restart DSH** (the host half does not hot-reload); the persistent readout
+appears under the composer.
+
+### Notes when troubleshooting an install
+
+- **Do not reach for `dsh plugin list` just to read state**: that subcommand is not
+  read-only — it triggers a reconcile and writes to disk (observed removing dependencies
+  no longer declared in the lockfile). Reading `~/.dsh/profiles/<profile>/package.json`
+  and `node_modules/` directly is safer.
+- **Confirm the host half is actually the new one**: `POST /api/dsh-cost-breakdown/skills`
+  (with a session cookie) should answer 200; a 404 means old code is still loaded — restart
+  DSH.
+- **After moving the path or upgrading**, check that `dsh.profile.bundles` lists
+  `dsh-cost-breakdown` exactly once, and that `cordis.patch.yml` has no `- id: <old name>`
+  row pointing at a removed package.
+
+> **On `dsh plugin list`**: that subcommand is not read-only — it triggers a reconcile and
+> writes to disk (observed removing dependencies no longer declared in the lockfile). When
+> you only want to inspect state, read `~/.dsh/profiles/<profile>/package.json` and
+> `node_modules/` directly instead.
+
+## Source and build
+
+Source is TypeScript (`src/`), the artifacts are `lib/`, and **tsdown** builds two entries:
+
+| Source | Artifacts | Notes |
+|---|---|---|
+| `src/host/index.ts` | `lib/index.js` + `lib/index.d.ts` | Host half (ESM). Needs a **DSH restart** after a change |
+| `src/client/index.ts` | `lib/client.js` | Browser half (CJS, wrapped in `window.__ModuleLoader__.load`). A page refresh suffices |
+
+```bash
+pnpm install
+pnpm run build      # tsdown -> lib/
+pnpm run typecheck  # tsc --noEmit -p tsconfig.tests.json
+```
+
+The browser half has a **purity gate** (`tsdown.config.ts`): only `react` / `react-dom` /
+`dsh-client-ui-primitives` may survive as runtime `require`s; everything else inlines.
+A new inlineable dependency must also be added to `onlyBundle`.
+
+## Verification
+
+```bash
+NODE_OPTIONS=--localstorage-file=/tmp/ls.db pnpm exec vitest run --coverage
+```
+
+- **2070 tests pass** and **100 % per-file coverage** is the repository's gate;
+- 2000+ of them are upstream's own tests; 8 upstream spec files only had assertions
+  updated for behaviour this fork deliberately changes (the official table superseding
+  models.dev pricing, holidays no longer billing at peak, five slots becoming six,
+  stateVersion 27→28 / 4→5) — no assertion was weakened;
+- `tests/compat/bundle.spec.ts` loads the **built** `lib/client.js`, exercising the
+  handoff protocol, the CSS channel and the slot registrations — so run
+  `pnpm run build` first;
+- this fork's own specs: `tests/shared/officialRates.spec.ts` (table / peak boundaries /
+  holidays / fallback) and `tests/client/components/composerDock.spec.ts` (the readout
+  and its card).
+
+### Environment notes
+
+1. **The DSH-bundled Node cannot run `tsdown`**: macOS rejects rolldown's native `.node`
+   inside the app's signature (`different Team IDs`). Build with a normal Node
+   (`/opt/homebrew/bin/node`); running the plugin is unaffected.
+2. **Node 26 shadows jsdom's `localStorage`** with its own, which is `undefined` without
+   `--localstorage-file`; ten client specs fail on it (upstream fails identically). Hence
+   `NODE_OPTIONS=--localstorage-file=/tmp/ls.db`.
 
 ## Known limits
 
-- **Holiday table**: ships the 2026 arrangement. Override with the plugin config
-  `holidays: ['2026-10-01', ...]` (`YYYY-MM-DD`, Beijing time) or update
-  `DEFAULT_HOLIDAYS` in `src/pricing.mts`. **A config that yields no valid date falls back
-  to the built-in table** rather than meaning "no holidays" — the latter would bill every
-  holiday at the **peak** rate (measurably doubling that day) with no visible sign.
-- **Descendant fan-out cap**: at most 400 descendant sessions per walk; beyond that the UI
-  marks the statistics as truncated.
-- **Sessions not yet on disk**: reading depends on DSH's session query service; unreachable
-  logs count as `missing` rather than raising.
-- **Public observation API only**: uses `ctx.sessionQuery.observeSession(...)`, **not**
-  `Session.snapshotEvents()` — the latter is deprecated in DSH with "new calls are
-  prohibited" and would bypass the query service's live-preferred resolution and caching.
-- **DSH-internal requests only**: usage from calling the API directly or from other clients
-  is not counted.
+- **Holiday table**: the 2026 arrangement is built in. When the State Council publishes
+  the next one, override with `holidays: [...]` or update `DEFAULT_HOLIDAYS` in
+  `src/shared/officialRates.ts`.
+- **Models in neither table**: unpriced and marked as such, never billed as free.
+- **Currency display**: the official table is CNY; the English UI converts at
+  **1 CNY = 0.15 USD**.
+- **DSH traffic only**: requests made by other clients or by calling the API directly are
+  not counted.
+
+## Permissions & external services
+
+| Item | Description |
+|---|---|
+| **Reads session logs** | read-only observation of local session events, to tally token usage |
+| **Reads the balance** | via upstream `host/balance.ts`, reading `settings` + `credentials` then calling `api.deepseek.com` (the plugin never touches your token) |
+| **Network** | the front-end models.dev price book (only needed for models outside the official table) and the balance query; everything else is local, and **nothing is reported anywhere** |
+| **Local storage** | only the remembered balance (`localStorage`); no files, no database |
+| **Telemetry** | none |
+| **Writes** | none. The plugin is read-only: it never modifies your sessions, config or code |
 
 ## License
 
-[MIT](LICENSE) © 2026 liaimei
+[Apache-2.0](LICENSE) © 2026 liaimei (a fork of the Apache-2.0 dsh-context; see `NOTICE`)

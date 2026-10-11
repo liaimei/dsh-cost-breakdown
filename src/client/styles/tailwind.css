@@ -1,0 +1,51 @@
+/*
+ * Tailwind 入口：tsdown.config.ts 编译插件 JSX 类名列表里用到的工具类。
+ * 同级的其他样式表保留这里变体无力承担的部分：harness 的 `--dsw-*` chrome、
+ * 依赖 JS 状态的类系统（其中几个还兼作测试锚点）、它们的上下文覆盖，以及
+ * 元素过渡 —— 过渡跟随 harness 的运动 token，逐元素写出精确属性列表，
+ * 因为 Tailwind 预设的时长会把这些值固定死。
+ *
+ * 以下是有意偏离 Tailwind 默认配置之处，全部为了与 harness 宿主页面共存：
+ * - 不要 preflight、不导入 theme：一套 reset 会重新给宿主 chrome 上色。
+ * - 用 `--spacing: 4px` 而不是 0.25rem，让工具类在任何宿主根字号下都保持设计的 px 尺寸。
+ * - 工具类以不分层方式编译：分层工具类会输给任何未分层的宿主规则。本表在
+ *   client/index.ts 里第一个导入，因此同级表在相同优先级下仍能胜出。
+ * - dsh 用 CSS modules 与 `--ds-*`/`--dsw-*` token 自绘样式，所以 `flex`/`gap-2`
+ *   这类通用名不会撞车；扁平的 `lc-*` 命名空间是插件自己的 chrome。
+ *
+ * tailwindcss / @tailwindcss/node / @tailwindcss/oxide 都锁在一个精确版本上（lightningcss 也是）：
+ * 配置进程会在加载 lightningcss 原生绑定的同一 realm 里加载本编译器，
+ * 而该 realm 里出现任何原生模块的两份副本，
+ * 都会让 napi 调用失败。
+ */
+@theme static {
+  --spacing: 4px;
+  /* `static` 是承重的：同级样式表和 TS 里的颜色字段都用普通 var() 消费这些变量，Tailwind 的“仅产出被用到者”策略否则会把它们丢掉。dsh 没有定义任何 `--color-*`，因此这些规范名不会撞车。 */
+  --color-red-500: oklch(63.7% 0.237 25.331);
+  --color-orange-500: oklch(70.5% 0.213 47.604);
+  --color-amber-500: oklch(76.9% 0.188 70.08);
+  --color-green-500: oklch(72.3% 0.219 149.579);
+  --color-teal-500: oklch(70.4% 0.14 182.503);
+  --color-blue-500: oklch(62.3% 0.214 259.815);
+  --color-indigo-500: oklch(58.5% 0.233 277.117);
+  --color-violet-500: oklch(60.6% 0.25 292.717);
+  --color-purple-500: oklch(62.7% 0.265 303.9);
+  --color-pink-500: oklch(65.6% 0.241 354.308);
+  --color-slate-400: oklch(70.4% 0.04 256.788);
+  --color-neutral-500: oklch(55.6% 0 none);
+  /* 关键帧只在其 `animate-*` 工具类被用到时才输出。环形扫场省略了 100% 关键帧，好让 CSS 停在元素自身的 stroke-dasharray 上，并且只在挂载时跑一次。 */
+  --animate-lc-donut-in: lc-donut-in 0.45s cubic-bezier(0.4, 0, 0.2, 1) calc(var(--lc-i, 0) * 50ms) backwards;
+  --animate-lc-stacked-in: lc-stacked-in 0.4s cubic-bezier(0.4, 0, 0.2, 1) calc(var(--lc-i, 0) * 40ms) backwards;
+  --animate-lc-bar-in: lc-bar-in 0.35s cubic-bezier(0.4, 0, 0.2, 1) calc(var(--lc-i, 0) * 15ms) backwards;
+  --animate-lc-agent-flow: lc-agent-flow 0.9s linear infinite;
+  --animate-lc-agent-in: lc-agent-in 0.35s cubic-bezier(0.4, 0, 0.2, 1) calc(var(--lc-i, 0) * 35ms) backwards;
+  @keyframes lc-donut-in { from { stroke-dasharray: 0 100; } }
+  @keyframes lc-stacked-in { from { transform: scaleX(0); } }
+  @keyframes lc-bar-in { from { transform: scaleY(0); } }
+  @keyframes lc-agent-flow { to { stroke-dashoffset: -9; } }
+  @keyframes lc-agent-in { from { opacity: 0; transform: translateY(6px); } }
+}
+
+@source "../";
+
+@tailwind utilities;

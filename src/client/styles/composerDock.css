@@ -1,0 +1,109 @@
+/* 输入区停靠读数：输入框下方常驻的花费行，以及
+   它展开后的明细卡。卡片用 `position: fixed` 逃出输入区自身的溢出裁剪，
+   位置由 composerDock.tsx 依据触发器测量得出。 */
+
+/* 峰时红 / 谷时绿，与费用图表用的是同一套配色。 */
+.lc-dock, .lc-dock-card {
+  --lc-dock-peak: var(--color-red-500, #ef4444);
+  --lc-dock-off: var(--color-green-500, #22c55e);
+  /* 三个 token 桶各自的色，取分类调色板里语义最近的一档
+     （缓存命中≈已复用的输入，未缓存≈新输入，输出自成一档），
+     与 Token 卡、堆叠条用的是同一套语言，而不是这里另发明一种。
+     这几个是**填充**色，只用于 4px 高的条：细条按非文本对比度衡量（≥3:1），
+     500 步在两种主题下都够。 */
+  --lc-dock-hit: var(--color-teal-500, #14b8a6);
+  --lc-dock-miss: var(--color-blue-500, #3b82f6);
+  --lc-dock-out: var(--color-pink-500, #ec4899);
+  /* 价目表里的**文字**色。同色系不能直接复用上面的填充色：那些是给 4px 细条选的，
+     当成 12px 正文放在浅色底上只有 2.5–3.7:1，读不清。
+     这里与 harness 语义 token 同一思路——按主题取两档：浅色底压暗、暗色底提亮，
+     两种主题都过 4.5:1（正文阈）。 */
+  --lc-rate-hit: color-mix(in srgb, var(--color-teal-500, #14b8a6) 60%, #000);
+  --lc-rate-miss: color-mix(in srgb, var(--color-blue-500, #3b82f6) 60%, #000);
+  --lc-rate-out: color-mix(in srgb, var(--color-pink-500, #ec4899) 60%, #000);
+}
+
+/* 暗色主题：换成提亮的一档（`body[data-ds-dark-theme]` 是 harness 自己的暗色标记）。 */
+body[data-ds-dark-theme] .lc-dock,
+body[data-ds-dark-theme] .lc-dock-card {
+  --lc-rate-hit: color-mix(in srgb, var(--color-teal-500, #14b8a6) 60%, #fff);
+  --lc-rate-miss: color-mix(in srgb, var(--color-blue-500, #3b82f6) 60%, #fff);
+  --lc-rate-out: color-mix(in srgb, var(--color-pink-500, #ec4899) 60%, #fff);
+}
+
+/* 触发器做成无边框按钮，读起来像环境文本而非控件；`white-space: nowrap` 让费用、余额、
+   时段在窄窄的输入区行内保持同一行。 */
+.lc-dock { display: inline-flex; align-items: center; gap: 6px; border: 0; background: transparent; color: var(--dsw-alias-label-secondary); font-family: inherit; font-size: 12px; line-height: 1; padding: 2px 6px; border-radius: 6px; cursor: pointer; white-space: nowrap; transition: color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out), background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+.lc-dock:hover { color: var(--dsw-alias-label-primary); background: var(--dsw-alias-bg-layer-2); }
+/* 用 `tabular-nums`，一轮对话流式输出时数字跳动不会让读数抖动。 */
+.lc-dock-cost { font-weight: 600; color: var(--dsw-alias-label-primary); font-variant-numeric: tabular-nums; }
+.lc-dock-balance { font-variant-numeric: tabular-nums; }
+.lc-dock-sep { color: var(--dsw-alias-label-tertiary); }
+/* 绿色表示谷时（此刻更便宜）；`data-peak` 属性无需换类即可把它翻成红色。 */
+.lc-dock-period { color: var(--lc-dock-off); }
+.lc-dock[data-peak='1'] .lc-dock-period { color: var(--lc-dock-peak); }
+
+/* 展开卡用 `bg-layer-2`：这是 harness 弹出层自己的那一层
+   （`.lc-tip` 等本插件浮层同样用它），落在页面之上读作浮起的面。
+   `bg-layer-1` 是主卡片层，暗色下比 layer-2 暗一档（#232324 对 #2c2c2e），
+   拿它做浮层会比 harness 的弹出层明显发闷；亮色下两者同为纯白，因此这处只影响暗色主题。 */
+.lc-dock-card { position: fixed; z-index: 210; box-sizing: border-box; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding: 10px 12px 12px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l2); border-radius: 10px; box-shadow: var(--dsw-shadow-lv3, 0 12px 32px rgba(0, 0, 0, 0.4)); color: var(--dsw-alias-label-primary); font-size: 12px; }
+.lc-dock-head { display: flex; align-items: baseline; gap: 8px; }
+.lc-dock-head-title { font-weight: 600; font-size: 13px; }
+.lc-dock-badge { margin-left: auto; font-size: 11px; padding: 1px 8px; border-radius: 999px; color: var(--lc-dock-off); background: color-mix(in srgb, var(--lc-dock-off) 14%, transparent); }
+.lc-dock-badge-peak { color: var(--lc-dock-peak); background: color-mix(in srgb, var(--lc-dock-peak) 14%, transparent); }
+.lc-dock-balance-row { display: flex; align-items: baseline; gap: 8px; color: inherit; text-decoration: none; padding: 4px 0; border-bottom: 1px solid var(--dsw-alias-border-l1); }
+.lc-dock-balance-row:hover b { text-decoration: underline; }
+.lc-dock-balance-row b { margin-left: auto; font-variant-numeric: tabular-nums; }
+/* 卡片分组：沿用插件其他页面的嵌套面写法（与 `.lc-stat`/`.lc-gran` 同款：
+   上一层容器的底再往上一档 + l2 描边 + 8px 圆角）。外层浮动卡本身已经是
+   layer-2，所以内层用 layer-3——同层或更低会与外层糊在一起，读不出这是「卡里的分区」。
+   内边距比页面的 14/16 收紧，因为这张卡本身已是浮层。 */
+.lc-dock-card-block {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  background: var(--dsw-alias-bg-layer-3);
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+.lc-dock-block-title { display: flex; align-items: baseline; gap: 8px; font-size: 11px; color: var(--dsw-alias-label-secondary); }
+.lc-dock-block-title b { margin-left: auto; font-size: 12px; color: var(--dsw-alias-label-primary); font-variant-numeric: tabular-nums; }
+.lc-dock-block-row { display: grid; grid-template-columns: minmax(56px, 1fr) 48px auto 44px; align-items: center; gap: 6px; }
+.lc-dock-block-row > span:first-child { color: var(--dsw-alias-label-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 轨道取插件其他页面（堆叠条、环图、计时条）用的同一层中性底，而不是主题的层色：
+   各处混用时，同一界面里的进度条深浅会不一致。 */
+.lc-dock-block-track { height: 4px; border-radius: 2px; background: color-mix(in srgb, var(--color-neutral-500) 18%, transparent); overflow: hidden; }
+/* 填充按语义上色（峰红/谷绿，三个 token 桶各一色）。
+   入场用堆叠条同源的 `scaleX` 动画，由组件挂 `animate-lc-stacked-in motion-reduce:animate-none`
+   工具类驱动——不在这里直接写 `animation`：关键帧只在工具类被用到时才输出，
+   而「减少动效」偏好也由同一个类负责关掉。 */
+.lc-dock-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  transform-origin: 0 50%;
+}
+.lc-dock-tint-peak .lc-dock-bar-fill { background: var(--lc-dock-peak); }
+.lc-dock-tint-off .lc-dock-bar-fill { background: var(--lc-dock-off); }
+.lc-dock-tint-hit .lc-dock-bar-fill { background: var(--lc-dock-hit); }
+.lc-dock-tint-miss .lc-dock-bar-fill { background: var(--lc-dock-miss); }
+.lc-dock-tint-out .lc-dock-bar-fill { background: var(--lc-dock-out); }
+/* 零值行不留悬空的色块：条本身零宽，颜色无从读起；轨道压得更淡，
+   让「这行确实为零」比「这是一条细条」更清楚。
+   由组件挂 `data-zero` 判定，不靠去解析行内样式字符串。 */
+.lc-dock-block-row[data-zero='1'] .lc-dock-block-track { background: color-mix(in srgb, var(--color-neutral-500) 10%, transparent); }
+.lc-dock-block-row b { font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }
+.lc-dock-block-row em { font-style: normal; color: var(--dsw-alias-label-tertiary); font-variant-numeric: tabular-nums; text-align: right; }
+.lc-dock-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.lc-dock-table th { font-weight: 400; font-size: 11px; color: var(--dsw-alias-label-secondary); text-align: right; padding: 2px 0; }
+.lc-dock-table th:first-child { text-align: left; }
+.lc-dock-table td { text-align: right; padding: 2px 0; color: var(--dsw-alias-label-secondary); }
+.lc-dock-table td:first-child { text-align: left; color: var(--dsw-alias-label-primary); }
+/* 价目表的费率按列取色，与上方 token 分桶一一对应：缓存输入=青、未缓存输入=蓝、输出=粉。
+   于是「表里哪一列贵」和「用量花在哪个桶」用同一种颜色说话，不必回看上方的条。 */
+.lc-dock-rate-hit { color: var(--lc-rate-hit); }
+.lc-dock-rate-miss { color: var(--lc-rate-miss); }
+.lc-dock-rate-out { color: var(--lc-rate-out); }
+.lc-dock-note { color: var(--dsw-alias-label-tertiary); font-size: 11px; line-height: 1.5; }

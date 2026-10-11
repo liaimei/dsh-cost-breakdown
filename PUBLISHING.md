@@ -58,10 +58,10 @@ dsh plugin --profile web add github:liaimei/dsh-cost-breakdown
 - 零运行时依赖；仓库自带编译产物，安装时无需构建
 
 ### 许可证
-MIT
+Apache-2.0（fork 自 Apache-2.0 的 dsh-context，归属与改动见 NOTICE / FORK.md）
 
 ### 截图 / 演示
-（截图：输入框下方收起读数、展开详情卡、右侧栏面板）
+`docs/assets/` 下的图片是**重构前**旧界面的截图，仅作历史留存，与当前界面不一致。
 
 ### 补充说明
 **三个「算对」而不是「算多」的设计**（与同类插件的差异点）：

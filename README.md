@@ -1,128 +1,99 @@
-# dsh-cost-breakdown
+# dsh-cost-breakdown — 官方人民币费用统计
 
-[![Listed on dsh-plugin.org](https://dsh-plugin.org/badges/listed.svg)](https://dsh-plugin.org/plugins/liaimei/dsh-cost-breakdown)
+> 本插件基于 [dsh-context](https://github.com/bowenliang123/dsh-context) 的源码（`main@209169d`，
+> 即 v0.66.1 之后的 `main`）重构：**`src/` 是上游 dsh-context 的逐字源码**，上游 2000+ 测试原样通过；
+> 本仓库在其**之上叠加**两项自己的功能 —— **官方人民币价目表（峰谷 + 法定节假日）**与
+> **输入框下方的常驻费用读数**。
 
-> **一句话价值**：装上它，DSH 输入框下方和右侧栏会常驻一份**费用账单** ——
-> 本会话花了多少、账户余额还剩多少、现在按峰价还是谷价计费，
-> 以及这笔钱**由哪几部分构成**（峰/谷拆分、本会话/衍生会话拆分、缓存命中/未命中/输出三个 token 桶）。
+## 保留的上游能力
 
-## 三个入口
+上游的**代码**逐行保留（除下文列出的接线文件）——注释与若干界面文案已按本仓库的
+约定改写，但没有任何一条语句、表达式或类型被改动（改动范围见 `NOTICE`）。
+因此下列上下文洞察能力全部保留：
 
-**① 输入框下方的常驻读数** —— 收起时只占一行，点一下展开详情卡：
+- **上下文仪表盘**：组成（system / tools / user / assistant / tool-results）、趋势图、上下文浏览器、
+  事件列表、文件活动、Agent 网络；
+- **统计页**（左侧栏，即重构后的「上下文洞察」页）：跨会话 KPI 条、**计费 Token 按平台四桶拆分**、
+  上下文组成圆环、7 日用量图、活跃度热力图、技能加载、会话卡片、账户余额胶囊；
+- **`/context` 命令**与 `Ctrl/⌘` 弹窗；
+- **每会话的 Token 卡与费用卡**（含子 Agent 折叠）。
 
-![收起状态的常驻读数](docs/assets/dock-collapsed.png)
+## 本仓库叠加的功能
 
-展开后（余额与时段是紧凑行，下面三块是带标题的卡片）：
+### ① 官方人民币价目表（`src/shared/officialRates.ts`）
 
-![输入框下方的读数与展开卡](docs/assets/dock-expanded.png)
+上游只按 models.dev 的**美元**簿计价，并给 DeepSeek 的 `peak` 桶统一乘 `PEAK_FACTOR = 2`，
+**没有节假日表**。本插件改为以**官方人民币价目表**为准：
 
-**② 右侧栏「用量与费用」标签页** —— 同样的数据，适合长期开着看：
+| 模型 | 谷价（缓存命中 / 未命中 / 输出，元/百万 Token） | 峰价 |
+|---|---|---|
+| DeepSeek-V4.1-Flash | 0.02 / 1 / 4 | 0.04 / 2 / 8 |
+| DeepSeek-V4-Pro | 0.15 / 4.5 / 13.5 | 0.3 / 9 / 27 |
 
-![右侧栏面板](docs/assets/panel-dark.png)
+- **峰谷判定**：北京时间周一至周五 09:00–12:00、14:00–18:00 为高峰，其余为空闲；谷价恰为峰价一半。
+- **法定节假日**：内置 2026 年国务院安排（31 天），节假日全天按**谷价**计费，与周末一致。
+  可用宿主配置 `holidays: ['2026-10-01', ...]`（`YYYY-MM-DD`，北京时间）覆盖。
+- **安全回退**：配置里给不出**任何一个**合法日期时退回内置表，而不是当成「没有节假日」——
+  后者会把每个节假日按高峰价计费，静默翻倍。
+- **谁贵谁便宜看官方表**：官方表收录的模型一律按官方价计（峰桶 = 谷价 × 2）；其余模型仍走上游
+  models.dev 的分支与回退层级。因此 **DeepSeek 的费用即使没有加载到 models.dev 也照常显示**。
+- 峰谷判定在**宿主**完成（`src/host/foldMetering.ts` 的 `isPeakAt`），所以落库的桶
+  携带的就是**当时实际适用的费率**；节假日真的会记进谷价桶。
 
-**③ 左侧导航「费用总览」** —— 整账号视角：每天消耗多少、每个会话花了多少。
-点左侧栏的仪表图标打开（与「插件 / 自动化任务 / 上下文洞察」同一栏）：
+### ② 输入框下方的常驻读数（`src/client/components/composerDock.tsx`）
 
-![整账号费用总览](docs/assets/overview-dark.png)
+上游没有这个入口。收起时只占一行：**本会话费用 · 余额 · 当前峰/谷**；
+点一下展开详情卡 —— Token 三桶（缓存命中 / 未命中 / 输出）拆分、峰谷费用拆分、
+当前时段官方价目表。卡片用 `position: fixed` 并实测触发按钮位置，避开输入框自身的
+`overflow` 裁剪；上方空间不足时自动翻到下方。峰谷徽标与倒计时随本机时钟自动翻转。
 
-浅色主题同样跟随 DSH 的令牌，不是另写一套（右侧栏面板与总览页都跟随）：
+余额由**两个来源**提供，按顺序尝试：① DSH 自身的账号登录（`deepseekAccount` 服务，**不需要 API key**
+—— 桌面端登录账号就用这个）；② API-key 提供方（没有账号服务时）。读数先画上次记住的数字，再按
+**60 秒**周期自动校正（这个数字随每次计费请求变化，长期挂载只读一次会显示过期值）。
 
-![浅色主题总览](docs/assets/overview-light.png)
+### ③ 统计页：具体到平台的计费桶（`src/client/components/overviewBilled.tsx`）
 
-![浅色主题右侧栏](docs/assets/panel-light.png)
+两个入口各用其名：**左侧栏那一页**是账号级汇总，叫**统计**（英文 `Statistics`，
+原「上下文洞察」）；**本会话视图**（对话区标签栏，以及右侧栏的标签、面板与入口卡片）
+是同**一个组件**、同一份本会话数据，因此两处共用一个名字，叫**汇总统计**
+（英文 `Summary Statistics`）——同名是有意的，否则同一份视图在两处会像两件事。
+本页新增一张**计费 Token** 卡 —— 按平台
+**实际计费的四个桶**统计，全部是 provider 上报的**精确值**（不是估算）：
 
-> 以上六张图由 `npm run shots` 从插件**真实的组件与真实 CSS** 渲染而成，不是手绘稿：
-> 脚本加载 `lib/client.js`、套用 DSH 的真实主题令牌后截图，所以图里就是实际会渲染出的东西。
-
-### 费用总览页（整账号）
-
-| 区块 | 内容 |
+| 桶 | 含义 |
 |---|---|
-| 指标条 | **计费 Token**（含缓存/未缓存/输出拆分）/ **总计费用** / **会话数（轮次 · 步数）** / **缓存命中率** |
-| 每日消耗 | **按所选窗口逐日铺开**（近 7 天就 7 根、近 30 天就 30 根），没有数据的当天留空；每根是峰/谷堆叠柱（**峰=红、谷=绿**），高度对照左侧 Y 轴刻度；悬停显示当天金额 |
-| 会话明细 | 按最近活动排序：日期、请求数、**轮次 / 步数**、token 用量、**缓存命中率**、费用；衍生会话带「衍生」标记 |
+| 缓存输入 | `cacheReadTokens`：命中缓存的那部分输入 |
+| 未缓存输入 | `inputTokens`（含缓存写入）：按未命中价计费 |
+| 输出 | `outputTokens`：已含思考 token |
 
-- **时间范围**可切近 7 天 / 近 30 天 / 全部（默认 30 天，上限 365 天）；
-  **每日图可在「费用 / Token」之间切换**（费用视图按峰谷堆叠，Token 视图是单色总量）。
-- **轮次与步数是读出来的，不是猜的**：直接数日志里 `turn/start` 与 `step/start` 事件，
-  与 agent 实际动作一致（按 `data.turn` 去重今天也能对上，但日志一旦重放某个 turn 就会失真）。
-- **窗口过滤的是事件而不是会话**：只挑「最近有活动的会话」再累加它整份日志，会把窗口外的
-  花费漏进窗口（实测一个 7 天请求会报出两个月前的日期）；现在总额、每日图、会话表
-  都取自同一个「窗口内事件」切片。
-- **实时统计，不落盘缓存**：每次打开（或切换范围）都重新回放日志。你现在的数据量
-  （十几个会话）在几十毫秒内完成；会话数到几百时会变慢，界面会显示统计耗时。
-- **一次最多统计 500 个会话**，超出部分会标注「仅统计了最近 N 个」。
-- **衍生会话照常计入**：日志里已经把继承来的祖先事件前缀排除掉了，剩下的就是子会话
-  **自己真实发生**的调用。这与单会话视图的 `own + children` 口径完全一致，
-  并有测试断言两者**逐个会话相等**。
+卡片下方是**峰 / 谷费用拆分**，直接回答「这笔钱有多少落在峰价上」。它与同排的
+**上下文组成圆环**（同样口径的 token，按 system / tools / user / assistant / tool-results 拆分）
+互为补充：一个说钱花在哪段时间，一个说 token 是什么内容。
 
-峰谷用**峰 / 谷**两个字，配色固定：**峰=红**（贵的那段）、**谷=绿**。
-徽标、圆环图例、费用构成里的堆叠条三处用的是同一套颜色，不会互相矛盾。
+## 与上游的关系
 
-详情里的**账号余额**三行也做了配色区分：**总额=黄**、**赠送=蓝**、**充值=紫**。
+| 本仓库 | 上游 |
+|---|---|
+| 官方人民币价目表 + 峰谷 + 法定节假日 | models.dev 美元簿 + 固定 `PEAK_FACTOR = 2`，无节假日表 |
+| 输入框下方常驻读数 | 无 |
+| `host/config.ts` 新增 `holidays` 字段 | 无 |
+| `contextTimeline` stateVersion 28、`contextActivity` 5 | 27 / 4 |
 
-**距离切换到峰/谷的倒计时是实时的**：它由一个按会话共享的 1 秒 ticker 驱动，
-到点（窗口真的翻转）会顺手重读一次状态，于是徽标和价目表跟着切过去 —— 没有写死任何时间。
-
-展开后的详情里，余额与时段是**紧凑行**，下面三块是**带标题的卡片** ——
-标题栏带主题色淡染，卡片内容**始终展开**（没有折叠）：
-
-| 卡片 | 标题栏 | 内容 |
-|---|---|---|
-| Token 统计 | 缓存命中 99.5% | 圆环 + 三个桶的图例 |
-| 费用构成 | ¥12.82 | 峰谷堆叠条 + 本会话/衍生会话堆叠条 |
-| 价目表 · 谷 | 元 / 百万 tokens | 当前时段价格表 |
-
-**两个入口的颜色一致**：余额（总额黄 / 赠送蓝 / 充值紫）、倒计时（峰红 / 谷绿）、
-价目表的三个费率列（缓存命中绿 / 未缓存输入琥珀 / 输出蓝）在侧边栏面板与输入框下方的读数里
-用的是同一套色阶，不会一处有颜色、另一处是灰字。表格的数值与表头**右对齐到同一条边**。
-
-三张卡片如下：
-
-| 卡片 | 色条 | 内容 |
-|---|---|---|
-| 账号余额 | 黄 | 总额在标题，赠送（蓝）/ 充值（紫）各一块色块 |
-| 当前计费时段 | 峰红 / 谷绿（随状态变） | 当前时段徽标 + **实时倒计时色块** |
-| Token 统计 | 绿 | 语义色圆环 + 图例占比 + 缓存命中率 |
-| 费用构成 | 蓝 | 两条堆叠条：峰谷拆分、本会话 / 衍生会话 |
-| 价目表 | 青 | 只列当前生效时段的价格，标题写明峰/谷 |
-
-> 不展示逐条请求明细：卡片只回答「花了多少、花在哪」，逐请求流水请用 DSH 自带的用量视图。
-
-配色与自带「上下文洞察」看板**同一套视觉语言**：
-
-- **Token 统计**：语义色圆环（缓存命中 / 未缓存输入 / 输出）+ 图例占比 + 缓存命中率；
-- **费用构成**：两条堆叠条 —— 峰谷拆分（峰红 / 谷绿）、本会话 / 衍生会话拆分；
-- 账号余额（充值 / 赠金分列）；
-- 当前峰谷时段、**实时倒计时**、价目表（**只列出当前生效时段那一套价格**，标题会写明是「峰」还是「谷」）。
-
-配色直接用 DSH 自己的语义色阶（`--color-green/amber/blue/violet/orange/teal-500`），
-和旁边那块看板的圆环是同一组颜色，明暗主题都跟随。圆环几何也照搬：`viewBox 0 0 42 42`
-配 `r = 15.9155`，使周长正好等于 100，于是 dash 长度可以直接当百分比读。
-
-卡片外观**直接复用 DSH 自己的菜单表面 token**（`--dsw-specific-menu` 底色 +
-`--dsw-menu-backdrop-filter` 背景模糊 + `--dsw-elevation-prominent` 阴影 +
-`--dsw-radius-lg` 圆角），和自带的「Token 用量」浮层是同一套视觉，明暗主题都跟随。
-浮层用 `position:fixed` 并实测触发按钮位置：默认向上展开，上方空间不足时自动翻到下方。
-
-**② 右侧栏「用量与费用」标签页** —— 同样的数据，适合长期开着看。
-
-两个入口读写**同一个按会话粒度的 store**：不会出现两处数字不一致，也不会因为开了两个界面就把
-昂贵的会话费用计算跑两遍。
+详细改动清单见 `NOTICE`，fork 说明见 `FORK.md`。
 
 ## 数据来源
 
 | 数据 | 来源 |
 |---|---|
-| 余额 | 优先走 DSH 内置的 `deepseekAccount` 服务（账号登录态，插件不接触任何令牌）；未登录时回退到 `DEEPSEEK_API_KEY` 直连 `api.deepseek.com/user/balance` |
-| 用量 | DSH 会话日志里 `assistant/message` 事件自带的 `usage`（`inputTokens` / `cacheReadTokens` / `outputTokens`），经 `ctx.sessionQuery.observeSession` 取得 |
-| 价格 | 插件内置的官方价目表（源码 `src/pricing.mts`，产物 `lib/pricing.mjs`），因为 **DSH 本身不包含任何计价模型** |
-| 时段 | 北京时间周一至周五 09:00–12:00、14:00–18:00 为高峰（法定节假日除外），其余为空闲；空闲价为高峰价的一半 |
+| 余额 | 上游 `host/balance.ts`：读 `settings` + `credentials` 后请求 `api.deepseek.com/user/balance`（插件不接触令牌） |
+| 用量 | 会话日志里 `assistant/message` 自带的 `usage`，由宿主投影折叠为每（provider, model, 时段）的累计桶 |
+| 价格 | 本插件的官方人民币价目表（`src/shared/officialRates.ts`）；官方表未收录的模型走 models.dev |
+| 时段 | 北京时间周一至周五 09:00–12:00、14:00–18:00（法定节假日与周末除外）为高峰 |
 
 ## 计价口径（重要）
 
 DSH 记录的 `inputTokens` 是**缓存未命中**的输入，`cacheReadTokens` 才是**缓存命中**的输入，
-`totalTokens` 是三者之和。实测一条真实记录：
+两者与 `outputTokens` 是**互不重叠**的桶。实测一条真实记录：
 
 ```
 {inputTokens: 192, outputTokens: 238, totalTokens: 13102, cacheReadTokens: 12672}
@@ -130,188 +101,108 @@ DSH 记录的 `inputTokens` 是**缓存未命中**的输入，`cacheReadTokens` 
 ```
 
 若把 `inputTokens` 当成整个 prompt，就会把已缓存的 12672 tokens 按未命中价计费，
-费用会被高估**一个数量级**。本插件按三个桶分别计价。
+费用会被高估**一个数量级**。本插件按三个桶分别计价（缓存写入不单独计价，按未命中价计）。
 
 费用为**估算值**，按 DSH 记录的 token 用量与官方价目表计算；实际扣费以平台账单为准。
-未收录的模型会计入请求数但**不计费**，并在界面标注，绝不会被当成免费。
+官方表与 models.dev 都未收录的模型会计入请求数但**不计费**，并在界面标注，绝不会被当成免费。
 
 ### 衍生会话只计一次（避免重复计费）
 
-fork / 摘要重建出来的会话是**带种子的**（`isSeeded` / `inheritedEventCount`）：
-它的日志开头是**祖先事件的一份拷贝**，而那些请求在祖先会话里**已经计过费**。
-若把祖先与派生会话的日志直接相加，同一笔钱会被算两次。
-
-因此本插件只统计每个会话**自己拥有**的事件（跳过 `inheritedEventCount` 前缀；
-日志没报该计数时退回到 `session/end-seed { inherited: true }` 标记处）。
-被跳过的数量会在返回值里以 `inheritedEventsSkipped` 报出。
-
-## 为什么是它：三个不重复计费的细节
-
-同类用量插件很多，本插件把工夫花在**「算对」**而不是「算多」上：
-
-| 细节 | 不处理会怎样 | 本插件怎么做 |
-|---|---|---|
-| **衍生会话去重** | fork / 摘要重建的会话日志开头是祖先事件的**拷贝**，直接相加会把同一笔钱算两次 | 只统计每个会话**自己拥有**的事件（跳过 `inheritedEventCount` 前缀，退回 `session/end-seed` 标记），跳过量以 `inheritedEventsSkipped` 报出 |
-| **token 三桶计价** | DSH 的 `inputTokens` 只是**缓存未命中**输入；当成整个 prompt 会把已缓存部分按未命中价计费，费用**高估约一个数量级** | 按 cacheRead / input / output 三桶分别套价 |
-| **节假日安全回退** | 配置给不出合法日期时若当成「没有节假日」，每个节假日都会按**高峰价**计费（静默翻倍） | 退回内置节假日表，绝不静默改口径 |
+这部分是上游行为，本仓库原样保留：fork / 摘要重建出来的会话是**带种子的**，
+日志开头是祖先事件的一份拷贝，而那些请求在祖先会话里**已经计过费**。
+宿主折叠在 `session/end-seed { inherited: true }` 标记处截断继承前缀，
+因此子会话只计**自己真实发生**的调用。
 
 ## 安装
 
-从市场或命令行安装（发布 profile 用 `web`）：
+本仓库的包名是 `dsh-cost-breakdown`，与上游 `dsh-context` **不同名**，两者可以并存
+（不建议同时启用：两套上下文入口会在界面上重复）。
 
-```bash
-dsh plugin --profile web add dsh-cost-breakdown
-```
-
-或直接从 GitHub 源安装（仓库已带编译产物，安装时**不需要任何构建**）：
+从 GitHub 源安装（仓库自带编译产物，安装时**不需要构建**）：
 
 ```bash
 dsh plugin --profile web add github:liaimei/dsh-cost-breakdown
 ```
 
-装完**重启** `dsh web`，然后：
-
-- **输入框下方**会出现常驻读数（收起时是一个费用数字，点一下展开详情卡）；
-- **右侧栏顶部标签条**会出现「用量与费用」，适合长期开着看。
-
-> **桌面端注意**：DSH 桌面 App 读的是 `desktop` profile，而 `dsh plugin` CLI 按设计拒绝操作它。
-> 桌面端请直接使用内置的 `plugin_manager` 工具安装本目录。
-
-### 开发本仓库
+从本地检出安装（开发时用，`link:` 让改完 `lib/` 刷新页面即生效）：
 
 ```bash
-npm install
-npm run build      # 源码是 src/*.ts，产物是 lib/；两个半区都由 tsc 编译
+dsh plugin --profile web add "dsh-cost-breakdown@link:/path/to/dsh-usage-meter"
 ```
 
-已安装到 `desktop` profile（`dsh.profile.bundles` 末行）并软链到本目录，因此
-**改完源码跑一次 `npm run build`，再刷新页面即可生效**（产物按 mtime 重新读取）。
+装完**重启 DSH**（宿主半区不热生效），然后输入框下方会出现常驻费用读数。
 
-### 生效范围（实测）
+### 排查安装问题时注意
 
-| 半区 | 改源码后 | 说明 |
-|---|---|---|
-| `src/client.ts` → `lib/client.js` | `npm run build` ＋ 刷新页面 | 宿主按 mtime 重读产物，`rev` 会变（本次迁移实测 `20684e0e9ae4` → `c7c2f67cba66`） |
-| `src/index.ts` / `src/pricing.mts` → `lib/index.js` / `lib/pricing.mjs` | `npm run build` ＋ **重启 DSH** | 宿主半区不热生效 |
-| `package.json` 的 `main` / `exports` | 指向的仍是 `lib/`，无需改动 | 插件契约不变 |
-
-宿主半区为什么不能热生效：该 profile 的 HMR 配置为 `root: []`，不监听模块文件；
-而 Node 的 ESM 缓存以 **URL** 为键，规格符不变就永远命中旧模块。实测下面几条路都**无效**：
-
-- 在插件管理里关闭再启用该 bundle（返回 `"application":"applied"`，但代码未换）
-- 重新执行 `install_bundle`（返回 `ambiguous-install` / 无变化）
-- 改动并保存 profile 补丁，触发配置 reconcile
-- 在 profile 补丁里把该行改成带版本号的相对规格符（`.../lib/index.js?v=N`）
-
-> ⚠️ 因此：改了 `lib/index.js` 就必须重启 DSH。运行中的宿主半区仍是启动时那份代码 ——
-> 用下面的自检确认，别把「接口没换」误当成「代码写错了」。
-
-### 自检
-
-```
-# 宿主半区：路由已注册（带会话 cookie 时返回 200 JSON）
-curl -s -X POST http://127.0.0.1:19387/api/dsh-cost-breakdown/status \
-  -H "cookie: <你的会话 cookie>" -H 'content-type: application/json' -d '{}'
-# 期望：{"ok":true,"value":{"balance":{...},"period":{...},"prices":[...]}}
-
-# 客户端半区：产物已由宿主提供
-curl -s "http://127.0.0.1:19387/plugins/??dsh-cost-breakdown/client.js" | head -3
-# 期望：window.__ModuleLoader__.load({ id: 'dsh-cost-breakdown', ...
-```
-
-裸 `curl` 会返回 401 `unauthorized` —— 那是 DSH 的浏览器信任栅栏，不是接口坏了。
+- **只想读状态时别用 `dsh plugin list`**：该子命令并非只读——它会触发一次 reconcile
+  并落盘（实测会移除 lock 里已不再声明的依赖）。直接看
+  `~/.dsh/profiles/<profile>/package.json` 与 `node_modules/` 更安全。
+- **确认宿主半区确实是新的**：`POST /api/dsh-cost-breakdown/skills`（带会话 cookie）
+  应返回 200；返回 404 说明跑的还是旧代码，重启 DSH 即可。
+- **改路径或升级后**检查 `dsh.profile.bundles` 里 `dsh-cost-breakdown` 只出现一次，
+  且 `cordis.patch.yml` 里没有指向已移除包的 `- id: <旧包名>` 死条目。
 
 ## 源码与构建
 
-**源码是 TypeScript（`src/`），产物是 `lib/`。** 两个半区都由 `tsc` 编译，
-没有打包器 —— 因为两个入口的形状本来就不同：
+源码是 TypeScript（`src/`），产物是 `lib/`，由 **tsdown** 打包成两个入口：
 
-| 源文件 | 产物 | 为什么这样编译 |
+| 源文件 | 产物 | 说明 |
 |---|---|---|
-| `src/index.ts` | `lib/index.js` | 宿主半区是普通 ESM，`main` 直接指向产物；Node 按 URL 缓存，改完要重启 DSH |
-| `src/pricing.mts` | `lib/pricing.mjs` | `.mts` 后缀让 `tsc` 在 `NodeNext` 下按 ESM 发射，且扩展名与 import 规格符一致 |
-| `src/client.ts` | `lib/client.js` | 浏览器半区**本身就是那个文件**：源码里已经写着 `window.__ModuleLoader__.load({ id, factory })`，没有 import 图，所以不打包、不转换模块格式 |
+| `src/host/index.ts` | `lib/index.js` + `lib/index.d.ts` | 宿主半区（ESM）。改完需**重启 DSH** |
+| `src/client/index.ts` | `lib/client.js` | 浏览器半区（CJS，包在 `window.__ModuleLoader__.load` 里）。改完刷新页面即可 |
 
 ```bash
-npm run build      # tsc -p tsconfig.json && tsc -p tsconfig.client.json
-npm run typecheck  # 同一套配置，--noEmit
+pnpm install
+pnpm run build      # tsdown -> lib/
+pnpm run typecheck  # tsc --noEmit -p tsconfig.tests.json
 ```
 
-浏览器半区用**独立**的 `tsconfig.client.json`，有三个关键设置，缺一不可：
-
-- `"module": "ESNext"` —— 保持脚本形态，不注入 CommonJS 互操作；
-- `"alwaysStrict": false` —— 产物是被当作脚本 eval 的，不能多出顶层 `'use strict'`；
-- `"types": []` —— 不引 `@types/node`：浏览器半区必须拿到 DOM 的 `setTimeout`
-  （返回 `number`），否则 `clearInterval` 的类型就对不上。
-
-`removeComments: false` 让 `//#region` 分节注释原样保留 —— 单元测试会断言
-这些标记各出现一次，用来防止函数被重复定义。
-
-> 之所以不用 esbuild 打包浏览器半区：esbuild 会重新引号化字符串
-> （`'峰'` → `"\u5CF0"`）并丢掉 `//#region` 标记，而那正是客户端单元测试
-> 与样式断言所依赖的文本。`tsc` 按原样发射，产物的 CSS 与逐节点渲染快照
-> 都能和迁移前的产物**逐字节一致**。
+浏览器半区的依赖有**纯净性闸门**（`tsdown.config.ts`）：只有 `react` / `react-dom` /
+`dsh-client-ui-primitives` 可以留成运行时 `require`，其余必须内联；新增的可内联依赖要同时
+加进 `onlyBundle`。
 
 ## 验证
 
 ```bash
-npm run typecheck # 两个半区严格模式零错误
-npm test          # 79 个单元测试：定价、峰谷边界、token 桶、会话折叠、配置校验、
-                  #              路由契约、面板渲染与降级、lease 释放
-npm run test:e2e  # 用 GUI 实际提供的客户端产物跑完整链路：
-                  #   pipeline    余额/时段/价目表/会话费用 逐项断言渲染结果
-                  #   peak        高峰分支（价目表切到 0.04/2/8 与 0.3/9/27）
-                  #   lineage     真实磁盘上的父子会话：子会话被发现且只计自己那份
-npm run test:live # 打真实 GUI 的两个路由（脚本自己从凭据记录签发会话 cookie）
-npm run test:accept # 逐条核对全部交付要求（余额/峰谷/会话消费/两个界面入口/测试）
-npm run verify    # 以上全部
+NODE_OPTIONS=--localstorage-file=/tmp/ls.db pnpm exec vitest run --coverage
 ```
 
-`test:accept` 是**验收脚本**：它对着正在运行的 GUI 逐条检查目标里的每一项要求，
-并把单元测试结果一并汇报，所以一条命令就能回答"做完了没有"。
+- **2070 个测试通过**，**逐文件 100% 覆盖率**是仓库门槛；
+- 其中 2000+ 个是上游原样的测试；另有 8 个上游 spec 只改了**被新功能有意改变**的断言
+  （官方价目表取代 models.dev 价、节假日不再按峰价、槽位从 5 个变 6 个、stateVersion 27→28 / 4→5），
+  没有放宽任何断言语义；
+- `tests/compat/bundle.spec.ts` 直接加载**构建产物** `lib/client.js`，验证交接协议、
+  CSS 通道与槽位注册，所以跑之前要先 `pnpm run build`；
+- 本仓库新增的 spec：`tests/shared/officialRates.spec.ts`（价表 / 峰谷边界 / 节假日 / 回退）、
+  `tests/client/components/composerDock.spec.ts`（常驻读数与展开卡）。
 
-`test:live` 与 `test:e2e` 都会**连到正在运行的 DSH**（默认 `http://127.0.0.1:19387`，
-可用 `DSH_WEB_URL` 覆盖）。`test:e2e` 从 boot graph 里发现当前 `rev` 再取产物，
-所以它断言的是**浏览器真正拿到的那个文件**，不是磁盘上的源码。
+### 环境注意
 
-> 重启 DSH 之前，`test:live` 会**故意失败**并指出「stale host half」——
-> 那是宿主半区还没换成新代码，不是测试写错了。
-
-
-## 使用
-
-会话打开后，右侧栏顶部标签条会出现「用量与费用」（也可从右侧栏的引导页进入）。
-面板打开时读取一次余额 + 本会话费用；之后**每 60 秒只刷新余额**（顺手点「刷新」则两者都重读）。
-之所以不连会话费用一起轮询：算一个会话的费用要回放它整份事件日志，逐分钟重放代价太高。
+1. **DSH 自带的 Node 跑不了 `tsdown`**：macOS 会拒绝 app 签名内 rolldown 的原生 `.node`
+   （`different Team IDs`）。用普通 Node（`/opt/homebrew/bin/node`）构建，运行时不受影响。
+2. **Node 26 会盖掉 jsdom 的 `localStorage`**：不给 `--localstorage-file` 时它是 `undefined`，
+   会让十个客户端 spec 失败（上游同样如此）。因此命令里带
+   `NODE_OPTIONS=--localstorage-file=/tmp/ls.db`。
 
 ## 已知边界
 
-- **法定节假日表**：内置 2026 年安排。国务院每年公布新安排后，可通过插件配置
-  `holidays: ['2026-10-01', ...]`（`YYYY-MM-DD`，北京时间）覆盖，或更新 `src/pricing.mts`
-  里的 `DEFAULT_HOLIDAYS`。**配置里给不出任何一个合法日期时会退回内置表**，而不是当成"没有节假日" ——
-  后者会把每个节假日按**高峰价**计费（实测同一天费用会翻倍），而且完全看不出来。
-- **衍生会话扇出上限**：一次最多统计 400 个衍生会话，超出会在界面标注「统计已截断」。
-- **未落盘的会话**：读取依赖 DSH 的会话查询服务；日志不可达的会话会计入 `missing` 而不报错。
-- **读取走公开观测 API**：用的是 `ctx.sessionQuery.observeSession(...)`（拿到的 lease 用完即释放），
-  **不是** `Session.snapshotEvents()` —— 后者在 DSH 里已标注 deprecated 且「禁止新调用」，
-  而且会绕开查询服务的 live 优先解析与缓存下限。
+- **法定节假日表**：内置 2026 年安排。国务院每年公布新安排后，可用插件配置
+  `holidays: ['2026-10-01', ...]` 覆盖，或更新 `src/shared/officialRates.ts` 里的 `DEFAULT_HOLIDAYS`。
+- **官方表未收录的模型**：按 models.dev 价（若已加载）估算；两者都没有则标注不计费。
+- **汇率显示**：官方价目表是人民币；英文界面按 **1 元 = 0.15 美元**换算显示。
 - **仅计量 DSH 内的请求**：直接调用 API 或使用其它客户端的消耗不在统计内。
 
 ## 权限与外部服务
 
-装之前你应该知道它碰什么：
-
 | 项 | 说明 |
 |---|---|
-| **读会话日志** | 通过 `ctx.sessionQuery.observeSession(...)` 只读观测本机会话事件，用于统计 token 用量；lease 用完即释放 |
-| **读账户余额** | 优先调用 DSH 内置的 `deepseekAccount` 服务（**插件不接触任何令牌**）；未登录时才回退到 `DEEPSEEK_API_KEY` 直连 `api.deepseek.com/user/balance` |
-| **外部网络** | 仅两条：账户余额查询走 `api.deepseek.com`（官方域）；其余全部本地计算，**不上报任何数据** |
-| **本地存储** | 无。不写任何文件、不建数据库、不留缓存 |
-| **遥测** | 无。不含任何分析/统计上报 |
-| **写操作** | 无。插件只读，不修改你的会话、配置或代码 |
-
-会话费用全部在本机由 DSH 记录的 token 用量 × 内置官方价目表算出，**费用为估算值，实际扣费以平台账单为准**。
+| **读会话日志** | 只读观测本机会话事件，用于统计 token 用量 |
+| **读账户余额** | 通过上游 `host/balance.ts` 读 `settings` + `credentials` 后请求 `api.deepseek.com`（插件不接触令牌） |
+| **外部网络** | 前端 models.dev 价目表（官方表未收录的模型才需要）+ 余额查询；其余全部本地计算，**不上报任何数据** |
+| **本地存储** | 只存上次记住的余额（`localStorage`）；不写文件、不建数据库 |
+| **遥测** | 无 |
+| **写操作** | 无。插件只读，不修改会话、配置或代码 |
 
 ## 许可
 
-[MIT](LICENSE) © 2026 liaimei
+[Apache-2.0](LICENSE) © 2026 liaimei（fork 自 Apache-2.0 的 dsh-context，见 `NOTICE`）

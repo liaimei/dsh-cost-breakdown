@@ -1,0 +1,64 @@
+/* 在插件各样式表中第一个导入：后面的表以相同优先级重新着色共享 chrome，所以这个顺序不可动。 */
+.lc-root { padding: 16px 20px 32px; overflow-y: auto; height: 100%; box-sizing: border-box; color: var(--dsw-alias-label-primary); font-size: 13px; }
+/** 右栏面板自带滚动容器：受支持的 shell 会把标签页套进定高 body；否则被撑高的根节点会被其 `overflow` 裁掉。
+ */
+[data-sidebar-right-open] .lc-root,
+[data-sidebar-right-float-host] .lc-root { padding: 12px; }
+.lc-title-icon { flex: none; }
+/* 30px 是 dockkit `.tabTitle` 自身遮罩的前置留白；那个遮罩若移动，这里要跟着复查。 */
+.lc-title-label { padding-right: 30px; }
+.lc-card { background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l2); border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; }
+/* 每张标签卡都是 `lc-card` 的 inline-size 查询容器；这条必须排在下方 `.lc-cols`/`.lc-col` 归零外边距规则之前，且卡片所用的 `min-w-[min(360px,100%)]` 下限要求 `box-sizing: border-box`。 */
+.lc-root .lc-card { box-sizing: border-box; padding: 7px 8px; margin-bottom: 7px; container: lc-card / inline-size; }
+.lc-root .lc-cols { gap: 7px; margin-bottom: 7px; }
+.lc-card-title { font-weight: 600; margin-bottom: 10px; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.lc-card-title-text { flex: none; white-space: nowrap; }
+.lc-gran, .lc-kinds { margin-left: auto; display: flex; gap: 2px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l2); border-radius: 6px; padding: 1px; }
+/* 标题同时带两组切换控件时会把它们折行，让整行只保留一次自动外边距推挤。 */
+.lc-trend-ctl, .lc-heat-ctl { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+.lc-trend-ctl .lc-gran, .lc-heat-ctl .lc-gran { margin-left: 0; }
+.lc-heat-ctl .lc-card-sub { margin-left: 0; }
+.lc-trend-mods { margin-left: 0; flex: none; }
+.lc-gran-btn { border: 0; background: transparent; color: var(--dsw-alias-label-secondary); font-size: 11px; line-height: 1; padding: 3px 8px; border-radius: 5px; cursor: pointer; font-family: inherit; transition: color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+.lc-gran-btn:hover { color: var(--dsw-alias-label-primary); }
+.lc-gran-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.lc-gran-btn:disabled:hover { color: var(--dsw-alias-label-secondary); }
+.lc-gran-on, .lc-gran-on:hover { background: var(--dsw-alias-button-primary-fill); color: var(--dsw-alias-label-primary-foreground); }
+.lc-kind-n { margin-left: 4px; font-variant-numeric: tabular-nums; opacity: 0.65; }
+.lc-gran-on .lc-kind-n { opacity: 0.85; }
+/* 共享的 tooltip chrome：与使用方自己的 tip 类搭配后再就地定位，新提示不必重复声明这套样式。 */
+.lc-tip { position: absolute; z-index: 6; width: max-content; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 6px 10px; font-size: 12px; color: var(--dsw-alias-label-primary); box-shadow: var(--dsw-shadow-lv3, 0 2px 8px rgba(0, 0, 0, 0.18)); pointer-events: none; opacity: 0; transition: opacity var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+.lc-events, .lc-fa-list { display: flex; flex-direction: column; gap: 2px; height: 320px; overflow-y: auto; }
+/* `.lc-cols` 行掌管整段纵向节奏；卡片取消自身下外边距，让每个分区边界无论弹性行怎么折都只量出一个间距。 */
+.lc-cols { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
+.lc-cols > .lc-card { margin-bottom: 0; }
+.lc-col > .lc-card:last-child { margin-bottom: 0; }
+.lc-col-browser { display: flex; flex-direction: column; }
+.lc-col-browser > .lc-card { flex: 1; }
+/** 头部横带：分两行 —— 先是以 3:1 并排的会话概览与插件卡（上下文 / 插件），
+ * 再是两张环形图卡并排（token / 计时）。这两行都是 `.lc-cols` 的弹性折行行，
+ * 卡片沿用共享的栏位写法（组件里的 `min-w-[min(360px,100%)]`）：
+ * 统计卡的 `flex-[3]` 对插件卡的 `flex-1` 把这一行分成三份，
+ * 而最小宽度下限就是折叠点 —— 行宽低于 (360 + 240)px 加间距时，
+ * 3:1 这对会折成整宽行；低于 2 × 360px 加间距时，等宽的两张环形图卡同样折行
+ * （约 360px 正是环形图卡的环加图例排成一行、
+ * 计数网格开始局促的位置，见 issue #48；
+ * 插件卡 240px 的下限则依赖其行内的省略号与 hover 回显）。
+ * 低于该下限的卡片各自走 lc-card 的重排（stats.css：环图叠到图例之上、
+ * 单元网格折叠），因此两张卡并排这一行就是该下限换来的取舍。
+ * 不支持容器查询的引擎保留宽布局。
+ * 右侧栏面板只渲染环形图那一行
+ * （它砍掉了上下文统计 / 插件信息行 —— 见 contextView.tsx）；
+ * 同样的折行逻辑在窄栏里把这对卡片竖着叠起来。 */
+/* 上下文卡的流程图会拉伸到与插件卡等高，让这一行读起来是一条齐平的横带。 */
+.lc-head > .lc-card:has(.lc-stats) { display: flex; flex-direction: column; }
+.lc-head .lc-stats { flex: 1; }
+.lc-empty { color: var(--dsw-alias-label-secondary); padding: 18px 0; text-align: center; }
+.lc-error { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 40px 16px; }
+.lc-error-msg { font-family: var(--ds-font-family-code, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 12px; color: var(--dsw-alias-state-error-primary); background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 4px 8px; max-width: 100%; overflow-wrap: anywhere; }
+.lc-error-retry { border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); font: inherit; font-size: 12px; padding: 4px 14px; border-radius: 6px; cursor: pointer; transition: border-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+.lc-foot { color: var(--dsw-alias-label-secondary); font-size: 12px; margin-top: 4px; }
+/* 插件界面接管内容区时隐藏输入区，但审批 / 提问 / 计划评审提示仍保留它。 */
+[data-conversation-scroll]:has(.lc-root) > [data-composer-seat]:not(:has([data-approval-key], [data-question-key], [data-plan-review-key])) { display: none; }
+/* harness 的对话宽度拖拽手柄是共享滚动容器的后续兄弟节点，所以必须用 `~`，后代组合器什么都匹配不到（issue #50）。`.lc-root` 或 `.lc-modal-backdrop` 挂载时隐藏它们，否则会横穿内容区拖拽并浮在模态遮罩之上。 */
+[data-conversation-scroll]:has(.lc-root, .lc-modal-backdrop) ~ [data-width-handle] { display: none; }

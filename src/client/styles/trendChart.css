@@ -1,0 +1,92 @@
+/* 趋势图：按轮次 / 按步骤的柱状图，带数值轴、网格线和 hover 提示。
+   布局约定：图表是横向滚动容器里一行定高的、定宽柱组成的弹性行，
+   因此下方的轴与网格线偏移都是绝对像素常量，绑定在 `.lc-chart` 的
+   `height: 130px` 与 `padding-top: 18px` 上 —— 改一个，网格线就会漂移。 */
+.lc-chartrow { display: flex; gap: 6px; align-items: stretch; }
+.lc-axis { position: relative; width: 40px; height: 150px; padding-top: 18px; box-sizing: border-box; color: var(--dsw-alias-label-secondary); font-size: 11px; }
+.lc-axis span { position: absolute; right: 0; line-height: 1; }
+/* 锚定在该列的左缘，让时长标签向右流开、远离绘图区。 */
+.lc-axis-r { width: 34px; flex: none; }
+.lc-axis-r span { left: 0; right: auto; }
+.lc-axis-top { top: 13px; }
+/* 与 trendChart.tsx 里的 Q3_TOP/Q1_TOP 镜像，用于增量模式的重叠检查。 */
+.lc-axis-q3 { top: 41px; }
+.lc-axis-mid { top: 69px; }
+.lc-axis-q1 { top: 97px; }
+.lc-axis-bot { top: 125px; }
+/* 同时容纳滚动容器与 hover 提示：滚动容器自身的绝对定位子元素会加进它的可滚动溢出，并随内容在滚动时平移开。 */
+.lc-chart-wrap { position: relative; flex: 1; min-width: 0; }
+/* 不要写 `scrollbar-width`/`scrollbar-color`：任一都会让 Chromium/Safari 丢弃所有 `::-webkit-scrollbar*` 规则，包括 dsh 全局的 8px 滚动条皮肤。
+   `overscroll-behavior-x: contain` 阻止滑过任一边缘时链式触发浏览器前进后退；WebKit 对历史导航忽略它，所以 overscroll.ts 在那里也取消了 wheel 事件。 */
+.lc-chart-scroll { overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scrollbar-gutter: stable; padding-bottom: var(--dsh-scrollbar-width, 8px); }
+/* 2px 内边距为 hover 描边的笔墨留出余地，否则边缘柱的描边会被滚动容器裁掉。 */
+.lc-chart { position: relative; display: flex; align-items: flex-end; gap: 2px; height: 130px; padding: 18px 2px 0; box-sizing: border-box; width: max-content; min-width: 100%; }
+.lc-grid { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--dsw-alias-border-l2); pointer-events: none; }
+.lc-grid-top { top: 18px; }
+.lc-grid-q3 { top: 46px; }
+.lc-grid-mid { top: 74px; }
+.lc-grid-q1 { top: 102px; }
+/* 两种模式下都存在的实线零基线：增量模式下贴着上臂内联定位，总量模式下就是图表底边。绘制在虚线参考线之后。 */
+.lc-grid-zero { top: 130px; border-top-style: solid; border-top-color: color-mix(in srgb, var(--color-neutral-500) 50%, transparent); }
+.lc-bar { position: relative; width: 14px; flex: none; height: 100%; display: flex; align-items: flex-end; cursor: pointer; border-radius: 2px; outline: 1px dashed transparent; outline-offset: 1px; transition: opacity var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out), background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out), outline-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+.lc-chart-dim .lc-bar { opacity: 0.35; }
+.lc-chart-dim .lc-bar-in-turn { opacity: 1; }
+.lc-chart-dim .lc-turn { opacity: 0.35; }
+.lc-chart-dim .lc-turn-on { opacity: 1; }
+/* 渲染在滚动容器之外（见 `.lc-chart-wrap`）；整个 `transform` 由 syncTip 掌管。浮在绘图区上方以免盖住柱和 ✂ 标记，并在外层包裹内折行，长行因此不会垂到卡片外。 */
+.lc-chart-tip { position: absolute; bottom: calc(100% + 4px); left: 0; z-index: 5; display: flex; flex-direction: column; gap: 2px; max-width: 100%; box-sizing: border-box; overflow-wrap: break-word; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 3px 8px; font-size: 12px; color: var(--dsw-alias-label-primary); box-shadow: 0 2px 8px rgba(0,0,0,0.18); pointer-events: none; }
+.lc-chart-tip span + span { color: var(--dsw-alias-label-secondary); }
+/* 选中态的规则写在最后且优先级相同：否则指针停在刚点过的柱上时，虚线 hover 框会一直覆盖它。 */
+.lc-bar-hovered { outline-color: var(--dsw-alias-brand-primary); }
+.lc-bar-selected { outline: 2px solid var(--dsw-alias-label-primary); outline-offset: 1px; }
+.lc-bar-in-turn { background: color-mix(in srgb, var(--color-neutral-500) 14%, transparent); }
+.lc-bar-stack { display: flex; flex-direction: column-reverse; width: 100%; }
+.lc-bar-stack > div { width: 100%; }
+/* 一个渐变 div 按阅读顺序画出整条逐项指纹，与分段堆叠共用同一套总量 / 最大值刻度。 */
+.lc-bar-dna { width: 100%; border-radius: 2px; }
+/* 入场升起：堆叠从基线处 scaleY 展开（增量模式的两臂从零线展开，所以下臂的原点是它的上缘），在组件的 RISE_CAP 窗口内自左向右错开。 */
+.lc-bar-stack, .lc-bar-up, .lc-bar-down, .lc-bar-dna { transform-origin: 50% 100%; }
+.lc-bar-down { transform-origin: 50% 0; }
+/* 只给每条柱的外侧角倒圆；内部边界保持直角，堆叠分段之间因此不会露出背景缝隙。 */
+.lc-bar-stack > div:first-child { border-radius: 0 0 2px 2px; }
+.lc-bar-stack > div:last-child { border-radius: 2px 2px 0 0; }
+.lc-bar-stack > div:only-child { border-radius: 2px; }
+/* 增量模式：以零线为锚点的双向堆叠，增长向上、收缩向下；每臂只在外端倒圆，因此零线接缝保持利落。 */
+.lc-bar-up, .lc-bar-down { position: absolute; left: 0; width: 100%; display: flex; }
+.lc-bar-up { flex-direction: column-reverse; }
+.lc-bar-down { flex-direction: column; }
+.lc-bar-up > div, .lc-bar-down > div { width: 100%; }
+.lc-bar-up > div:last-child { border-radius: 2px 2px 0 0; }
+.lc-bar-down > div:last-child { border-radius: 0 0 2px 2px; }
+/* 容器把 hover 的分类键带在 `data-catdim` 上，仅靠 CSS 就能点亮每根柱上的该分类，被 memo 的柱在跨卡片 hover 时永不重渲染。只用 `opacity`：`filter` 会在每次切换时强制逐分段分层（issue #116）。这份重新点亮的清单必须跟着 Category 的取值走 —— 漏掉一个桶就会把所有柱压暗却点亮不了任何一根（issue #66）。 */
+.lc-cat-seg { transition: opacity var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+.lc-chart[data-catdim] .lc-cat-seg { opacity: 0.35; }
+.lc-chart[data-catdim='system'] .lc-cat-seg[data-cat='system'],
+.lc-chart[data-catdim='tools'] .lc-cat-seg[data-cat='tools'],
+.lc-chart[data-catdim='user'] .lc-cat-seg[data-cat='user'],
+.lc-chart[data-catdim='inject'] .lc-cat-seg[data-cat='inject'],
+.lc-chart[data-catdim='skill'] .lc-cat-seg[data-cat='skill'],
+.lc-chart[data-catdim='assistant'] .lc-cat-seg[data-cat='assistant'],
+.lc-chart[data-catdim='tool'] .lc-cat-seg[data-cat='tool'] { opacity: 1; }
+/* 一行镜像柱网格的弹性行，因此无需逐柱算 x；z-index 1 让它高于柱、低于 ✂ 标记与步骤旗标（z-index 2）。 */
+.lc-dna-hl { position: absolute; top: 18px; right: 2px; bottom: 0; left: 2px; z-index: 1; display: flex; gap: 2px; align-items: stretch; pointer-events: none; }
+.lc-dna-cell { position: relative; width: 14px; flex: none; }
+.lc-dna-slice { position: absolute; left: 0; width: 100%; box-sizing: border-box; border: 1px solid var(--dsw-alias-brand-primary); border-radius: 1px; background: color-mix(in srgb, var(--dsw-alias-brand-primary) 26%, transparent); }
+/* 一个覆盖柱形区域的 svg，尺寸用内容 px，因此随柱一起滚动；`overflow` 设为可见，让自适应模式的尖峰可以探出绘图区。用 label-tertiary 而非品牌色：近黑 / 近白会让曲线成为最抢眼的元素，并与 hover 描边撞在一起。 */
+.lc-duration { position: absolute; top: 18px; left: 2px; z-index: 1; overflow: visible; pointer-events: none; }
+.lc-duration polyline, .lc-duration circle { fill: none; stroke: var(--dsw-alias-label-tertiary); stroke-width: 1.25; stroke-linejoin: round; stroke-linecap: round; }
+.lc-duration circle { fill: var(--dsw-alias-label-tertiary); }
+.lc-duration .lc-dur-halo { stroke: var(--dsw-alias-bg-layer-1); stroke-width: 3; opacity: 0.85; }
+.lc-duration circle.lc-dur-halo { stroke: none; fill: var(--dsw-alias-bg-layer-1); }
+.lc-chart-dim .lc-duration { opacity: 0.35; }
+.lc-bar-marker { position: absolute; top: -16px; left: 50%; transform: translateX(-50%); z-index: 2; font-size: 11px; color: var(--dsw-alias-state-warn-primary); }
+/* 步骤旗标（仅步骤粒度）：每第 5 根柱往图表顶部留白带插一根 1px 的杆，累计步骤号盒装在其顶端，向左延伸因此不增加可滚动溢出。纯装饰、穿透指针，且位于动画堆叠之外，入场升起不会带倒它。 */
+.lc-step-flag { position: absolute; right: -1px; top: -17px; bottom: 0; z-index: 2; width: 1px; background: color-mix(in srgb, var(--color-neutral-500) 45%, transparent); pointer-events: none; }
+.lc-step-flag-label { position: absolute; top: 0; right: 0; box-sizing: border-box; padding: 1px 3px; border: 1px solid color-mix(in srgb, var(--color-neutral-500) 45%, transparent); border-radius: 3px; background: var(--dsw-alias-bg-layer-1); font-size: 9px; line-height: 1; font-weight: 600; color: var(--dsw-alias-label-secondary); white-space: nowrap; }
+/* 中性的斑马填充（内联，见 TURN_FILLS）—— 绝不用分类配色，那会被读成柱底多出来的一段。 */
+.lc-turns { display: flex; gap: 2px; overflow: hidden; margin-top: 4px; padding: 0 2px; box-sizing: border-box; width: max-content; min-width: 100%; }
+.lc-turn { flex: none; box-sizing: border-box; text-align: center; font-size: 10px; line-height: 14px; font-weight: 600; color: var(--dsw-alias-label-secondary); border-radius: 3px; height: 14px; white-space: nowrap; cursor: pointer; transition: filter var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out), opacity var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+.lc-turn-on { filter: brightness(1.35); color: var(--dsw-alias-label-primary); }
+/* 标签按自然宽度渲染、居中于各自色块之上，因此 14px 的轮次格上放两位数 “12” 是溢出而不是被省略掉。trendChart.tsx 会在最紧的相邻一对在 10px 基准下将要相撞时统一调小一档字号（镜像为 LABEL_FONT）。 */
+.lc-turn-label { display: inline-block; }
+

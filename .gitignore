@@ -1,14 +1,39 @@
-# Dependencies — reproducible from package-lock.json.
+# Dependencies — reproducible from pnpm-lock.yaml.
 node_modules/
+
+# …except the harness-version fixtures: those homes ARE tiny committed
+# `node_modules/@deepseek-ai/dsh/package.json` stubs that the host version
+# probes resolve against on purpose (version.spec.ts / index.spec.ts). The rule
+# above would drop them, and the suite then fails on a fresh clone.
+!tests/host/fixtures/**/node_modules/
+!tests/host/fixtures/**/node_modules/**
 
 # Local editor / OS noise.
 .DS_Store
 *.log
 *.tsbuildinfo
 
+# Vitest's coverage output; the suite's 100%-per-file gate is the artifact, not the report.
+coverage/
+
+# Scratch space the compat matrix unpacks its fixture installs into.
+.tmp/
+
 # `lib/` is deliberately NOT ignored. The browser half is served straight from
 # `lib/client.js`, and a `github:` install runs no build step, so the compiled
 # artifacts have to be committed or the plugin installs broken.
+#
+# The client sourcemap is the exception: nothing loads it at runtime (the browser
+# takes `lib/client.js` alone), and it inlines all 90 source files, so committing
+# it would add ~6MB to every clone for a debugging convenience.
+lib/client.js.map
+
+# Pre-refactor snapshots that must not be published: the superseded
+# implementation is already recoverable from git history, and a stale copy of
+# `cordis.patch.yml` still names the plugin `dsh-context`.
+*.context
+*.dum-old
+.dum-legacy/
 
 # The npm tarball produced by `npm pack`.
 *.tgz

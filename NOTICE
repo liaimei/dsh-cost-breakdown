@@ -1,0 +1,91 @@
+dsh-cost-breakdown
+Copyright 2026 liaimei
+
+This product is a fork of dsh-context.
+Copyright the dsh-context contributors.
+Licensed under the Apache License, Version 2.0.
+
+  Upstream: https://github.com/bowenliang123/dsh-context
+  Forked at: commit 209169d (main, just after v0.66.1)
+  Upstream licence text: LICENSE.apache
+
+Changes made in this fork, as required by section 4(b) of the Apache License:
+
+  * Pricing is extended with this plugin's official CNY price table, explicit
+    peak/off-peak windows, and a Chinese public-holiday calendar
+    (src/shared/officialRates.ts). Upstream prices only from the client's
+    models.dev USD book with a flat `PEAK_FACTOR = 2` and has no holiday table,
+    so its holidays bill at the peak rate. Here the official table takes
+    precedence for the models it lists, the host fold resolves each settlement's
+    period against it, and other models keep pricing from models.dev.
+    `host/config.ts` gains the `holidays` field; `host/foldMetering.ts`,
+    `host/activity.ts`, `host/fold.ts`, `host/timeline.ts`, `host/index.ts` and
+    `client/cost.ts` thread it through. The `contextTimeline` stateVersion is
+    bumped 27 -> 28 and `contextActivity` 4 -> 5 because the folded period
+    classification changed.
+  * A composer-dock cost readout is added (src/client/components/composerDock.tsx,
+    src/client/dockReading.ts, src/client/styles/composerDock.css): absent
+    upstream. `client/index.ts` registers it on `conversation.composer.dock`, and
+    `client/i18n.ts` gains its dictionary keys.
+
+  * The package is named `dsh-cost-breakdown` (upstream's is `dsh-context`), and its
+    icon.svg is this fork's own three-segment "usage meter" gauge rather than
+    upstream's document-sheet emblem. Upstream's source files are otherwise
+    carried over unmodified; the identity strings the runtime depends on (route
+    paths, locale namespace, slot ids, config key) follow the package name.
+  * Documentation comments were added across the whole `src/` tree (including the
+    CSS sheets): every exported declaration carries a doc block, and non-obvious
+    logic carries explanatory inline comments. The comments are written in Chinese.
+    This touches most files inherited from upstream, so those files are no longer
+    byte-identical to their upstream revisions (see below). Only comments changed —
+    no statement, expression, identifier, string literal, type or formatting of
+    code was altered, which was enforced mechanically by comparing the pre- and
+    post-edit trees token by token. Upstream's behaviour, structure and public
+    surface are therefore unchanged; the divergence is documentation only, and a
+    rebase should treat these edits as comment noise.
+
+Files carried over from upstream are otherwise unmodified unless the change is
+noted above or in the commit history.
+
+`lib/` is committed, so the shipped artifacts were regenerated after the comment
+pass. The rebuild is code-equivalent to the previous one: the host bundle is
+identical once comments are removed, the declaration file's declarations are
+unchanged, and the client bundle's JavaScript and its Tailwind CSS payload are
+unchanged. The only substantive bundle difference is that SEVEN DEAD utility
+rules (`.collapse`, `.relative`, `.container`, `.border`, `.ring`, `.outline`,
+`.transition`) are no longer emitted. They existed only because the older English
+comments happened to contain those words, which Tailwind's content scanner reads
+as class candidates; nothing in the source used them, and the bundle now has no
+dangling `--tw-*` custom-property references as a result. `lib/index.d.ts` gained
+the doc blocks that reach it from the source.
+
+Post-pass fix (own code, not upstream): the composer-dock detail card was
+positioned from a height measured before the card existed, so an open card sat
+at a top computed for a size it never had and could overlap the composer row.
+The card now mounts as soon as the readout opens (hidden until placed), the
+first measurement happens against the real element, and a ResizeObserver
+re-places it when its asynchronous content changes its height. A no-op guard
+keeps an unchanged measurement from re-rendering. Covered by a regression test
+in tests/client/components/composerDock.spec.ts.
+
+Follow-up: the composer-dock card's surface token was corrected from
+`--dsw-alias-bg-layer-1` (the primary card layer) to `--dsw-alias-bg-layer-2`,
+which is what DSH's own floating surfaces use (its dialog/float rules pair
+layer-2 with a shadow) and what this plugin's other overlays (`.lc-tip`) already
+used. In the dark theme layer-1 is bluish-875 (#232324) against layer-2's
+bluish-850 (#2c2c2e), so the open card read noticeably darker than the harness's
+own popovers; in the light theme both resolve to pure white, so the change has no
+effect there.
+
+UI label rename (own code): the two entry points are named by what they show.
+The session-scoped view — the conversation tab strip and the right-side tab, panel
+and guide card — is ONE component serving one dataset, so all of those surfaces now
+share a single name, "汇总统计" / "Summary Statistics"; they previously split into
+"上下文" for the tab and "汇总统计" for the card, which made one view look like two
+features. The account-level page (the left-nav entry and that page's heading) stays
+"统计" / "Statistics". The `sidebar.guideTitle` key this briefly introduced was
+retired once the tab and the card agreed, so the name has one source rather than
+two that could drift. Both dictionaries were changed in step, and the assertions
+that pin these strings were updated with them. Note that the panel keeps the term
+"上下文" inside itself where it is accurate ("当前上下文", "上下文趋势"); that is
+panel vocabulary, not the entry's name.

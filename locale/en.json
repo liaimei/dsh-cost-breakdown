@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Usage & Cost (dsh-cost-breakdown)",
+    "description": "Cost and context insight: account-wide token/cost statistics, official CNY peak/off-peak pricing with Chinese public holidays, and a persistent cost readout under the composer, alongside the context dashboard, browser and /context command."
+  }
+}
