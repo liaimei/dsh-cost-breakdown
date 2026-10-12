@@ -1161,3 +1161,34 @@ describe('ComposerDock — official billing UI appears only where it applies', (
     } finally { await m.unmount(); vi.useRealTimers() }
   })
 })
+
+describe('ComposerDock — the line never totals platforms it cannot report', () => {
+  const bj = (y: number, mo: number, d: number, h: number, mi = 0): number => Date.UTC(y, mo - 1, d, h - 8, mi)
+
+  test('a route with no row of its own falls back to a dash, not a cross-platform total', async () => {
+    // The regression: with no platform row to show, the line fell back to `reading.cost`
+    // — the WHOLE ledger's estimate. Two money platforms therefore made the line read
+    // "¥4.00" while the route actually in use had spent nothing. A sum across platforms
+    // of different units is meaningless, and here it was presented as "right now".
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(bj(2026, 10, 12, 10)))
+    const D = Dock(new TestClientCtx({ locale: 'zh' }), kitZh)
+    const tl = {
+      ok: true, requests: [], events: [], nodes: [], archive: [],
+      current: { system: 0, tools: 0, user: 0, inject: 0, skill: 0, assistant: 0, tool: 0, total: 0 },
+      provider: 'kimi-coding', model: 'kimi-k2',
+      cost: {
+        'deepseek-account': { 'deepseek-v4-flash': { off: { uncached: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } } },
+        'other-route': { 'deepseek-v4-flash': { off: { uncached: 3_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } } },
+      },
+      calls: {}, creditRates: null,
+    } as unknown as ContextTimeline
+    const m = await mount(h(D, { sessionId: 's1', ...seatOf(tl) }))
+    try {
+      await flush()
+      const line = text(query(m.container, '.lc-dock'))
+      assert.ok(!line.includes('¥4.00'), `must not total the ledger, got ${JSON.stringify(line)}`)
+      assert.match(line, /—/, 'an honest dash instead')
+    } finally { await m.unmount(); vi.useRealTimers() }
+  })
+})

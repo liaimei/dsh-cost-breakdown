@@ -428,7 +428,11 @@ function platformBalanceTexts(
     const displayCurrency: CostCurrency = activeLocale === 'zh' ? 'cny' : 'usd'
     const platformRows = platformSpendsOf(data.cost ?? null, data.calls ?? null, book, null, data.creditRates ?? null)
     // 当前在用的平台：`Snapshot.provider` 是 harness 逐请求更新的路由。
-    const activePlatform = platformRows.find(r => r.provider === data.provider) ?? null
+    // 当前路由直接取快照字段，**不**从可定价的平台行里反查：那一行可能因为
+    // 「这一轮还没入账」或「拿不到费率」而不存在，反查会得到 null，进而让费用卡
+    // 退回按整个账本计价（跨平台求和）。单位与积分值才需要那一行。
+    const activeProvider = data.provider ?? null
+    const activePlatform = platformRows.find(r => r.provider === activeProvider) ?? null
     // 会话里**出现过官方模型**吗？没有的话整块金额统计都不成立：峰谷时段、人民币
     // 价目表、按 token 计价的拆分全都是官方计价才有的概念。一个只用了积分平台的
     // 会话，显示一张人民币费用卡（外加峰谷徽标与价目表）等于凭空造出一笔账单。
@@ -589,7 +593,7 @@ function platformBalanceTexts(
             usage={data.cost ?? null}
             calls={data.calls ?? null}
             creditRates={data.creditRates ?? null}
-            provider={activePlatform?.provider ?? null}
+            provider={activeProvider}
             unit={activePlatform?.unit}
                 creditsValue={activePlatform?.unit === 'credits' ? activePlatform.value : undefined}
                 currency={displayCurrency}

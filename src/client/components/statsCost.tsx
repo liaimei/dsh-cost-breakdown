@@ -51,7 +51,7 @@ export function makeStatsCost(kit: ViewKit, Donut: (props: DonutProps) => ReactE
   usage: SessionCostUsage | null
   calls?: SessionCallCounts | null
   creditRates?: Record<string, Record<string, number>> | null
-  provider?: string | null
+  provider: string | null
   unit?: 'money' | 'credits'
   creditsValue?: number
   currency: CostCurrency
@@ -61,9 +61,10 @@ export function makeStatsCost(kit: ViewKit, Donut: (props: DonutProps) => ReactE
     usage: SessionCostUsage | null
     calls?: SessionCallCounts | null
     creditRates?: Record<string, Record<string, number>> | null
-    /** 当前在用的平台（账本里的 provider 键）。给定时这张卡只算它——
-     *  积分平台的用量不能按人民币计价，混在一起算出来的数没有意义。 */
-    provider?: string | null
+    /** 当前在用的平台（账本里的 provider 键）。**必填**：这张卡只算这一个平台。
+     *  省略它（或给 `null`）意味着拿不到路由，那时如实显示「暂无数据」，
+     *  而**不是**退回按整个账本计价——账本里各平台单位不同，相加没有意义。 */
+    provider: string | null
     /** 该平台的单位；`credits` 时这张卡不画金额（积分不是钱）。 */
     unit?: 'money' | 'credits'
     /** 积分平台本会话的积分数（由调用方按当前平台算好）。 */
@@ -81,8 +82,11 @@ export function makeStatsCost(kit: ViewKit, Donut: (props: DonutProps) => ReactE
     // 只算当前平台：不同平台的账单单位不同，把积分平台的用量按人民币算出来
     // 会给出一个看起来合理却错的数字（实测：workbuddy 的 1M token 被算成 ¥0.30）。
     // 积分平台整卡不画金额，改用平台卡那一组呈现。
+    // 路由未知时**范围为空**，而不是退回整个账本：账本里各平台的单位不同，
+    // 一起算出来的数没有意义（曾实测把 workbuddy 的 1M token 算成 ¥0.30）。
+    // 拿不到路由就据实说没数据，比给一个错的总额好。
     const scope = props.provider === undefined || props.provider === null
-      ? props.usage
+      ? null
       : (props.usage?.[props.provider] !== undefined ? { [props.provider]: props.usage[props.provider] } : null)
     const isCredits = props.unit === 'credits'
     const split = isCredits

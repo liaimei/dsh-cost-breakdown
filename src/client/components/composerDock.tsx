@@ -328,9 +328,12 @@ export function makeComposerDock(
     // 换成一个时钟图标 + 紧凑读数（`6h38m`）。两者由 CSS 按容器宽度二选一，
     // 数字都来自同一个 `remainingMs`，不会各走各的。
     // 悬停提示把两件事说全：峰时窗口是哪几段，以及还有多久翻转。
-    // 一个平台都定不出价时的兜底读数：那时没有平台行可显示，但这一行仍有话要说
-    // （「还没有可计价的量」或「有量但拿不到费率」），用破折号如实表达。
-    const costTextFallback = reading.cost === null ? '—' : formatCost(reading.cost, currency)
+    // 没有可显示的平台行时的兜底读数。
+    // 这里**不能**用 `reading.cost`——那是整个账本的合计，而账本里各平台的单位不同，
+    // 相加得到的数没有意义（实测：两个金额平台的量相加后，在当前根本没用量的一条
+    // 路由上显示出 ¥4.00，读起来像「此刻花了 4 元」）。拿不到当前平台就读不到数，
+    // 用破折号如实表达。
+    const costTextFallback = '—'
     // 按平台拆分本会话消费：每个平台各自带自己的单位与余额。
     // 这是这行读数的主内容——不同平台的账单单位不同，合成一个数字没有意义。
     // 只讲**当前在用**的那个平台：这一行是「此刻的状态」，不是账单。
@@ -338,9 +341,10 @@ export function makeComposerDock(
     // 当前路由未知时才回退到全部平台（宁可多讲，也不要因为缺一个字段就不说话）。
     const allPlatforms = platformSpendsOf(reading.usage, reading.calls, reading.book, null, reading.creditRates)
     const active = reading.active
-    const platforms = active === undefined
-      ? allPlatforms
-      : allPlatforms.filter(row => row.provider === active.provider)
+    // 当前路由所在的那一行；「这一轮还没入账」或「拿不到费率」时会是 undefined，
+    // 那时状态栏不报读数（据实），但**不**退回列出全部平台。
+    const activeRow = active === undefined ? undefined : allPlatforms.find(row => row.provider === active.provider)
+    const platforms = active === undefined ? allPlatforms : (activeRow === undefined ? [] : [activeRow])
     // 完整读数（用于量宽）：与上面渲染的那一串同源，因此量出来的就是要显示的东西。
     const probeText = platforms.map(row => (
       platformLabel(row, t)

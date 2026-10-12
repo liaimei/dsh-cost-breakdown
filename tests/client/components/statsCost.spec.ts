@@ -70,7 +70,7 @@ function periodOf(container: HTMLElement, i: number): { label: string; cost: str
 
 describe('StatsCost', () => {
   test('the ring splits the spend by billed bucket, with each bucket’s money in the sub-row', async () => {
-    const m = await mount(h(Cost, { usage: OFFPEAK, currency: 'usd' }))
+    const m = await mount(h(Cost, { usage: OFFPEAK, currency: 'usd', provider: 'deepseek-official' }))
     // Off-peak flash: hit 0.003, miss 0.15, out 0.6 per 1M → $0.753 total, shown to the cent.
     assert.equal(query(m.container, '.lc-donut-center b').textContent, '$0.75')
     assert.equal(query(m.container, '.lc-donut-center span').textContent, 'Total Cost')
@@ -85,7 +85,7 @@ describe('StatsCost', () => {
   })
 
   test('the peak/off-peak split sits under the ring and adds up to the ring total', async () => {
-    const m = await mount(h(Cost, { usage: BOTH, currency: 'usd' }))
+    const m = await mount(h(Cost, { usage: BOTH, currency: 'usd', provider: 'deepseek-official' }))
     // Peak doubles the official off-peak rate: $0.30 peak vs $0.15 off.
     assert.deepEqual(periodOf(m.container, 0), { label: 'Peak', cost: '$0.30', pct: '66.7%' })
     assert.deepEqual(periodOf(m.container, 1), { label: 'Off-peak', cost: '$0.15', pct: '33.3%' })
@@ -93,7 +93,7 @@ describe('StatsCost', () => {
   })
 
   test('the zh locale prices in CNY with localized labels', async () => {
-    const m = await mount(h(CostZh, { usage: OFFPEAK, currency: 'cny' }))
+    const m = await mount(h(CostZh, { usage: OFFPEAK, currency: 'cny', provider: 'deepseek-official' }))
     assert.ok(text(m.container).includes('费用统计'))
     // 0.753 USD / 0.15 = ¥5.02.
     assert.equal(query(m.container, '.lc-donut-center b').textContent, '¥5.02')
@@ -105,7 +105,7 @@ describe('StatsCost', () => {
 
   test('nothing billed renders the empty note, with no ring', async () => {
     for (const usage of [null, {} as never]) {
-      const m = await mount(h(Cost, { usage, currency: 'usd' }))
+      const m = await mount(h(Cost, { usage, currency: 'usd', provider: 'deepseek-official' }))
       assert.equal(queryAll(m.container, '.lc-donut').length, 0)
       assert.equal(queryAll(m.container, '.lc-sc-period').length, 0)
       assert.ok(text(m.container).includes('No billing data for this session yet'))
@@ -117,6 +117,7 @@ describe('StatsCost', () => {
     // A model outside both tables: the ledger is real, the price is not.
     const m = await mount(h(Cost, {
       usage: { 'unknown-route': { 'mystery-model': { off: { uncached: 1000, cacheRead: 0, cacheWrite: 0, output: 0 } } } },
+      provider: 'unknown-route',
       currency: 'usd',
     }))
     assert.equal(queryAll(m.container, '.lc-donut').length, 0)
@@ -130,7 +131,7 @@ describe('StatsCost', () => {
       isAvailable: true,
       balances: [{ currency: 'CNY', total: 38.12, granted: 1.5, toppedUp: 36.62 }],
     }))
-    const m = await mount(h(Cost, { usage: OFFPEAK, currency: 'usd' }))
+    const m = await mount(h(Cost, { usage: OFFPEAK, currency: 'usd', provider: 'deepseek-official' }))
     const link = query(m.container, '.lc-sc-balance')
     assert.equal(query(link, '.lc-sc-balance-label').textContent, 'DeepSeek balance')
     assert.equal(query(link, 'b').textContent, '¥38.12', 'the entry keeps its own currency')
@@ -139,13 +140,13 @@ describe('StatsCost', () => {
   })
 
   test('no balance remembered leaves the row out entirely', async () => {
-    const m = await mount(h(Cost, { usage: OFFPEAK, currency: 'usd' }))
+    const m = await mount(h(Cost, { usage: OFFPEAK, currency: 'usd', provider: 'deepseek-official' }))
     assert.equal(queryAll(m.container, '.lc-sc-balance').length, 0, 'never a zero standing in for "unknown"')
     await m.unmount()
   })
 
   test('hovering a legend row lights its donut segment and the row itself', async () => {
-    const m = await mount(h(Cost, { usage: OFFPEAK, currency: 'usd' }))
+    const m = await mount(h(Cost, { usage: OFFPEAK, currency: 'usd', provider: 'deepseek-official' }))
     const rows = queryAll(m.container, '.lc-sl-row')
     await hover(rows[0])
     assert.ok(query(m.container, '.lc-donut').className.includes('lc-donut-dim'))
@@ -230,6 +231,37 @@ describe('StatsCost — it speaks for the platform currently in use', () => {
       // the card priced the whole ledger instead of just the selected platform.
       assert.match(body, /¥1\.00/, 'only the selected platform')
       assert.doesNotMatch(body, /¥4\.00/, 'never the whole ledger')
+    } finally { await m.unmount() }
+  })
+})
+
+describe('StatsCost — an unknown route reports nothing, it does not total the ledger', () => {
+  const TWO_MONEY = {
+    a: { 'deepseek-v4-flash': { off: { uncached: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } } },
+    b: { 'deepseek-v4-flash': { off: { uncached: 3_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } } },
+  }
+
+  test('a null provider does not fall back to pricing every platform together', async () => {
+    // The regression: `provider: null` (the route is not in the ledger yet, or has no
+    // resolvable rate) used to fall back to `props.usage`, i.e. the whole ledger. With
+    // two money platforms that is a silent cross-platform sum — exactly the error the
+    // per-platform scoping exists to prevent, reached by a different branch.
+    const m = await mount(h(Cost, { usage: TWO_MONEY, provider: null, currency: 'cny' }))
+    try {
+      await flush()
+      const body = text(m.container)
+      assert.ok(!body.includes('¥4.00'), `must not sum the ledger, got ${JSON.stringify(body)}`)
+      assert.match(body, /¥1\.00|No billing data|暂无/, 'it reports the single platform or nothing')
+    } finally { await m.unmount() }
+  })
+
+  test('naming one platform reports that platform alone', async () => {
+    const m = await mount(h(Cost, { usage: TWO_MONEY, provider: 'a', currency: 'cny' }))
+    try {
+      await flush()
+      const body = text(m.container)
+      assert.match(body, /¥1\.00/, 'the named platform')
+      assert.doesNotMatch(body, /¥4\.00/, 'never both')
     } finally { await m.unmount() }
   })
 })
