@@ -109,6 +109,24 @@ describe('the per-turn spend reading', () => {
     } finally { await m.unmount() }
   })
 
+  test('a sub-cent amount is not rounded away to "0"', async () => {
+    // The regression: money went through `fmt` (a TOKEN-count formatter that rounds
+    // below 1000), so a real turn costing ~$0.009 rendered as the literal text "0".
+    // Money must use the currency formatter, which keeps two significant digits.
+    setModelPricesLoader(null)
+    resetModelPrices()
+    const View = makeTurnSpend(kit, () => 'usd', () => null, () => null)
+    const usage = { workbuddy: { 'deepseek-v4.1-flash': { peak: { uncached: 1000, cacheRead: 0, cacheWrite: 0, output: 100 } } } }
+    const timeline = timelineWithTurnCost({ '1': { usage, requests: {} } })
+    const m = await mount(h(View as never, seatOf([assistantNode('m1', 1)], timeline) as never))
+    try {
+      await flush()
+      const shown = text(query(m.container, '.lc-turn-spend'))
+      assert.notEqual(shown, '0', 'a real amount must never collapse to zero')
+      assert.match(shown, /^\$0\.0/, `two significant digits, got ${shown}`)
+    } finally { await m.unmount() }
+  })
+
   test('renders nothing when the turn has no ledger', async () => {
     setModelPricesLoader(null)
     resetModelPrices()

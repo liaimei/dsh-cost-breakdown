@@ -15,7 +15,7 @@ import type { ConversationNodeLike, SessionStandardProps } from '../services'
 import { conversationNodesOf } from '../services'
 import type { ContextTimeline, TurnCostEntry } from '../../shared/types'
 import { useModelPrices } from '../modelPrices'
-import { toCurrency, type CostCurrency } from '../cost'
+import { formatCost, toCurrency, type CostCurrency } from '../cost'
 import { fmt } from '../format'
 import type { ThirdPartyRates } from '../../shared/thirdPartyRates'
 import type { CreditRates, TurnSpend } from '../turnSpend'
@@ -92,9 +92,12 @@ export function makeTurnSpend(
     const entry: TurnCostEntry | undefined = timeline?.turnCost?.[String(turn)]
     const spend = turnSpendOf(entry, book, rates(), credits())
     if (spend === null) return null
+    // 金额必须走 `formatCost`：`fmt` 是 token 计数的格式（千以下取整），
+    // 用它会把不到五分的单轮金额显示成 `0`——这正是此前实际渲染出的内容。
+    // 货币符号由 `formatCost` 给出，字典因此只放一个纯数字占位。
     const text = spend.unit === 'credits'
       ? t('turnSpend.credits', { n: fmtCredits(spend.value) })
-      : t('turnSpend.money', { n: fmt(toCurrency(spend.value, currency())) })
+      : formatCost(toCurrency(spend.value, currency()), currency())
     return (
       <Tooltip label={tipOf(spend, t)} side="bottom">
         <span className="lc-turn-spend" data-unit={spend.unit}>{text}</span>
