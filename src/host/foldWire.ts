@@ -3,7 +3,7 @@
  * 每个字段都是副本，对外提供的值因此绝不与持久 state 别名共享。
  */
 
-import type { ContextTimelineDetail, Snapshot, ToolTimingTotals } from '../shared/types'
+import type { ContextTimelineDetail, Snapshot, ToolTimingTotals, TurnCostEntry, TurnCostUsage } from '../shared/types'
 import { copyCostUsage } from './foldMetering'
 import type { FoldBounds } from './config'
 import type { TimelineState } from './foldState'
@@ -48,6 +48,17 @@ function headFieldsOf(state: TimelineState): Snapshot {
   // 成本汇总与集合一样，以「副本」形式上 wire。
   if (state.cost !== undefined) {
     result.cost = copyCostUsage(state.cost)
+  }
+  // 每轮账本同样逐层复制：对外提供的值绝不能与持久 state 别名共享。
+  if (state.turnCost !== undefined) {
+    const perTurn: TurnCostUsage = {}
+    for (const turn in state.turnCost) {
+      const entry = state.turnCost[turn]
+      const requests: TurnCostEntry['requests'] = {}
+      for (const pv in entry.requests) requests[pv] = { ...entry.requests[pv] }
+      perTurn[turn] = { usage: copyCostUsage(entry.usage), requests }
+    }
+    result.turnCost = perTurn
   }
   // 计时汇总同样以「副本」形式上 wire（含按名称的行）。
   if (state.timing !== undefined) {

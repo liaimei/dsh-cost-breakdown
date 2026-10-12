@@ -118,9 +118,9 @@ describe.skipIf(staging.artifactsMissing())('bundle smoke — the built lib/clie
     assert.ok(!css.includes('120ms ease'), 'lightningcss minified the sheet')
   })
 
-  test('registrations: bilingual dictionaries, six slots, the /context trigger source', () => {
+  test('registrations: bilingual dictionaries, seven slots, the /context trigger source', () => {
     assert.ok(state.dicts.get('dsh-cost-breakdown')?.zh && state.dicts.get('dsh-cost-breakdown')?.en, 'bilingual dictionaries registered')
-    assert.equal(state.slots.length, 6, 'view tab + assistant action + input overlay + composer dock + insight page and sidebar entry slots')
+    assert.equal(state.slots.length, 7, 'view tab + two assistant actions + input overlay + composer dock + insight page and sidebar entry slots')
     assert.equal(state.slots[0]?.[0], 'conversation.view')
     assert.equal(state.slots[0]?.[1].order, 20)
     assert.equal(state.slots[0]?.[1].label?.(), '汇总统计', 'tab label localized')
@@ -128,15 +128,17 @@ describe.skipIf(staging.artifactsMissing())('bundle smoke — the built lib/clie
     assert.equal(state.slots[1]?.[1].id, 'context-jump', 'jump action rides its own slot id')
     assert.equal(state.slots[2]?.[0], 'conversation.composer.dock', 'the cost readout rides the composer dock')
     assert.equal(state.slots[2]?.[1].id, 'context-cost', 'the readout owns its own dock cell')
-    assert.equal(state.slots[3]?.[0], 'conversation.input.overlay')
-    const overlayInject = state.slots[3]?.[1].inject
+    assert.equal(state.slots[3]?.[0], 'conversation.chat.assistant-actions', 'the per-turn reading shares the assistant action row')
+    assert.equal(state.slots[3]?.[1].id, 'turn-spend', 'and owns its own slot id beside the jump action')
+    assert.equal(state.slots[4]?.[0], 'conversation.input.overlay')
+    const overlayInject = state.slots[4]?.[1].inject
     const overlayHooks = overlayInject?.('s1') as { hooks: { contextModal: { getSnapshot: unknown } } } | undefined
     assert.equal(typeof overlayHooks?.hooks.contextModal.getSnapshot, 'function', 'overlay hooks carry the modal store')
-    assert.equal(state.slots[4]?.[0], 'main', 'the insight page rides the layout\'s keyed main seat')
-    assert.equal(state.slots[4]?.[1].key, 'dsh-cost-breakdown', 'the page panel key is the plugin id')
-    assert.equal(state.slots[5]?.[0], 'sidebar.panellist', 'the insight entry rides the sidebar panel list')
-    assert.equal(state.slots[5]?.[1].id, 'dsh-cost-breakdown', 'the entry id addresses the main panel')
-    assert.equal(state.slots[5]?.[1].label?.(), '统计', 'the entry label localized')
+    assert.equal(state.slots[5]?.[0], 'main', 'the insight page rides the layout\'s keyed main seat')
+    assert.equal(state.slots[5]?.[1].key, 'dsh-cost-breakdown', 'the page panel key is the plugin id')
+    assert.equal(state.slots[6]?.[0], 'sidebar.panellist', 'the insight entry rides the sidebar panel list')
+    assert.equal(state.slots[6]?.[1].id, 'dsh-cost-breakdown', 'the entry id addresses the main panel')
+    assert.equal(state.slots[6]?.[1].label?.(), '统计', 'the entry label localized')
     assert.equal(state.sources.length, 1, '/context trigger source registered')
     assert.equal(state.sources[0]?.trigger, '/', 'trigger is the slash')
   })

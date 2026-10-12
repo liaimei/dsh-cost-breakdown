@@ -1,3 +1,26 @@
 /* 对齐 harness MessageIconActions `.action` 的 chrome，让按钮与既有图标并排贴合。 */
 .lc-jump { display: inline-flex; align-items: center; justify-content: center; width: calc(28px + var(--dsh-content-font-delta, 0px)); height: calc(28px + var(--dsh-content-font-delta, 0px)); padding: 6px; border: 0; border-radius: 28px; background: transparent; color: var(--dsw-alias-label-tertiary); cursor: pointer; transition: background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out), color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 .lc-jump svg { width: calc(16px + var(--dsh-content-font-delta, 0px)); height: calc(16px + var(--dsh-content-font-delta, 0px)); }
+
+/* 每轮消费读数：刻意复刻官方「用量」胶囊的排版（ui-chat 的 StatsPills/TurnUsagePanel
+   用的是同一套度量），这样两个胶囊并排时不会一个高一个矮、一个字重一个轻。
+   数值用 tabular-nums，逐轮变化时不抖。 */
+.lc-turn-spend {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: default;
+}
+/* 积分与金额用同一档灰：两者都是「读数」，没有一个比另一个更该抢眼。 */
+.lc-turn-spend[data-unit='credits'],
+.lc-turn-spend[data-unit='money'] { color: var(--dsw-alias-label-tertiary); }

@@ -15,6 +15,7 @@ import { createContextSettings, type ConfigFormsFace, type SettingsField } from 
 import { makeContextView } from './components/contextView'
 import { makeComposerDock } from './components/composerDock'
 import { makeContextJumpButton } from './components/contextJump'
+import { makeTurnSpend } from './components/turnSpend'
 import { watchHistoryFaces } from './historyPage'
 import { watchPlacement } from './placement'
 import { watchSidebarContextTab } from './sidebar'
@@ -94,6 +95,20 @@ function apply(ctx: ClientCtx): void {
     return ctx.slots.register(
       { name: 'conversation.composer.dock', id: 'context-cost', order: 10, locale: NS },
       props => h(ComposerDock, props),
+    )
+  })
+
+  // 每轮回复后面的消费读数：与官方的「用量 N tok」胶囊同一行（该槽位由 harness 的
+  // turn-tail 渲染成图标行，官方胶囊在行尾的 endInfo 里）。它按每轮账本动态决定
+  // 显示金额（区分峰谷）还是积分——见 components/turnSpend.tsx。
+  const TurnSpend = makeTurnSpend(kit, () => (
+    typeof ctx.locale.getLocale === 'function' && ctx.locale.getLocale().active === 'zh' ? 'cny' : 'usd'
+  ))
+  ctx.slots.inject('conversation.chat.assistant-actions', () => {
+    return ctx.slots.register(
+      // 排在随附的 feedback（10）与上面的 context-jump（20）之后，仍是图标行内的一员。
+      { name: 'conversation.chat.assistant-actions', id: 'turn-spend', order: 30, locale: NS },
+      props => h(TurnSpend, props as unknown as Parameters<typeof TurnSpend>[0]),
     )
   })
 

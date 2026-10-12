@@ -134,10 +134,13 @@ describe('client entry: assistant-actions seat', () => {
     const ctx = new TestClientCtx()
     applyTo(ctx)
     const entries = ctx.slots.of('conversation.chat.assistant-actions')
-    assert.equal(entries.length, 1)
-    const { registration, component } = entries[0]
+    // Two entries now share the row: the jump button and the per-turn spend reading.
+    // They sit alongside the shipped feedback entry (order 10).
+    assert.equal(entries.length, 2)
+    const jump = entries.find(e => e.registration.id === 'context-jump')
+    assert.ok(jump !== undefined, 'the jump entry is registered')
+    const { registration, component } = jump
     assert.equal(registration.name, 'conversation.chat.assistant-actions')
-    assert.equal(registration.id, 'context-jump')
     assert.equal(registration.order, 20, 'right of the shipped feedback entry')
     assert.equal(registration.locale, 'dsh-cost-breakdown')
 
@@ -150,6 +153,18 @@ describe('client entry: assistant-actions seat', () => {
     const nil = await mount(component({ messageId: 7 }) as ReactElement)
     assert.equal(queryAll(nil.container, 'button').length, 0)
     await nil.unmount()
+    ctx.dispose()
+  })
+
+  test('registers the per-turn spend reading after the jump entry', () => {
+    const ctx = new TestClientCtx()
+    applyTo(ctx)
+    const spend = ctx.slots.of('conversation.chat.assistant-actions')
+      .find(e => e.registration.id === 'turn-spend')
+    assert.ok(spend !== undefined, 'the per-turn spend entry is registered')
+    // Order 30 puts it to the right of the jump button, still inside the icon row.
+    assert.equal(spend.registration.order, 30)
+    assert.equal(spend.registration.locale, 'dsh-cost-breakdown')
     ctx.dispose()
   })
 })

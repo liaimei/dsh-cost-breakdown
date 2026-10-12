@@ -74,6 +74,9 @@ interface TimelineState {
   /** 按 (provider, model) 累计的计费 token 总量，对 DeepSeek 再按时段拆分。从不裁剪，
    * 因此估算覆盖「完整」session 日志。 */
   cost?: SessionCostUsage;
+  /** 每轮消费账本（见 TurnCostUsage）。与 `cost` 由同一次 `accumulateCost` 写出，
+   *  因此两者对同一次结算永远一致。键是十进制 turn 字符串。 */
+  turnCost?: TurnCostUsage;
   /** 整个 session 的人类输入计数（见 Snapshot.humanInputs）；与 `cost` 一样从不裁剪。 */
   humanInputs?: number;
   /** 整个 session 的回复计数（见 Snapshot.answers）；与 `humanInputs` 一样从不裁剪。 */
@@ -293,6 +296,9 @@ interface Snapshot {
   events: ContextEventRecord[];
   /** session 成本的累计原料（SessionCostUsage）；在出现已知模型且报告了 usage 的请求之前缺失。 */
   cost?: SessionCostUsage;
+  /** 每轮（turn）的消费原料（TurnCostUsage）；在出现已知模型、报告了 usage 且带 `turn` 的
+   *  请求之前缺失。与会话级 `cost` 由同一次定价写出，两者不会互相矛盾。 */
+  turnCost?: TurnCostUsage;
   /** 整个 session 的计时汇总（TimingTotals）。首个 step 生命周期走完之前缺失。 */
   timing?: TimingTotals;
   /** 存活的 system prompt 节点，由旧到新。在字段出现之前折叠出的行上缺失——
@@ -441,6 +447,27 @@ interface SessionCostUsage {
   [provider: string]: {
     [model: string]: CostModelUsage;
   };
+}
+/** 单轮（turn）的消费原料。
+ *
+ * 为什么要单独存一份：会话级的 `cost` 只累计到会话，无法回答「这一轮花了多少」。
+ * 归因的是**这一轮自己的请求**（`turn` 取自请求信封），不是两次累计值相减——
+ * 后者在并行/交错的请求下会算错。 */
+interface TurnCostEntry {
+  /** 该轮的计价账本，与会话级 `cost` **同形**，因此走同一个定价函数、
+   *  同一套峰谷规则，汇总卡与每轮读数不会对同一次结算给出两个答案。 */
+  usage: SessionCostUsage;
+  /** 该轮按 provider → model 计的**请求次数**。按次计费的平台（如积分制）用它，
+   *  因为那类账单与 token 量无关，一次请求就是一次扣费。 */
+  requests: {
+    [provider: string]: {
+      [model: string]: number;
+    };
+  };
+}
+/** turn → 该轮的消费原料。键是十进制字符串，JSON 往返不改形状。 */
+interface TurnCostUsage {
+  [turn: string]: TurnCostEntry;
 }
 /** surface 上一条模型可见的消息，及其启发式估算的 token 价。 */
 interface SurfaceNode {

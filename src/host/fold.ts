@@ -657,7 +657,7 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
               cacheRead: cacheRead ?? 0,
               cacheWrite: cacheWrite ?? 0,
               output: output ?? 0,
-            }, bounds.holidays)
+            }, bounds.holidays, record.turn)
           }
         }
         s.requests.push(record)
@@ -723,6 +723,7 @@ export function applyTimeline(state: TimelineState, event: TimelineEvent, bounds
         if (data?.inherited !== true) break
         const s = ensure([])
         s.cost = {}
+        s.turnCost = {}
         break
       }
       case 'plan/mode': {

@@ -499,6 +499,62 @@ describe('hostile provider usage (issue #44: stats must survive nonconforming fi
       uncached: 0, cacheRead: 300, cacheWrite: 10, output: 0,
     })
   })
+
+  test('the same settlement also lands in its own turn', () => {
+    // The per-turn ledger answers "what did THIS turn cost", which the session total
+    // cannot. It is written by the same addBilledUsage call, so the two can never
+    // disagree about one settlement.
+    const { state } = driveTimeline([
+      header(1, { model: 'deepseek-v4-flash', provider: 'deepseek-official' }),
+      assistantMessage(2, {
+        turn: 7,
+        usage: { inputTokens: 100, cacheReadTokens: 300, cacheWriteTokens: 10, outputTokens: 20 },
+        time: Date.UTC(2024, 0, 1, 2, 0, 0),
+      }),
+    ])
+    const turn = state.turnCost?.['7']
+    assert.deepEqual(turn?.usage['deepseek-official']['deepseek-v4-flash'].peak, {
+      uncached: 100, cacheRead: 300, cacheWrite: 10, output: 20,
+    })
+    // And the turn's totals equal the session's, because there is only one turn.
+    assert.deepEqual(turn?.usage, state.cost)
+  })
+
+  test('each turn keeps its own tally and its own call count', () => {
+    const { state } = driveTimeline([
+      header(1, { model: 'deepseek-v4-flash', provider: 'deepseek-official' }),
+      // An explicit peak instant: the buckets must land where the session ledger puts them.
+      assistantMessage(2, { turn: 1, usage: { inputTokens: 10 }, time: Date.UTC(2024, 0, 1, 2, 0, 0) }),
+      assistantMessage(3, { turn: 1, usage: { inputTokens: 5 }, time: Date.UTC(2024, 0, 1, 2, 1, 0) }),
+      assistantMessage(4, { turn: 2, usage: { inputTokens: 100 }, time: Date.UTC(2024, 0, 1, 2, 2, 0) }),
+    ])
+    // Two calls in turn 1, one in turn 2 — a per-call platform bills from this count.
+    assert.equal(state.turnCost?.['1'].requests['deepseek-official']['deepseek-v4-flash'], 2)
+    assert.equal(state.turnCost?.['2'].requests['deepseek-official']['deepseek-v4-flash'], 1)
+    assert.equal(state.turnCost?.['1'].usage['deepseek-official']['deepseek-v4-flash'].peak?.uncached, 15)
+    assert.equal(state.turnCost?.['2'].usage['deepseek-official']['deepseek-v4-flash'].peak?.uncached, 100)
+  })
+
+  test('a request without a turn is priced into the session only', () => {
+    // Nothing may be attributed to a turn we cannot name: better a missing per-turn
+    // reading than one charged to somebody else's turn.
+    const { state } = driveTimeline([
+      header(1, { model: 'deepseek-v4-flash', provider: 'deepseek-official' }),
+      assistantMessage(2, { usage: { inputTokens: 10 }, time: Date.UTC(2024, 0, 1, 2, 0, 0) }),
+    ])
+    assert.equal(state.cost?.['deepseek-official']['deepseek-v4-flash'].peak?.uncached, 10)
+    // Never written at all: no turn was ever named, so there is no per-turn ledger.
+    assert.equal(state.turnCost === undefined || Object.keys(state.turnCost).length === 0, true)
+  })
+
+  test('the per-turn ledger survives the schema gates', () => {
+    const drive = driveTimeline([
+      header(1, { model: 'deepseek-v4-flash', provider: 'deepseek-official' }),
+      assistantMessage(2, { turn: 3, usage: { inputTokens: 10 } }),
+    ])
+    drive.def.stateSchema.parse(assertPlainJson(drive.state))
+    drive.def.wire.viewSchema.parse(drive.def.wire.view(drive.state))
+  })
 })
 
 describe('session/end-seed', () => {

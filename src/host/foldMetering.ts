@@ -100,16 +100,37 @@ export function copyCostUsage(cost: SessionCostUsage): SessionCostUsage {
   return copy
 }
 
-/** 键取自请求信封的 (provider, model)；没有 model 的请求无从计价。 */
+/** 键取自请求信封的 (provider, model)；没有 model 的请求无从计价。
+ *
+ *  同一次定价同时写进两个账本：会话级 `cost` 与**该轮** `turnCost`。
+ *  两者共用 {@link addBilledUsage}，因此峰谷判定、桶的清洗与求和口径完全一致——
+ *  卡片与每轮读数不可能对同一次结算给出两个答案。
+ *  `turn` 缺席时不写每轮账本：宁可没有这一轮的读数，也不把它并进别人的轮次。 */
 export function accumulateCost(
   st: TimelineState,
   time: number,
   usage: BilledUsage,
   holidays: readonly string[] = DEFAULT_HOLIDAYS,
+  turn?: number,
 ): void {
   const model = st.model
   if (model === undefined) return
-  st.cost = addBilledUsage(st.cost, st.provider ?? '', model, time, usage, holidays)
+  const provider = st.provider ?? ''
+  st.cost = addBilledUsage(st.cost, provider, model, time, usage, holidays)
+  if (turn === undefined || !Number.isFinite(turn)) return
+  const key = String(turn)
+  const prev = st.turnCost?.[key]
+  // 请求次数单独记一份，且**与 token 无关**：按次计费的平台（积分制）一次请求就是
+  // 一次扣费，用它乘模型的积分费率即可，不需要任何 token 量。
+  const models = prev?.requests[provider] ?? {}
+  const count = models[model] ?? 0
+  st.turnCost = {
+    ...st.turnCost,
+    [key]: {
+      usage: addBilledUsage(prev?.usage, provider, model, time, usage, holidays),
+      requests: { ...prev?.requests, [provider]: { ...models, [model]: count + 1 } },
+    },
+  }
 }
 
 /** 只保留最忙的 16 个工具名。 */
