@@ -891,3 +891,95 @@ describe('ComposerDock — the line speaks for the platform in use', () => {
     } finally { resetPlatformCredits(); vi.unstubAllGlobals(); vi.useRealTimers() }
   })
 })
+
+describe('ComposerDock — the status bar wears the statistics icon, and degrades to it', () => {
+  const bj = (y: number, mo: number, d: number, h: number, mi = 0): number => Date.UTC(y, mo - 1, d, h - 8, mi)
+
+  function onePlatform(): ContextTimeline {
+    return timelineWith(
+      { workbuddy: { 'glm-5.3': { peak: { uncached: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } } } },
+      { calls: { workbuddy: { 'glm-5.3': 5 } }, creditRates: { workbuddy: { 'glm-5.3': 0.79 } } } as Partial<ContextTimeline>,
+    )
+  }
+
+  test('carries the same icon the statistics entry uses, so it reads as one feature', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(bj(2026, 10, 12, 10)))
+    const D = Dock(new TestClientCtx({ locale: 'zh' }), kitZh)
+    const m = await mount(h(D, { sessionId: 's1', ...seatOf(onePlatform()) }))
+    try {
+      await flush()
+      // The icon is the first child, ahead of the readings.
+      assert.ok(query(m.container, '.lc-dock > svg') !== null, 'the icon leads the row')
+      assert.match(text(query(m.container, '.lc-dock')), /workbuddy/, 'with the readings beside it')
+    } finally { await m.unmount(); vi.useRealTimers() }
+  })
+
+  test('an always-rendered probe measures the full reading, invisible to the reader', async () => {
+    // The probe must be laid out at the full reading even while the row shows only an
+    // icon, or the verdict would flip back the moment the icon appears.
+    const css = readFileSync(join(process.cwd(), 'src/client/styles/composerDock.css'), 'utf8')
+    assert.match(css, /\.lc-dock-probe\s*\{[^}]*visibility:\s*hidden/, 'the probe is invisible')
+    assert.match(css, /\.lc-dock-probe\s*\{[^}]*position:\s*absolute/, 'and takes no space in the row')
+    const src = readFileSync(join(process.cwd(), 'src/client/components/composerDock.tsx'), 'utf8')
+    assert.match(src, /className="lc-dock-probe"/, 'rendered unconditionally, not only in one branch')
+  })
+
+  test('the observer is attached on the frame the button mounts', async () => {
+    // 真实时序：timeline 在首帧之后才推入，按钮与探针因此都是第二帧才出现的。
+    // 测量 effect 必须在它们出现时自己重跑——依赖里若没有那个「已就绪」信号，
+    // 它会在首帧对着两个 null ref 返回，而依赖永不变化，观察者就永远挂不上，
+    // 判据会一直停在初始的「够宽」。这里用一个可观察的 ResizeObserver 钉住它。
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(bj(2026, 10, 12, 10)))
+    const observed: Element[] = []
+    vi.stubGlobal('ResizeObserver', class {
+      observe(el: Element): void { observed.push(el) }
+      disconnect(): void { /* nothing to release in the stub */ }
+    })
+    try {
+      const D = Dock(new TestClientCtx({ locale: 'zh' }), kitZh)
+      // 关键：首帧**没有** timeline，按钮和探针都还没出现。
+      let tl: ContextTimeline | undefined
+      const seat = {
+        sessionId: 's1',
+        useProjection: (k: string) => (k === 'contextTimeline' ? tl : undefined),
+        useChat: (sel: (s: unknown) => unknown) => sel({ legacy: { nodes: [] } }),
+      }
+      const m = await mount(h(D, seat as never))
+      await flush()
+      assert.equal(observed.length, 0, 'nothing to observe before the button exists')
+      tl = onePlatform()
+      await m.update(h(D, seat as never))
+      await flush()
+      assert.ok(observed.length > 0, 'the row is observed once the button mounts')
+      await m.unmount()
+    } finally { vi.unstubAllGlobals(); vi.useRealTimers() }
+  })
+
+  test('a row with no room left drops the readings and keeps the icon', async () => {
+    // The verdict compares what the row is GIVEN with what the full reading NEEDS, so a
+    // wide window with a narrow column still degrades.
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(bj(2026, 10, 12, 10)))
+    const D = Dock(new TestClientCtx({ locale: 'zh' }), kitZh)
+    const m = await mount(h(D, { sessionId: 's1', ...seatOf(onePlatform()) }))
+    try {
+      await flush()
+      const trigger = query(m.container, '.lc-dock')
+      const parent = trigger.parentElement!
+      // jsdom reports zero for every box: give the row less room than the probe needs.
+      Object.defineProperty(parent, 'clientWidth', { value: 40, configurable: true })
+      const probe = query(m.container, '.lc-dock-probe')
+      Object.defineProperty(probe, 'offsetWidth', { value: 300, configurable: true })
+      // jsdom 里没有 ResizeObserver，代码会退回 window 的 resize 监听。
+      await act(async () => { window.dispatchEvent(new Event('resize')) })
+      await flush()
+      assert.ok(query(m.container, '.lc-dock').querySelector('svg') !== null, 'the icon stays')
+      // 注意：`text(trigger)` 会带上那个**始终渲染**的量宽探针，所以这里必须看
+      // 可见的那部分——探针正是判据不自激的原因，它本来就该一直量着完整读数。
+      assert.equal(queryAll(m.container, '.lc-dock-platform').length, 0, 'the readings are gone')
+      assert.ok(query(m.container, '.lc-dock').classList.contains('lc-dock-narrow'), 'collapsed form')
+    } finally { await m.unmount(); vi.useRealTimers() }
+  })
+})

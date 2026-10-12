@@ -158,3 +158,20 @@ body[data-ds-dark-theme] .lc-dock-card {
 .lc-dock-platform-name { color: var(--dsw-alias-label-tertiary); }
 .lc-dock-spend { color: inherit; font-variant-numeric: tabular-nums; }
 .lc-dock-left { color: var(--dsw-alias-label-tertiary); font-variant-numeric: tabular-nums; }
+
+/* 量宽探针：始终按完整读数排版，好让「够不够宽」的判据量到真正需要多宽，
+   而不管这一行当前显示的是完整读数还是只有一个图标——判据靠它才不自激。
+   移出可视区且不参与排布，因此看不见也不撑宽这一行。 */
+.lc-dock-probe {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  visibility: hidden;
+  pointer-events: none;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+/* 探针是绝对定位的，需要这一行当它的包含块。 */
+.lc-dock { position: relative; }
+/* 只有图标时也要有可点的面积：图标本身 14px，给一点内边距让它好点。 */
+.lc-dock-narrow { padding: 1px 6px; }

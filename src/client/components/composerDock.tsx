@@ -27,6 +27,7 @@ import type { PlatformBalance, PlatformBalanceEntry } from '../../shared/types'
 import { fmtCredits } from '../turnSpend'
 import { platformSpendsOf, type PlatformSpend } from '../platformSpend'
 import { readPlatformCredits, type PlatformCreditsTable } from '../platformCredits'
+import { InsightPanelIcon } from '../icon'
 import { Donut } from './donut'
 import { makeStatsCost } from './statsCost'
 import { makeStatsPlatforms } from './statsPlatforms'
@@ -140,12 +141,47 @@ export function makeComposerDock(
     const reading = readDock(props, { currency }, book, failed)
     const period = usePricingPeriod()
     const [open, setOpen] = useState(false)
+    // 宽度不够时这一行只留图标（见下面那个测量 effect）。
+    const [narrow, setNarrow] = useState(false)
+    // 按钮是否已挂载。它决定下面那个测量 effect 何时能真正开始工作。
+    const ready = reading.timeline !== null
+    /** 完整读数的量宽探针：始终按完整排版，因此与当前显示哪种形态无关，判据不自激。 */
+    const probeRef = useRef<HTMLSpanElement | null>(null)
     const [anchor, setAnchor] = useState<Anchor | null>(null)
     const [balance, setBalance] = useState<PlatformBalance | null>(null)
     // 平台的剩余积分（积分制平台）；与余额同一套「先画记住的数字、再后台校正」的语义。
     const [credits, setCredits] = useState<PlatformCreditsTable | null>(() => readPlatformCredits((v: PlatformCreditsTable) => { setCredits(v) }))
     const triggerRef = useRef<HTMLButtonElement | null>(null)
     const cardRef = useRef<HTMLDivElement | null>(null)
+    // 宽度够不够：比的是「留给本行的可用宽度」与「完整读数需要的宽度」，
+    // 而不是拿一个写死的断点比整行总宽——官方那一行里还有用量读数与上下文环，
+    // 它们先占掉一截，所以总宽够、留给本行的却可能不够。
+    // 探针始终按完整排版量宽，因此「已切成图标」时判据答案不变，不会自激。
+    useLayoutEffect(() => {
+      const trigger = triggerRef.current
+      const probe = probeRef.current
+      // 按钮只在 timeline 到位后才渲染（见下面那个提前返回），所以首帧这两个 ref 都还是
+      // null。effect 必须在它们出现时**重跑**一次——依赖里放 `ready` 就是为此；
+      // 否则依赖永不变化，观察者永远挂不上，判据会一直停在初始的「够宽」。
+      if (trigger === null || probe === null) return
+      const apply = (): void => {
+        const parent = trigger.parentElement
+        const row = parent?.clientWidth ?? 0
+        const need = probe.offsetWidth
+        // 量不到时按「够宽」处理：宁可显示完整读数，也不要在异常环境里退化成图标。
+        setNarrow(row > 0 && need > 0 && need > row)
+      }
+      apply()
+      const target = trigger.parentElement
+      if (target === null || typeof ResizeObserver === 'undefined') {
+        window.addEventListener('resize', apply)
+        return () => { window.removeEventListener('resize', apply) }
+      }
+      const observer = new ResizeObserver(apply)
+      observer.observe(target)
+      return () => { observer.disconnect() }
+    }, [ready])
+
     // 收起那一行自己也要显示余额，所以这份读取不能省：先画记住的数字，
     // 随后在 dock 保持挂载期间由轮询让它保持诚实，切换会话时清理计时器。
     // （展开卡里的余额行由费用卡自己承担，见下面的 StatsCost。）
@@ -276,6 +312,14 @@ export function makeComposerDock(
     const platforms = active === undefined
       ? allPlatforms
       : allPlatforms.filter(row => row.provider === active.provider)
+    // 完整读数（用于量宽）：与上面渲染的那一串同源，因此量出来的就是要显示的东西。
+    const probeText = platforms.map(row => (
+      platformLabel(row, t)
+      + (row.unit === 'credits'
+        ? t('dock.creditsSpent', { n: fmtCredits(row.value) })
+        : t('dock.moneySpent', { n: formatCost(toCurrency(row.value, currency), currency) }))
+      + (balanceCellFor(row, credits, entry, symbolOf, t) !== null ? ' ' + t('dock.creditsLeft', { n: '' }) : '')
+    )).join(' · ') + ' · ' + periodLabel
     const periodTip = [
       t('dock.peakWindows', { windows }),
       dayOff === 'weekend' ? t('dock.weekendOff') : null,
@@ -288,7 +332,7 @@ export function makeComposerDock(
         <button
           type="button"
           ref={triggerRef}
-          className="lc-dock"
+          className={narrow ? 'lc-dock lc-dock-narrow' : 'lc-dock'}
           data-peak={period.peak ? '1' : '0'}
           aria-expanded={open}
           title={periodTip}
@@ -299,24 +343,36 @@ export function makeComposerDock(
           {platforms.length === 0
             ? <span className="lc-dock-cost">{costTextFallback}</span>
             : null}
-          {platforms.map((row, i) => (
-            <span key={row.provider} className="lc-dock-platform" data-unit={row.unit}>
-              {i > 0 ? <span className="lc-dock-sep">·</span> : null}
-              <span className="lc-dock-platform-name">{platformLabel(row, t)}</span>
-              <span className="lc-dock-spend">
-                {row.unit === 'credits'
-                  ? t('dock.creditsSpent', { n: fmtCredits(row.value) })
-                  : t('dock.moneySpent', { n: formatCost(toCurrency(row.value, currency), currency) })}
-              </span>
-              {balanceCellFor(row, credits, entry, symbolOf, t) !== null
-                ? balanceCellFor(row, credits, entry, symbolOf, t)
-                : null}
-            </span>
-          ))}
-          {/* 时段徽标：峰/谷是这一行唯一保留语义色的地方，它回答「此刻贵不贵」，
-              与旁边的消费读数互补。倒计时仍在悬停提示里，不占这一行。 */}
-          <span className="lc-dock-sep">·</span>
-          <span className="lc-dock-period">{periodLabel}</span>
+          {/* 图标：与左侧栏「统计」入口同一个（InsightPanelIcon），因此读者认得它属于哪里。
+              宽度不够时这一行只留它，完整读数仍在悬停提示里。 */}
+          <InsightPanelIcon size={14} />
+          {narrow
+            ? null
+            : (
+              <>
+                {platforms.map((row, i) => (
+                  <span key={row.provider} className="lc-dock-platform" data-unit={row.unit}>
+                    {i > 0 ? <span className="lc-dock-sep">·</span> : null}
+                    <span className="lc-dock-platform-name">{platformLabel(row, t)}</span>
+                    <span className="lc-dock-spend">
+                      {row.unit === 'credits'
+                        ? t('dock.creditsSpent', { n: fmtCredits(row.value) })
+                        : t('dock.moneySpent', { n: formatCost(toCurrency(row.value, currency), currency) })}
+                    </span>
+                    {balanceCellFor(row, credits, entry, symbolOf, t) !== null
+                      ? balanceCellFor(row, credits, entry, symbolOf, t)
+                      : null}
+                  </span>
+                ))}
+                {/* 时段徽标：峰/谷是这一行唯一保留语义色的地方，它回答「此刻贵不贵」，
+                    与旁边的消费读数互补。倒计时仍在悬停提示里，不占这一行。 */}
+                <span className="lc-dock-sep">·</span>
+                <span className="lc-dock-period">{periodLabel}</span>
+                  </>
+            )}
+          {/* 量宽探针：**始终**按完整读数排版，因此它的宽度与当前显示图标还是全文无关——
+              判据靠它才不自激。CSS 把它移出可视区，不占排布。 */}
+          <span ref={probeRef} className="lc-dock-probe" aria-hidden="true">{probeText}</span>
         </button>
         {/* 只在 `open` 时挂载：`place()` 需要在同一个布局趟里量到真实高度，
             所以卡片不能等 `anchor` 就绪才出现（那时 ref 还是 null，只能退回兜底高度，
