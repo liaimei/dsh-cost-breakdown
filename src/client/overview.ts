@@ -697,6 +697,11 @@ export function kpisOf(
   book: ModelBook | null | undefined,
   currency: CostCurrency,
 ): OverviewKpis {
+  // 积分费率取自各行的 timeline——与单会话那张卡用的是同一份数据。
+  // **必须**传给 `billedTotalsOf`：没有它，积分平台判定不出来（`platformSpendsOf`
+  // 靠这张表认出哪些 provider 是按次计积分），于是它们会被套上官方人民币费率，
+  // 页面上就出现了「workbuddy ¥51.04」这种把积分当钱算的读数。
+  const credits = mergeCreditRates(rows)
   // 计费体量与花费与卡片、图表共用同一个家族作用域。
   const usage = mergeCostUsage(...rows.map(row => row.familyCost))
   const totals = usageTotalsOf(usage)
@@ -732,7 +737,7 @@ export function kpisOf(
     calls,
     wallMs,
     tokenParts: tokenPartsOf(rows),
-    billed: billedTotalsOf(rows, book),
+    billed: billedTotalsOf(rows, book, credits),
     timing: timingSumOf(rows),
   }
 }
@@ -832,4 +837,30 @@ export function relativeTime(t: (key: string, params?: Record<string, string | n
   const hours = Math.floor(minutes / 60)
   if (hours < 24) return t('ov.time.h', { n: hours })
   return t('ov.time.d', { n: Math.floor(hours / 24) })
+}
+
+/** 范围内各会话来用到的积分费率表，按 provider → model 合并。
+ *
+ *  同一平台在多个会话里是同一份费率，因此后到的不覆盖先到的（值相同时无所谓，
+ *  不同时保留先出现的那个，避免跨会话把数字改掉）。取不到就整体是 null，
+ *  调用方据此把积分平台当作「认不出来」——那正是修复前的错误来源，
+ *  因此宁可返回 null 也不要凭空编一份费率。 */
+export function mergeCreditRates(
+  rows: readonly OverviewRow[],
+): Record<string, Record<string, number>> | null {
+  const out: Record<string, Record<string, number>> = {}
+  let any = false
+  for (const row of rows) {
+    const table = row.timeline?.creditRates
+    if (table === null || table === undefined) continue
+    for (const provider of Object.keys(table)) {
+      const models = table[provider]
+      if (models === null || models === undefined) continue
+      const target = out[provider] ?? (out[provider] = {})
+      for (const model of Object.keys(models)) {
+        if (target[model] === undefined) { target[model] = models[model]; any = true }
+      }
+    }
+  }
+  return any ? out : null
 }

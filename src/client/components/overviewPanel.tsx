@@ -15,7 +15,7 @@
  */
 
 import { useEffect, useMemo, useState, type ReactElement } from 'react'
-import { estimateSessionCost, formatCost, type CostCurrency, type ModelBook } from '../cost'
+import { estimateSessionCost, formatCost, moneyOnlyUsage, type CostCurrency, type ModelBook } from '../cost'
 import { fmt } from '../format'
 import { useModelPrices } from '../modelPrices'
 import {
@@ -405,6 +405,12 @@ export function makeOverviewPanel(ctx: ClientCtx, kit: ViewKit): (props: Overvie
  *  而事实是这个数字无法计价。 */
 function cardCostOf(row: OverviewRow, book: ModelBook | null, currency: CostCurrency): string {
   if (row.familyCost === null) return '—'
-  const cost = estimateSessionCost(row.familyCost, book, currency)
+  // 这张标签只报**按人民币可计价**的那部分。
+  // 从前它把整份账本交给 `estimateSessionCost`，于是积分平台的用量被套上官方人民币
+  // 费率，卡片上就出现「仅用 workbuddy 的会话 ¥2.00」这种把积分当钱算的读数。
+  // 积分消费由同一张卡片下面的平台行呈现（那是它的单位）。
+  const money = moneyOnlyUsage(row.familyCost, row.timeline?.creditRates ?? null)
+  if (money === null) return '—'
+  const cost = estimateSessionCost(money, book, currency)
   return cost === null ? '—' : formatCost(cost, currency)
 }

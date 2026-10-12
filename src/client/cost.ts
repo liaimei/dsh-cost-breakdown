@@ -445,3 +445,30 @@ export function formatCost(amount: number, currency: CostCurrency): string {
 export function formatPriceRate(amount: number, currency: CostCurrency): string {
   return (currency === 'cny' ? '¥' : '$') + amount.toFixed(2)
 }
+
+/** 账本里**只按人民币计价**的那部分：剔掉积分平台的 provider。
+ *
+ *  积分平台的用量不能按 token 换成人民币——它的账单单位是积分。把它们留在同一份
+ *  用量里交给 `estimateSessionCost`，只要模型恰好收录在官方价目表里，就会得到一个
+ *  看起来合理却错的金额（实测：workbuddy 的 1M peak token → ¥2.00）。
+ *  一个 provider 只要在积分表里有任意一个模型，整条就按积分处理：同一个平台的套餐
+ *  是统一的，个别模型缺费率不该让同一个平台的另一半数字变成人民币。
+ *
+ *  没有任何可计价的部分时返回 null（调用方据此显示短横线，而不是 `0`）。 */
+export function moneyOnlyUsage(
+  usage: SessionCostUsage | null | undefined,
+  credits: Record<string, Record<string, number>> | null | undefined,
+): SessionCostUsage | null {
+  if (usage === null || usage === undefined) return null
+  const out: SessionCostUsage = {}
+  let any = false
+  for (const provider of Object.keys(usage)) {
+    const models = usage[provider]
+    if (models === null || models === undefined) continue
+    const isCredit = credits !== null && credits !== undefined && credits[provider] !== undefined
+    if (isCredit) continue
+    out[provider] = models
+    any = true
+  }
+  return any ? out : null
+}

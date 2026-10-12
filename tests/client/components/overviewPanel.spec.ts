@@ -451,7 +451,7 @@ describe('OverviewPanel', () => {
         <button role="switch"></button>
         <button>Context</button>
       </div>`
-    for (const b of [...chrome.querySelectorAll('button')]) {
+    for (const b of chrome.querySelectorAll('button')) {
       b.addEventListener('click', () => { clicks.push(b.getAttribute('aria-label') ?? (b.textContent ?? '')) })
     }
     document.body.appendChild(chrome)

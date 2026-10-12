@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
-import { estimateSessionCost, estimateSessionCostByBucket, estimateSessionCostByPeriod, billedTokensOf, formatCost, formatPriceRate, mergeCostUsage, priceFaceOf, priceIndexOf, priceOf, toCurrency } from '../../src/client/cost'
+import { estimateSessionCost, estimateSessionCostByBucket, estimateSessionCostByPeriod, billedTokensOf, formatCost, formatPriceRate, mergeCostUsage, moneyOnlyUsage, priceFaceOf, priceIndexOf, priceOf, toCurrency } from '../../src/client/cost'
 import type { ModelBook, ModelPrices } from '../../src/client/cost'
 import type { CostBucketTotals, SessionCostUsage } from '../../src/shared/types'
 
@@ -536,5 +536,45 @@ describe('estimateSessionCostByBucket', () => {
       assert.equal(split.peak, 0)
       assert.equal(split.off, 0)
     }
+  })
+})
+
+describe('moneyOnlyUsage — credits are not money', () => {
+  const CREDIT = { workbuddy: { 'deepseek-v4.1-flash': 0.11 }, 'workbuddy-ai': { 'deepseek-v4.1-flash': 0 } }
+  const LEDGER = {
+    workbuddy: { 'deepseek-v4.1-flash': { peak: { uncached: M, cacheRead: 0, cacheWrite: 0, output: 0 } } },
+    'deepseek-account': { 'deepseek-v4-flash': { off: { uncached: M, cacheRead: 0, cacheWrite: 0, output: 0 } } },
+  }
+
+  test('a credits-only ledger has nothing to price as money', () => {
+    // The regression this guards: the overview priced the whole family ledger, so a
+    // workbuddy-only session showed a yuan figure (1M peak tokens -> ¥2.00) derived
+    // from the official table, because that model id is listed there.
+    assert.equal(moneyOnlyUsage({ workbuddy: LEDGER.workbuddy }, CREDIT), null)
+  })
+
+  test('a mixed ledger keeps only the currency platform', () => {
+    const money = moneyOnlyUsage(LEDGER, CREDIT)
+    assert.deepEqual(Object.keys(money ?? {}), ['deepseek-account'])
+  })
+
+  test('no credit table at all leaves the ledger alone', () => {
+    // Without the credit rates we cannot tell a credit platform apart, and guessing
+    // would be worse than pricing what the table covers.
+    const money = moneyOnlyUsage(LEDGER, null)
+    assert.deepEqual(Object.keys(money ?? {}).sort(), ['deepseek-account', 'workbuddy'])
+  })
+
+  test('a provider with one credit model is entirely credits', () => {
+    // A platform's plan is uniform: a missing rate for one model must not turn the
+    // other half of that platform's numbers into currency.
+    const partial = { workbuddy: { 'glm-5.3': 0.5 } }
+    const usage = { workbuddy: { 'glm-5.3': LEDGER.workbuddy['deepseek-v4.1-flash'], other: LEDGER.workbuddy['deepseek-v4.1-flash'] } }
+    assert.equal(moneyOnlyUsage(usage, partial), null)
+  })
+
+  test('an empty ledger stays null rather than becoming an empty object', () => {
+    assert.equal(moneyOnlyUsage({}, CREDIT), null)
+    assert.equal(moneyOnlyUsage(null, CREDIT), null)
   })
 })
