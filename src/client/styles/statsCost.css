@@ -1,0 +1,26 @@
+/* 费用卡片：环形图 + 分桶图例，下面是峰谷两段和余额行。
+   与 Token / 耗时卡共用 .lc-donut-row / .lc-sl 的排版，这里只补这张卡
+   独有的三条横排：峰谷拆分、本会话行、余额行。 */
+
+/* 峰谷两段压缩成一行，与费用读数卡里的同名字段落一个读法。 */
+.lc-sc-periods { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--dsw-alias-border-l1); font-size: 12px; color: var(--dsw-alias-label-secondary); }
+.lc-sc-period { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
+.lc-sc-period i { flex: none; width: 8px; height: 8px; border-radius: 2px; }
+.lc-sc-period-label { white-space: nowrap; }
+.lc-sc-period b { color: var(--dsw-alias-label-primary); font-variant-numeric: tabular-nums; }
+.lc-sc-period em { font-style: normal; color: var(--dsw-alias-label-tertiary); font-variant-numeric: tabular-nums; }
+/* 没有花钱的那一段整体变暗：数字仍是真实的 0，眼睛可以先跳过它。 */
+.lc-sc-period-dim { opacity: 0.55; }
+
+/* 本会话一行：与余额行共用「标签靠左、数字靠右」的写法。 */
+.lc-sc-rows { margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--dsw-alias-border-l1); }
+.lc-sc-row { display: flex; align-items: baseline; gap: 8px; font-size: 12px; color: var(--dsw-alias-label-secondary); }
+.lc-sc-row-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lc-sc-row b { margin-left: auto; color: var(--dsw-alias-label-primary); font-variant-numeric: tabular-nums; }
+.lc-sc-row em { font-style: normal; color: var(--dsw-alias-label-tertiary); font-variant-numeric: tabular-nums; }
+
+/* 余额行是链接：给出平台控制台入口，悬停时下划线指向可点。 */
+.lc-sc-balance { display: flex; align-items: baseline; gap: 8px; margin-top: 6px; font-size: 12px; color: inherit; text-decoration: none; }
+.lc-sc-balance:hover .lc-sc-balance-label { text-decoration: underline; }
+.lc-sc-balance-label { color: var(--dsw-alias-label-secondary); white-space: nowrap; }
+.lc-sc-balance b { margin-left: auto; color: var(--dsw-alias-label-primary); font-variant-numeric: tabular-nums; }

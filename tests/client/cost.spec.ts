@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
-import { estimateSessionCost, billedTokensOf, formatCost, formatPriceRate, mergeCostUsage, priceFaceOf, priceIndexOf, priceOf, toCurrency } from '../../src/client/cost'
+import { estimateSessionCost, estimateSessionCostByBucket, estimateSessionCostByPeriod, billedTokensOf, formatCost, formatPriceRate, mergeCostUsage, priceFaceOf, priceIndexOf, priceOf, toCurrency } from '../../src/client/cost'
 import type { ModelBook, ModelPrices } from '../../src/client/cost'
 import type { CostBucketTotals, SessionCostUsage } from '../../src/shared/types'
 
@@ -293,8 +293,10 @@ describe('estimateSessionCost', () => {  test('null usage or null book prices to
 
   test('a provider id the registry does not know still prices by model id', () => {
     // The issue #91 shape: a subscription/proxy route (`claude`, a gateway)
-    // whose models live under the vendor's registry branch.
-    close(estimateSessionCost({ unmapped: { 'deepseek-v4-flash': { peak: bucket(0, M, 0, 0) } } }, BOOK_B, 'usd'), 0.15)
+    // whose models live under the vendor's registry branch. Here the model is an
+    // official one, so the official table prices it AND doubles its peak bucket.
+    close(estimateSessionCost({ unmapped: { 'kimi-k2.7-code': { peak: bucket(0, M, 0, 0) } } }, BOOK_B, 'usd'), 0.95)
+    close(estimateSessionCost({ unmapped: { 'deepseek-v4-flash': { peak: bucket(0, M, 0, 0) } } }, BOOK_B, 'usd'), 0.3)
   })
 
   test('prices every period bucket at its own rate (hit / miss / write / out)', () => {
@@ -324,6 +326,21 @@ describe('estimateSessionCost', () => {  test('null usage or null book prices to
     // The account route shares DeepSeek's period list, so its peak buckets
     // double too — the fold splits them only since providers.ts maps it.
     close(estimateSessionCost({ 'deepseek-account': { 'deepseek-v4-flash': split } }, BOOK_B, 'usd'), 0.3 + 0.15)
+  })
+
+  test('an official model doubles under a third-party route, keyed by model not provider', () => {
+    // The workbuddy shape: a proxy route the registry does not own, carrying an
+    // official DeepSeek model id. The official table prices it either way, so its
+    // peak bucket must double there too — a provider-keyed rule would leave the
+    // peak window charged at the off-peak rate.
+    const split = { peak: bucket(0, M, 0, 0), off: bucket(0, M, 0, 0) }
+    close(estimateSessionCost({ workbuddy: { 'deepseek-v4.1-flash': split } }, BOOK_B, 'usd'), 0.3 + 0.15)
+    // A model the official table does not carry keeps the flat peak bucket.
+    close(
+      estimateSessionCost({ workbuddy: { 'kimi-k2.7-code': { peak: bucket(0, M, 0, 0) } } }, BOOK_B, 'usd'),
+      0.95,
+      'a proxy route carrying a non-official model still bills its peak bucket flat',
+    )
   })
 
   test('a missing model is skipped while priced ones still sum', () => {
@@ -452,5 +469,72 @@ describe('formatPriceRate', () => {
     assert.equal(formatPriceRate(4.5, 'cny'), '¥4.50')
     assert.equal(formatPriceRate(0.007, 'usd'), '$0.01')
     assert.equal(formatPriceRate(0.1, 'usd'), '$0.10')
+  })
+})
+
+describe('estimateSessionCostByBucket', () => {
+  test('the four buckets sum to the total, and to the period split, in one pass', () => {
+    // A mixed ledger: an official model across both windows, plus a book-priced one.
+    const usage: SessionCostUsage = {
+      'deepseek-official': {
+        'deepseek-v4-flash': {
+          peak: bucket(M, M, 0, M),
+          off: bucket(0, M, M, 0),
+        },
+      },
+      'kimi-coding': { 'kimi-k2.7-code': { peak: bucket(0, M, 0, 0) } },
+    }
+    const split = estimateSessionCostByBucket(usage, BOOK_B)
+    const byBucket = split.cacheRead + split.uncached + split.cacheWrite + split.output
+    assert.ok(Math.abs(byBucket - split.total) < 1e-12, 'the bucket split adds up to the total')
+    assert.ok(Math.abs(split.peak + split.off - split.total) < 1e-12, 'so does the period split')
+    // The two splits are views of one ledger: the period figures come from the
+    // same accumulation the bucket figures do.
+    const byPeriod = estimateSessionCostByPeriod(usage, BOOK_B)
+    assert.equal(split.peak, byPeriod.peak)
+    assert.equal(split.off, byPeriod.off)
+    assert.equal(split.any, byPeriod.any)
+  })
+
+  test('each bucket keeps its own rate rather than a blended one', () => {
+    // Official flash off-peak: hit 0.003, miss 0.15, out 0.6 per 1M.
+    const usage: SessionCostUsage = {
+      'deepseek-official': { 'deepseek-v4-flash': { off: bucket(M, M, M, M) } },
+    }
+    const split = estimateSessionCostByBucket(usage, BOOK_B)
+    close(split.cacheRead, 0.003)
+    close(split.uncached, 0.15)
+    // Cache writes are not billed separately: they price at the cache-miss rate.
+    close(split.cacheWrite, 0.15)
+    close(split.output, 0.6)
+    close(split.total, 0.903)
+  })
+
+  test('the peak bucket doubles every bucket inside it, not just the total', () => {
+    const off = bucket(M, M, M, M)
+    // Official flash: the peak window doubles all four buckets, so the ring's
+    // slices stay proportional to the off-peak ones.
+    const officialOff = estimateSessionCostByBucket({ 'deepseek-official': { 'deepseek-v4-flash': { off } } }, BOOK_B)
+    const officialPeak = estimateSessionCostByBucket({ 'deepseek-official': { 'deepseek-v4-flash': { peak: off } } }, BOOK_B)
+    close(officialPeak.cacheRead, officialOff.cacheRead * 2)
+    close(officialPeak.uncached, officialOff.uncached * 2)
+    close(officialPeak.cacheWrite, officialOff.cacheWrite * 2)
+    close(officialPeak.output, officialOff.output * 2)
+    close(officialPeak.total, officialOff.total * 2)
+    // A flat-rate provider never doubles: its peak bucket is ordinary list price.
+    const kimiOff = estimateSessionCostByBucket({ 'kimi-coding': { 'kimi-k2.7-code': { off: bucket(0, M, 0, 0) } } }, BOOK_B)
+    const kimiPeak = estimateSessionCostByBucket({ 'kimi-coding': { 'kimi-k2.7-code': { peak: bucket(0, M, 0, 0) } } }, BOOK_B)
+    close(kimiPeak.total, 0.95)
+    close(kimiOff.total, 0.95, 'a flat-rate provider bills both windows at book price')
+  })
+
+  test('no usage at all reports nothing rather than zero', () => {
+    for (const usage of [null, undefined, {} as SessionCostUsage]) {
+      const split = estimateSessionCostByBucket(usage, BOOK_B)
+      assert.equal(split.any, false)
+      assert.equal(split.total, 0)
+      assert.equal(split.peak, 0)
+      assert.equal(split.off, 0)
+    }
   })
 })

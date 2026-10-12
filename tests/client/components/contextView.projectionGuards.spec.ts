@@ -88,7 +88,7 @@ describe('ContextView — projection guards', () => {
 })
 
 describe('ContextView — the sidebar host', () => {
-  test('the panel drops the context-stats and plugin-info head cards, keeping the two donut cards', async () => {
+  test('the panel drops the context-stats and plugin-info head cards, keeping the three donut cards', async () => {
     const View = makeView(new TestClientCtx())
     const projections = projectionsFor(richTimeline())
 
@@ -100,8 +100,13 @@ describe('ContextView — the sidebar host', () => {
     const panel = await mount(h(View, { host: 'sidebar', useProjection: projections }))
     assert.equal(queryAll(panel.container, '.lc-stats').length, 0, 'the panel drops the context stats')
     assert.equal(queryAll(panel.container, '.lc-pi-grid').length, 0, 'the panel drops the plugin info')
-    assert.equal(queryAll(panel.container, '.lc-head > .lc-card').length, 2, 'the head row keeps its two donut cards')
-    assert.equal(queryAll(panel.container, '.lc-head > .lc-col-donut').length, 2, 'token usage and timing')
+    assert.equal(queryAll(panel.container, '.lc-head > .lc-card').length, 3, 'the head row keeps its three donut cards')
+    assert.equal(queryAll(panel.container, '.lc-head > .lc-col-donut').length, 3, 'token usage, cost and timing')
+    // The cost card sits between the token and timing cards, as the reading order intends.
+    assert.deepEqual(
+      queryAll(panel.container, '.lc-head > .lc-col-donut .lc-card-title-text').map(el => el.textContent),
+      [DICT_EN['tokens.title'], DICT_EN['costStat.title'], DICT_EN['timing.title']],
+    )
     await panel.unmount()
   })
 

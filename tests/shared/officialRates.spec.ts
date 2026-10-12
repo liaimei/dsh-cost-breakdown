@@ -5,14 +5,18 @@
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
 import {
+  allDayOffReason,
   beijingParts,
+  countdownParts,
   DEFAULT_HOLIDAYS,
   holidaysFrom,
   isPeakBeijing,
   matchOfficialModel,
+  msUntilFlip,
   officialRateOf,
   OFFICIAL_MODELS,
   PEAK_WINDOWS,
+  peakWindowsText,
   periodAt,
 } from '../../src/shared/officialRates'
 
@@ -197,5 +201,79 @@ describe('holidaysFrom (the config narrowing)', () => {
     for (const bad of [undefined, null, '2026-01-01', 7, {}, [], ['bad'], [7, null], ['']]) {
       assert.equal(holidaysFrom(bad), undefined, JSON.stringify(bad))
     }
+  })
+})
+
+describe('peakWindowsText (the windows as the UI spells them)', () => {
+  test('renders every window from the table, zero-padded', () => {
+    // Derived from PEAK_WINDOWS, so changing the table changes the label — the two
+    // can never disagree about when peak actually is.
+    assert.equal(peakWindowsText(', '), '09:00–12:00, 14:00–18:00')
+    assert.equal(peakWindowsText('、'), '09:00–12:00、14:00–18:00')
+    assert.equal(PEAK_WINDOWS.length, 2)
+  })
+
+  test('the separator is the caller’s, so no locale punctuation is baked in', () => {
+    assert.equal(peakWindowsText(' / '), '09:00–12:00 / 14:00–18:00')
+  })
+})
+
+describe('msUntilFlip (the countdown source)', () => {
+  test('counts down to the end of the current peak window', () => {
+    // Monday 10:00 Beijing is peak; the window ends at 12:00, so two hours remain.
+    assert.equal(msUntilFlip(beijing(2026, 10, 12, 10)), 2 * 3600 * 1000)
+  })
+
+  test('counts down to the start of the next peak window', () => {
+    // Monday 12:30 sits in the 12:00-14:00 gap, so the next boundary is 14:00.
+    assert.equal(msUntilFlip(beijing(2026, 10, 12, 12, 30)), 90 * 60 * 1000)
+  })
+
+  test('never reports a negative remainder', () => {
+    // Exactly on a boundary the remainder is zero, not a negative leftover: 12:00 is
+    // already off-peak, so the next boundary is 14:00, two hours away.
+    const onBoundary = beijing(2026, 10, 12, 12)
+    assert.equal(isPeakBeijing(onBoundary), false, 'the boundary itself belongs to the new period')
+    assert.equal(msUntilFlip(onBoundary), 2 * 3600 * 1000)
+    assert.ok(msUntilFlip(Number.NaN) === null || msUntilFlip(Number.NaN)! >= 0)
+  })
+})
+
+describe('allDayOffReason (why a day has no peak window)', () => {
+  test('names the weekend', () => {
+    // 2026-10-11 is a Sunday.
+    assert.equal(allDayOffReason(beijing(2026, 10, 11, 10)), 'weekend')
+  })
+
+  test('names a listed holiday', () => {
+    assert.equal(allDayOffReason(beijing(2026, 10, 2, 10)), 'holiday')
+  })
+
+  test('is null on a plain weekday, so the countdown is shown instead', () => {
+    assert.equal(allDayOffReason(beijing(2026, 10, 12, 10)), null)
+    // ...and it agrees with isPeakBeijing about which days are off.
+    for (const [y, m, d] of [[2026, 10, 11], [2026, 10, 12], [2026, 10, 2]] as const) {
+      const t = beijing(y, m, d, 10)
+      assert.equal(allDayOffReason(t) !== null, !isPeakBeijing(t), `${y}-${m}-${d}`)
+    }
+  })
+})
+
+describe('countdownParts (arithmetic only, no locale words)', () => {
+  test('splits hours, minutes and seconds', () => {
+    assert.deepEqual(countdownParts(2 * 3600 * 1000 + 30 * 60 * 1000 + 5000), { hours: 2, minutes: 30, seconds: 5 })
+    assert.deepEqual(countdownParts(90 * 1000), { hours: 0, minutes: 1, seconds: 30 })
+    assert.deepEqual(countdownParts(7000), { hours: 0, minutes: 0, seconds: 7 })
+  })
+
+  test('floors rather than rounding, so the reading never overstates the wait', () => {
+    assert.deepEqual(countdownParts(1999), { hours: 0, minutes: 0, seconds: 1 })
+  })
+
+  test('clamps negatives to zero and passes null through', () => {
+    assert.deepEqual(countdownParts(-5000), { hours: 0, minutes: 0, seconds: 0 })
+    assert.equal(countdownParts(null), null)
+    assert.equal(countdownParts(Number.NaN), null)
+    assert.equal(countdownParts(Number.POSITIVE_INFINITY), null)
   })
 })

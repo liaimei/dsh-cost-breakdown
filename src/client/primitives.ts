@@ -43,3 +43,6 @@ export const IconChevronDown = resolveIcon('IconChevronDownOutlineMedium')
 export const IconChevronUp = resolveIcon('IconChevronUpOutlineMedium')
 /** 查找栏的查询入口。 */
 export const IconSearch = resolveIcon('IconSearchOutlineRegular')
+/** 窄状态栏里替代峰谷倒计时长文案的时钟标记。
+ *  用官方 `IconClockOutlineRegular`，与状态栏其余图标同一套字形。 */
+export const IconClock = resolveIcon('IconClockOutlineRegular')

@@ -2,8 +2,9 @@
  * 输入框下方那行常驻开销读数——composer dock。
  *
  * 收起时它只有一行：本会话的开销、DeepSeek 余额，以及
- * 当前定价时段。点击会展开一张明细卡片，里面装着 token 拆分、
- * 按时段的成本拆分，以及官方费率表。
+ * 当前定价时段。点击会展开一张明细卡片，里面装着**汇总统计页的两张卡**——
+ * 「Token 统计」与「费用统计」——外加官方费率表：同一份数据、同一种排版，
+ * 因此输入框下方与统计页读到的永远是一回事。
  *
  * 这张卡片是 `position: fixed` 的，从触发器量出来，因而得以避开
  * composer 自身的溢出裁剪；上方没有空间时它翻转到触发器下方，
@@ -12,13 +13,18 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactElement } from 'react'
 import { balanceEntryOf, readPlatformBalance } from '../balance'
-import { estimateSessionCostByPeriod, formatCost, formatPriceRate, fromCny, toCurrency, type CostCurrency } from '../cost'
+import { formatCost, formatPriceRate, fromCny, type CostCurrency } from '../cost'
 import { readDock, useDockBook, usePricingPeriod } from '../dockReading'
+import { fmtCountdown, fmtCountdownCompact } from '../format'
+import { contextBreakdownOf, projectionOf, tokenUsageOf } from '../services'
 import type { ClientCtx, SessionStandardProps } from '../services'
-import { fmt, fmtShare } from '../format'
 import type { ViewKit } from '../viewkit'
-import { OFFICIAL_MODELS } from '../../shared/officialRates'
+import { allDayOffReason, OFFICIAL_MODELS, peakWindowsText } from '../../shared/officialRates'
+import { IconClock } from '../primitives'
 import type { PlatformBalance } from '../../shared/types'
+import { Donut } from './donut'
+import { makeStatsCost } from './statsCost'
+import { makeStatsTokens } from './statsTokens'
 
 /** 平台所支持币种的符号前缀；其余币种直接显示代码。 */
 function symbolOf(currency: string): string {
@@ -27,54 +33,137 @@ function symbolOf(currency: string): string {
   return currency + ' '
 }
 
-/** 余额数字背后那个旧版平台控制台页面。 */
-const USAGE_URL = 'https://platform.deepseek.com/usage'
-
-/** 余额自己的轮询节奏：这行读数长期存活，而数字随着每一笔
- *  计费请求变化，只有周期性读取才能让这行保持诚实。 */
+/** 余额自己的轮询节奏：收起那一行长期存活，而余额随着每一笔计费请求变化，
+ *  只有周期性读取才能让这行保持诚实。 */
 const BALANCE_POLL_MS = 60_000
 
 /** 固定定位卡片的落点，以视口像素计；`maxHeight` 是翻转方向
  *  剩下的空间，好让卡片滚动而不是跑出屏幕。 */
 interface Anchor { left: number; top: number; width: number; maxHeight: number }
 
-/** 成本块绘制的定价时段带，按顺序排列。 */
-const PERIOD_BANDS = [
-  { key: 'peak', labelKey: 'dock.peak' },
-  { key: 'off', labelKey: 'dock.off' },
-] as const
+/** 卡片宽度（px）：对齐 harness 官方面板的上限（`stat-dialog.module.css` 的
+ *  `max-width: min(440px, 100vw - 24px)`），两张复用卡的环形图与图例因此能并排
+ *  放下且不与官方弹窗抢宽度。实际宽度再受触发条与视口约束（见 `place()`）。 */
+const CARD_WIDTH = 440
+
+/** 视口两侧各留的边距（px）：卡片是 `position: fixed`，留出它才不会贴边。
+ *  与官方面板的 `100vw - 24px` 同源（每侧 12px）。 */
+const VIEWPORT_GUTTER = 12
+
+/** 极窄视口下的兜底宽度（px），避免在异常环境下算出 0 或负数。 */
+const CARD_MIN_VIEWPORT_WIDTH = 200
+
+/** 这一行放不放得下**完整读数**。
+ *
+ *  判据是「留给本行的空间」与「完整内容需要的宽度」之比，而不是拿一个写死的
+ *  断点去比这一行的总宽：官方那一行里还有用量读数与上下文环，它们先占掉一截，
+ *  所以**总宽够、留给本行的却可能不够**——线上正是这种情况（行宽约 860px，
+ *  官方两块占掉约 260px，留给本行的约 570px，而整句需要约 600px）。
+ *
+ *  `have` 由「父级内容宽 − 其它条目宽度」算出，`need` 由一句**始终渲染但不可见**
+ *  的量宽探针给出——两者都与当前渲染的是整句还是紧凑形态无关，因此不会自激。 */
+export type IsRowTooNarrow = (trigger: HTMLElement) => boolean
+
+/** 量宽探针的类名；JSX 里始终渲染，CSS 里挪出可视区。 */
+export const PROBE_CLASS = 'lc-dock-probe'
+
+export const isRowTooNarrow: IsRowTooNarrow = (trigger) => {
+  const parent = trigger.parentElement
+  const probe = trigger.querySelector<HTMLElement>('.' + PROBE_CLASS)
+  if (parent === null || probe === null) return false
+  // 探针始终按整句排版，所以它的宽度与当前渲染哪种形态无关——这是不自激的关键。
+  const full = probe.offsetWidth
+  const row = parent.clientWidth
+  if (full <= 0 || row <= 0) return false
+  // 本行除倒计时以外的部分。整句形态下 = 总宽 − 整句宽；紧凑形态下 = 总宽 − 紧凑宽；
+  // 两者都等于同一份核心读数宽度，因此同样与形态无关。
+  const countdown = trigger.querySelector<HTMLElement>('.lc-dock-countdown')
+  const core = trigger.offsetWidth - (countdown?.offsetWidth ?? 0)
+  // 兄弟条目（官方用量读数、上下文环）占掉的宽度。本行自己的浮层卡不算：
+  // 它是 `position: fixed`，不参与这一行的排布。
+  let others = 0
+  let count = 0
+  for (const child of Array.from(parent.children)) {
+    if (child === trigger || child.classList.contains('lc-dock-card')) continue
+    const width = (child as HTMLElement).offsetWidth
+    if (width > 0) {
+      others += width
+      count += 1
+    }
+  }
+  // 条目之间各有一个 gap；兄弟有 count 个，加上本行共 count 个间隔。
+  const gap = Number.parseFloat(getComputedStyle(parent).columnGap) || 0
+  const have = row - others - gap * count
+  return core + full > have
+}
 
 /**
  * 绑定 `ctx`（语言 → 展示货币）与 `kit`，返回 composer 槽位的入口。
  * 宿主在切换语言时会重新渲染每个槽位入口，所以货币可以在每次渲染时读取
  * 而无须订阅；`readDock` 随后按读到的东西重新计价。
  */
-export function makeComposerDock(ctx: ClientCtx, kit: ViewKit): (props: SessionStandardProps) => ReactElement | null {
+export function makeComposerDock(
+  ctx: ClientCtx,
+  kit: ViewKit,
+  tooNarrow: IsRowTooNarrow = isRowTooNarrow,
+): (props: SessionStandardProps) => ReactElement | null {
   const { t } = kit
+  // 明细卡里复用汇总统计页的那两张卡，同一份数据、同一种排版——两处因此不会各说各话。
+  const StatsTokens = makeStatsTokens(kit, Donut)
+  const StatsCost = makeStatsCost(kit, Donut)
   /** 当前语言决定展示货币，与其他每个成本界面一样；
    *  harness 在切换语言时会重新渲染每个槽位入口，所以每次渲染读一次就是精确的。 */
-  const currencyNow = (): CostCurrency => {
+  const localeNow = (): string => {
     try {
       const locale = ctx.locale
-      const active = typeof locale.getLocale === 'function' ? locale.getLocale().active : 'en'
-      return active === 'zh' ? 'cny' : 'usd'
+      return typeof locale.getLocale === 'function' ? locale.getLocale().active : 'en'
     } catch {
-      return 'usd'
+      return 'en'
     }
   }
+  const currencyNow = (): CostCurrency => (localeNow() === 'zh' ? 'cny' : 'usd')
   return function ComposerDock(props: SessionStandardProps): ReactElement | null {
     const currency = currencyNow()
+    const activeLocale = localeNow()
     const { book, failed } = useDockBook()
     const reading = readDock(props, { currency }, book, failed)
     const period = usePricingPeriod()
     const [open, setOpen] = useState(false)
     const [anchor, setAnchor] = useState<Anchor | null>(null)
     const [balance, setBalance] = useState<PlatformBalance | null>(null)
+    const [narrow, setNarrow] = useState(false)
     const triggerRef = useRef<HTMLButtonElement | null>(null)
     const cardRef = useRef<HTMLDivElement | null>(null)
+    // 按钮只在 timeline 到位后才渲染（见下面那个提前返回）。首帧它是 null，
+    // 所以这个 effect 必须在它出现时**重跑**一次：把 `hasTrigger` 放进依赖。
+    // 否则 `triggerRef.current === null` 那一帧会直接 return，而依赖永不变化，
+    // 观察者就永远挂不上——判据永远停在初始的「够宽」，也就是线上表现出的「不生效」。
+    const hasTrigger = reading.timeline !== null
 
-    // 第一个数字必须来自记住的那次读取，而不是转圈：随后在 dock 保持挂载期间由轮询让
-    // 它保持诚实，而清理函数会在切换会话时停掉计时器。
+    // 状态栏放不下完整读数时切到紧凑形态。判据见 `isRowTooNarrow`：
+    // 比的是「留给本行的空间」与「完整内容需要的宽度」，因此官方那两块先占位、
+    // 本行只剩一点空间的情况也能正确降级。用 ResizeObserver 观察父级：
+    // 它的宽度由对话栏决定，与我们的内容无关，所以不会自激。
+    useLayoutEffect(() => {
+      if (!hasTrigger) return
+      const trigger = triggerRef.current
+      if (trigger === null) return
+      const apply = (): void => { setNarrow(tooNarrow(trigger)) }
+      apply()
+      // 父级宽度变化（对话栏伸缩、侧栏开合）都要重新判定。
+      const target = trigger.parentElement
+      if (target === null || typeof ResizeObserver === 'undefined') {
+        window.addEventListener('resize', apply)
+        return () => { window.removeEventListener('resize', apply) }
+      }
+      const observer = new ResizeObserver(apply)
+      observer.observe(target)
+      return () => { observer.disconnect() }
+    }, [tooNarrow, hasTrigger])
+
+    // 收起那一行自己也要显示余额，所以这份读取不能省：先画记住的数字，
+    // 随后在 dock 保持挂载期间由轮询让它保持诚实，切换会话时清理计时器。
+    // （展开卡里的余额行由费用卡自己承担，见下面的 StatsCost。）
     useEffect(() => {
       setBalance(readPlatformBalance(setBalance))
       const timer = setInterval(() => { setBalance(readPlatformBalance(setBalance)) }, BALANCE_POLL_MS)
@@ -105,10 +194,15 @@ export function makeComposerDock(ctx: ClientCtx, kit: ViewKit): (props: SessionS
       const flip = above < 8
       const available = Math.max(120, (flip ? window.innerHeight - rect.bottom : rect.top) - 16)
       const height = Math.min(natural, available)
+      // 宽度：以内容偏好为准，再夹进视口（两侧各留边距），同时不窄于触发条。
+      // 只跟随触发条会把复用卡右列的数值挤出卡片；而宽度一旦超过视口又会长出
+      // 横向滚动条，所以这里主动夹好，配套 CSS 把横向溢出关死。
+      const viewportMax = Math.max(CARD_MIN_VIEWPORT_WIDTH, window.innerWidth - VIEWPORT_GUTTER * 2)
+      const width = Math.min(Math.max(rect.width, CARD_WIDTH), viewportMax)
       const next: Anchor = {
-        left: Math.max(8, Math.min(rect.left, window.innerWidth - rect.width - 8)),
+        left: Math.max(VIEWPORT_GUTTER, Math.min(rect.left, window.innerWidth - width - VIEWPORT_GUTTER)),
         top: flip ? rect.bottom + 8 : rect.top - height - 8,
-        width: rect.width,
+        width,
         maxHeight: available,
       }
       // 只有结果真的变了才 setState：否则观察者每回调一次就重渲染一次。
@@ -161,16 +255,41 @@ export function makeComposerDock(ctx: ClientCtx, kit: ViewKit): (props: SessionS
       }
     }, [open])
 
+    // 两张复用卡读的是与统计页同一批投影：Token 卡要 `tokenUsage` 与
+    // `contextBreakdown`，而当前上下文取自 timeline 自身（`ContextTimeline` 就是
+    // `Snapshot`）。投影未装配时它们的空状态照常成立。
+    // `projectionOf` 是 hook，必须在下面那个提前返回**之前**无条件调用，
+    // 否则首帧（timeline 为 null）与之后各帧的 hook 数量不一致。
+    const tokenUsage = projectionOf(props, 'tokenUsage', tokenUsageOf)
+    const breakdown = projectionOf(props, 'contextBreakdown', contextBreakdownOf)
+
     // 第一个推来的值出现之前没有什么可报告的：宁可不渲染任何单元格，
     // 也不要渲染一个误导性的 0。
     if (reading.timeline === null) return null
     const entry = balanceEntryOf(balance, currency)
-    const split = estimateSessionCostByPeriod(reading.usage, book)
-    const peak = toCurrency(split.peak, currency)
-    const off = toCurrency(split.off, currency)
-    const periodSum = peak + off
     const costText = reading.cost === null ? '—' : formatCost(reading.cost, currency)
     const periodLabel = t(period.peak ? 'dock.peak' : 'dock.off')
+    // 峰时窗口由官方表派生，分隔符按语言给：中文用顿号，其余用逗号。
+    const windows = peakWindowsText(activeLocale === 'zh' ? '、' : ', ')
+    // 周末/节假日全天谷时：当天根本没有峰时窗口，改说原因，
+    // 而不是报一个指向「下一个工作日 09:00」的倒计时——那会让人以为今天还有峰时。
+    const dayOff = allDayOffReason(period.now)
+    // 倒计时指向「即将进入」的那个时段，所以文案取当前时段的反面。
+    const countdown = fmtCountdown(t, period.remainingMs)
+    const countdownText = countdown === null || dayOff !== null
+      ? null
+      : t(period.peak ? 'dock.toOff' : 'dock.toPeak', { countdown })
+    // 窄状态栏的退化形态：整句「6 小时 38 分 后进入峰时」放不下时，
+    // 换成一个时钟图标 + 紧凑读数（`6h38m`）。两者由 CSS 按容器宽度二选一，
+    // 数字都来自同一个 `remainingMs`，不会各走各的。
+    const compactCountdown = dayOff === null ? fmtCountdownCompact(period.remainingMs) : null
+    // 悬停提示把两件事说全：峰时窗口是哪几段，以及还有多久翻转。
+    const periodTip = [
+      t('dock.peakWindows', { windows }),
+      dayOff === 'weekend' ? t('dock.weekendOff') : null,
+      dayOff === 'holiday' ? t('dock.holidayOff') : null,
+      countdownText,
+    ].filter((part): part is string => part !== null).join(' · ')
 
     return (
       <>
@@ -180,7 +299,7 @@ export function makeComposerDock(ctx: ClientCtx, kit: ViewKit): (props: SessionS
           className="lc-dock"
           data-peak={period.peak ? '1' : '0'}
           aria-expanded={open}
-          title={t('dock.title')}
+          title={periodTip}
           onClick={() => { setOpen(v => !v) }}
         >
           <span className="lc-dock-cost">{costText}</span>
@@ -192,6 +311,24 @@ export function makeComposerDock(ctx: ClientCtx, kit: ViewKit): (props: SessionS
             : null}
           <span className="lc-dock-sep">·</span>
           <span className="lc-dock-period">{periodLabel}</span>
+          {/* 宽时读整句，窄时读时钟图标 + 紧凑读数。两者互斥渲染，
+              数字都来自同一个 `remainingMs`，所以不会各走各的。 */}
+          {countdownText !== null && !narrow
+            ? <span className="lc-dock-countdown">{countdownText}</span>
+            : null}
+          {compactCountdown !== null && narrow
+            ? (
+              <span className="lc-dock-countdown" title={countdownText ?? undefined}>
+                <IconClock size={12} />
+                {compactCountdown}
+              </span>
+            )
+            : null}
+          {/* 量宽探针：**始终**按整句排版，因此它的宽度与当前显示的是整句还是
+              紧凑形态无关——判据靠它才不自激。CSS 把它移出可视区，不占排布。 */}
+          {countdownText !== null
+            ? <span className={PROBE_CLASS} aria-hidden="true">{countdownText}</span>
+            : null}
         </button>
         {/* 只在 `open` 时挂载：`place()` 需要在同一个布局趟里量到真实高度，
             所以卡片不能等 `anchor` 就绪才出现（那时 ref 还是 null，只能退回兜底高度，
@@ -214,16 +351,21 @@ export function makeComposerDock(ctx: ClientCtx, kit: ViewKit): (props: SessionS
                 <span className="lc-dock-head-title">{t('dock.title')}</span>
                 <span className={'lc-dock-badge' + (period.peak ? ' lc-dock-badge-peak' : '')}>{periodLabel}</span>
               </div>
-              {entry !== null
-                ? (
-                  <a className="lc-dock-balance-row" href={USAGE_URL} target="_blank" rel="noreferrer">
-                    <span>{t('balance.title')}</span>
-                    <b>{symbolOf(entry.currency) + entry.total.toFixed(2)}</b>
-                  </a>
-                )
-                : null}
-              <DockTokens kit={kit} reading={reading} />
-              <DockCost kit={kit} peak={peak} off={off} periodSum={periodSum} currency={currency} />
+              {/* 峰谷窗口与倒计时在展开卡里也写全：收起那一行只放得下一个倒计时，
+                  而「峰时是哪几段」正是这张卡要回答的问题。 */}
+              <div className="lc-dock-period-row">
+                <span className="lc-dock-period-windows">{t('dock.peakWindows', { windows })}</span>
+                <span className="lc-dock-period-eta">
+                  {dayOff === 'weekend' ? t('dock.weekendOff') : null}
+                  {dayOff === 'holiday' ? t('dock.holidayOff') : null}
+                  {countdownText !== null ? countdownText : null}
+                </span>
+              </div>
+              {/* 余额不再单列：费用卡自带那行（与统计页一致），两处各写一遍会显得像两个数。 */}
+              <div className="lc-dock-cards">
+                <StatsTokens usage={tokenUsage} current={reading.timeline.current} breakdown={breakdown} />
+                <StatsCost usage={reading.usage} currency={currency} />
+              </div>
               <DockRates kit={kit} peak={period.peak} currency={currency} />
               <div className="lc-dock-note">{t('dock.note')}</div>
             </div>
@@ -232,86 +374,6 @@ export function makeComposerDock(ctx: ClientCtx, kit: ViewKit): (props: SessionS
       </>
     )
   }
-}
-
-/** 行内进度条填充的入场类：与堆叠条/计时条/Agent 条同款（`scaleX` 生长），
- *  并自带 `motion-reduce:animate-none`，尊重系统的「减少动效」偏好。
- *  留前导空格以便直接拼接（与 trendChart 的 `RISE_CLASS` 同一写法）。 */
-const BAR_RISE = ' animate-lc-stacked-in motion-reduce:animate-none'
-
-/** token 拆分：先是计费总量，然后是三个分桶及其占比。投影还没有用量时
- *  什么都不渲染，所以卡片永远不会显示一份全零的拆分。 */
-function DockTokens(props: { kit: ViewKit; reading: ReturnType<typeof readDock> }): ReactElement | null {
-  const { t } = props.kit
-  const usage = props.reading.usage
-  if (usage === null) return null
-  let cacheRead = 0
-  let miss = 0
-  let output = 0
-  for (const models of Object.values(usage)) {
-    for (const model of Object.keys(models)) {
-      const periods = models[model]
-      for (const key of ['peak', 'off'] as const) {
-        const bucket = periods[key]
-        if (bucket === undefined) continue
-        cacheRead += bucket.cacheRead
-        miss += bucket.uncached + bucket.cacheWrite
-        output += bucket.output
-      }
-    }
-  }
-  const total = props.reading.tokens
-  if (total <= 0) return null
-  const rows = [
-    { key: 'cacheHit', value: cacheRead, tint: 'hit' },
-    { key: 'cacheMiss', value: miss, tint: 'miss' },
-    { key: 'output', value: output, tint: 'out' },
-  ]
-  return (
-    <div className="lc-dock-card-block">
-      <div className="lc-dock-block-title">
-        {t('dock.tokens')}
-        <b>{fmt(total)}</b>
-      </div>
-      {rows.map(r => (
-        <div key={r.key} className="lc-dock-block-row" data-zero={r.value <= 0 ? '1' : undefined}>
-          <span>{t('dock.' + r.key)}</span>
-          <span className={'lc-dock-block-track lc-dock-tint-' + r.tint}><i className={'lc-dock-bar-fill' + BAR_RISE} style={{ width: fmtShare(r.value, total) }} /></span>
-          <b>{fmt(r.value)}</b>
-          <em>{fmtShare(r.value, total)}</em>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-/** 按时段的成本拆分；一个计价为零的会话不贡献任何带。
- *  峰/谷各用自己的色（红/绿），两行同色的话这张表读不出「贵的占了多少」。 */
-function DockCost(props: { kit: ViewKit; peak: number; off: number; periodSum: number; currency: CostCurrency }): ReactElement | null {
-  const { t } = props.kit
-  if (props.periodSum <= 0) return null
-  const rows = PERIOD_BANDS.map(band => ({
-    key: band.key,
-    label: t(band.labelKey),
-    value: band.key === 'peak' ? props.peak : props.off,
-    tint: band.key,
-  }))
-  return (
-    <div className="lc-dock-card-block">
-      <div className="lc-dock-block-title">
-        {t('dock.cost')}
-        <b>{formatCost(props.periodSum, props.currency)}</b>
-      </div>
-      {rows.map(r => (
-        <div key={r.key} className="lc-dock-block-row" data-zero={r.value <= 0 ? '1' : undefined}>
-          <span>{r.label}</span>
-          <span className={'lc-dock-block-track lc-dock-tint-' + r.tint}><i className={'lc-dock-bar-fill' + BAR_RISE} style={{ width: fmtShare(r.value, props.periodSum) }} /></span>
-          <b>{formatCost(r.value, props.currency)}</b>
-          <em>{fmtShare(r.value, props.periodSum)}</em>
-        </div>
-      ))}
-    </div>
-  )
 }
 
 /** 当前生效时段的官方费率表。费率住在表格自己的 CNY 空间里，

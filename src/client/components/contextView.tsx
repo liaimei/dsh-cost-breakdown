@@ -25,6 +25,7 @@ import { makePluginInfo } from './pluginInfo'
 import { makeUpgradeGate } from './upgradeGate'
 import { makeRequestDetail } from './requestDetail'
 import { countsOfRecords, makeStatsContext, makeSubagentCost, toolTallyOf } from './statsContext'
+import { makeStatsCost } from './statsCost'
 import { makeStatsTiming } from './statsTiming'
 import { makeStatsTokens } from './statsTokens'
 import { makeLegend, makeStackedBar } from './stackedBar'
@@ -65,6 +66,7 @@ export function makeContextView(
   // Agent network 卡片的组成环与统计板的子代理成本单元格，对每个亲属都只取一次。
   const heads = makeAgentHeads()
   const StatsContext = makeStatsContext(kit, makeSubagentCost(ctx, heads))
+  const StatsCost = makeStatsCost(kit, Donut)
   const StatsTiming = makeStatsTiming(kit, Donut)
   const StatsTokens = makeStatsTokens(kit, Donut)
   const PluginInfo = makePluginInfo(kit)
@@ -515,6 +517,7 @@ export function makeContextView(
         )}
         <div className="lc-cols lc-head">
           <StatsTokens usage={usage} current={data.current} breakdown={breakdown} />
+          <StatsCost usage={data.cost ?? null} currency={activeLocale === 'zh' ? 'cny' : 'usd'} />
           <StatsTiming timing={data.timing ?? null} spans={data.spans} />
         </div>
 

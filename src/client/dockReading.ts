@@ -15,7 +15,7 @@ import type { CostCurrency, ModelBook } from './cost'
 import { useModelPrices } from './modelPrices'
 import { projectionOf, type SessionStandardProps } from './services'
 import { timelineOf } from './services'
-import { DEFAULT_HOLIDAYS, periodAt, type PricingPeriod } from '../shared/officialRates'
+import { DEFAULT_HOLIDAYS, msUntilFlip, periodAt, type PricingPeriod } from '../shared/officialRates'
 import type { ContextTimeline, SessionCostUsage } from '../shared/types'
 import { isDeepSeekProvider } from '../shared/providers'
 
@@ -43,20 +43,39 @@ export interface DockReading {
 const TICK_MS = 1000
 
 /**
- * 实时的定价时段。读数挂载期间会一直重启一秒节拍，
- * 让徽标及其倒计时随窗口同步翻转，卸载后停止。
+ * 实时的定价时段，外加距离下一次翻转的剩余时间。
+ *
+ * 读数挂载期间一直跑一秒节拍，让徽标与倒计时随窗口同步翻转，卸载后停止。
+ * `remainingMs` 每拍都会变，所以调用方每拍都会重渲染——倒计时读的就是它；
+ * 而时段本身只在真正翻转时才换新对象，于是「时段没变」的帧不会白白触发
+ * 投影重读。
  */
-export function usePricingPeriod(now: () => number = Date.now, holidays: readonly string[] = DEFAULT_HOLIDAYS): PricingPeriod {
-  const [period, setPeriod] = useState<PricingPeriod>(() => periodAt(now(), holidays))
+export interface LivePricingPeriod extends PricingPeriod {
+  /** 距离下一次时段翻转的毫秒数；扫描窗口内没有已知边界时为 null。 */
+  remainingMs: number | null
+  /** 这一拍所用的时刻。界面据此判断「今天为什么全天谷时」，
+   *  与 `remainingMs` 取自同一个瞬间，两处不会互相矛盾。 */
+  now: number
+}
+
+export function usePricingPeriod(now: () => number = Date.now, holidays: readonly string[] = DEFAULT_HOLIDAYS): LivePricingPeriod {
+  const [state, setState] = useState<LivePricingPeriod>(() => {
+    const at = now()
+    return { ...periodAt(at, holidays), remainingMs: msUntilFlip(at, holidays), now: at }
+  })
   useEffect(() => {
     const timer = setInterval(() => {
-      const next = periodAt(now(), holidays)
-      // 同一引用即退出：时段未变的节拍不得让 composer 重渲染。
-      setPeriod(prev => (prev.peak === next.peak && prev.next?.at === next.next?.at ? prev : next))
+      const at = now()
+      const next = periodAt(at, holidays)
+      const remainingMs = msUntilFlip(at, holidays)
+      // 时段与剩余毫秒都没变就不换对象：同一个输入不该产生新的渲染。
+      setState(prev => (prev.peak === next.peak && prev.next?.at === next.next?.at && prev.remainingMs === remainingMs
+        ? prev
+        : { ...next, remainingMs, now: at }))
     }, TICK_MS)
     return () => { clearInterval(timer) }
   }, [now, holidays])
-  return period
+  return state
 }
 
 /** 驱动停靠区读数的接缝；生产环境挂载时只传 `currency`。 */

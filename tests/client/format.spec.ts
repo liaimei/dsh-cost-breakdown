@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict'
 import { describe, test } from 'vitest'
-import { cacheHitPercent, fmt, fmtBytes, fmtDuration, fmtShare, fmtTime } from '../../src/client/format'
+import { cacheHitPercent, fmt, fmtBytes, fmtCountdown, fmtCountdownCompact, fmtDuration, fmtShare, fmtTime } from '../../src/client/format'
 
 describe('fmt', () => {
   test('missing/NaN input shows the dash', () => {
@@ -121,5 +121,60 @@ describe('fmtDuration', () => {
   test('an hour and beyond: hours and minutes', () => {
     assert.equal(fmtDuration(4_440_000), '1h14m')
     assert.equal(fmtDuration(7_320_000), '2h2m')
+  })
+})
+
+describe('fmtCountdown', () => {
+  // A fake translator with the real dictionary's unit keys, so the test pins the
+  // SHAPE the component gets (locale words assembled by the caller) rather than any
+  // one locale's punctuation.
+  const t = (key: string, params?: Record<string, string | number>): string => {
+    const table: Record<string, string> = {
+      'dock.dur.hm': '{h} 小时 {m} 分',
+      'dock.dur.ms': '{m} 分 {s} 秒',
+      'dock.dur.s': '{s} 秒',
+    }
+    return table[key].replace(/\{(\w+)\}/g, (_, k: string) => String(params?.[k] ?? ''))
+  }
+
+  test('picks the largest unit that fits, so the reading stays short', () => {
+    assert.equal(fmtCountdown(t, 2 * 3600_000 + 30 * 60_000), '2 小时 30 分')
+    assert.equal(fmtCountdown(t, 90_000), '1 分 30 秒')
+    assert.equal(fmtCountdown(t, 7000), '7 秒')
+  })
+
+  test('floors, so it never overstates the remaining wait', () => {
+    assert.equal(fmtCountdown(t, 1999), '1 秒')
+    assert.equal(fmtCountdown(t, 3599_000), '59 分 59 秒')
+  })
+
+  test('clamps a negative remainder to zero instead of showing a minus', () => {
+    assert.equal(fmtCountdown(t, -5000), '0 秒')
+  })
+
+  test('a missing boundary yields null, so no countdown is rendered', () => {
+    assert.equal(fmtCountdown(t, null), null)
+    assert.equal(fmtCountdown(t, Number.NaN), null)
+  })
+})
+
+describe('fmtCountdownCompact', () => {
+  test('picks the largest unit that fits, dropping what the eye does not need', () => {
+    // The narrow status bar shows this beside a clock icon; a trailing `0s` or a
+    // redundant `0m` would cost width without adding meaning.
+    assert.equal(fmtCountdownCompact(6 * 3600_000 + 38 * 60_000), '6h38m')
+    assert.equal(fmtCountdownCompact(38 * 60_000), '38m')
+    assert.equal(fmtCountdownCompact(45_000), '45s')
+  })
+
+  test('floors, so it never overstates the remaining wait', () => {
+    assert.equal(fmtCountdownCompact(1999), '1s')
+    assert.equal(fmtCountdownCompact(3599_000), '59m')
+  })
+
+  test('clamps negatives to zero and passes a missing boundary through', () => {
+    assert.equal(fmtCountdownCompact(-5000), '0s')
+    assert.equal(fmtCountdownCompact(null), null)
+    assert.equal(fmtCountdownCompact(Number.NaN), null)
   })
 })

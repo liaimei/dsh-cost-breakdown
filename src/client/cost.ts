@@ -9,8 +9,9 @@
  * 注册表不认识的 provider id 则走模型侧索引计价。
  */
 
-import type { SessionCostUsage } from '../shared/types'
-import { isDeepSeekProvider, modelsDevProviderOf } from '../shared/providers'
+import type { PriceTriple, SessionCostUsage } from '../shared/types'
+import { modelsDevProviderOf, pricedByOfficialPeriod } from '../shared/providers'
+import { configuredRateOf, type ThirdPartyRates } from '../shared/thirdPartyRates'
 import { matchOfficialModel } from '../shared/officialRates'
 import { asRecord, numOf } from './services'
 
@@ -26,8 +27,9 @@ const USD_PER_CNY = 0.15
  *  官方价目表每个费率就只需带一列。 */
 const PEAK_FACTOR = 2
 
-/** 每 100 万 token 的费率（美元）；注册表缺失的缓存字段回退到输入费率。 */
-export interface PriceTriple { hit: number; miss: number; write: number; out: number }
+/* `PriceTriple` 的唯一声明在 shared/types.ts；这里再导出，
+   既有 `from './cost'` 的导入路径因此不用改。 */
+export type { PriceTriple } from '../shared/types'
 
 /** 注册表结构：provider id → model id → 费率。 */
 export type ModelPrices = Record<string, Record<string, PriceTriple>>
@@ -222,10 +224,22 @@ function lookupFace(models: Record<string, PriceTriple>, model: string): { mid: 
  * 一方价目册，而模型侧分层可能把同一个 id 交给自称同名的宿主，
  * 后者把缓存命中当作普通输入计费（issue #93）。
  */
-export function priceFaceOf(book: ModelBook | null | undefined, provider: string, model: string): PriceFace | null {
+export function priceFaceOf(
+  book: ModelBook | null | undefined,
+  provider: string,
+  model: string,
+  rates?: ThirdPartyRates | null,
+): PriceFace | null {
   const official = officialRateOf(model)
   if (official !== null) {
     return { pid: 'deepseek', mid: officialLabel(model), rate: official, official: true }
+  }
+  // 用户声明的平台费率优先于注册表：注册表里同一个模型常由几十家厂商提供、
+  // 价格相差十几倍，而第三方平台自身往往不在注册表里。用户知道自己的套餐，
+  // 插件不知道（规范见 docs/third-party-pricing.md）。
+  const configured = configuredRateOf(rates, provider, model)
+  if (configured !== null) {
+    return { pid: provider, mid: model, rate: configured }
   }
   if (book === null || book === undefined) return null
   const registryPid = modelsDevProviderOf(provider)
@@ -248,49 +262,90 @@ export function priceFaceOf(book: ModelBook | null | undefined, provider: string
 
 /** 只查费率——需要注册表面孔的调用方（tooltip 的 provider/model
  *  那一行）应改用 {@link priceFaceOf}，二者必须对「哪一行定价」保持一致。 */
-export function priceOf(book: ModelBook | null | undefined, provider: string, model: string): PriceTriple | null {
-  return priceFaceOf(book, provider, model)?.rate ?? null
+export function priceOf(
+  book: ModelBook | null | undefined,
+  provider: string,
+  model: string,
+  rates?: ThirdPartyRates | null,
+): PriceTriple | null {
+  return priceFaceOf(book, provider, model, rates)?.rate ?? null
 }
 
 /** 一次遍历的结果：每个定价时段的美元成本，以及是否有任何费率被套用。 */
 export interface CostByPeriod { peak: number; off: number; any: boolean }
 
-/** 为一个账本定价，并按 **host** 的定价时段标签拆分。
+/** 一次遍历的结果：四个计费分桶各自的美元成本，加上峰谷拆分与总量。
+ *  `total` 恒等于四分桶之和、也恒等于 `peak + off`——三者出自同一次
+ *  累加，因此卡片上的任何两个数字都不会互相矛盾。 */
+export interface CostByBucket extends CostByPeriod {
+  cacheRead: number
+  uncached: number
+  cacheWrite: number
+  output: number
+  total: number
+}
+
+/** 为一个账本定价，同时给出**两套**拆分：按计费分桶（钱花在哪种
+ *  token 上）与按定价时段（钱花在哪段时间）。
  *
- * 一次遍历就为每个数字定价，因此时段拆分与 session 总量不会
- * 互相漂移。某个桶记录存在即为 `any`（即便全为零），
- * 真正免费的范围因此显示 ¥0.00 而不是破折号。 */
-export function estimateSessionCostByPeriod(
+ *  费率与峰谷接缝与 {@link estimateSessionCostByPeriod} 完全共用，
+ *  后者如今只是取走这里的时段两项——一次遍历产出的数字因此不会
+ *  在两张卡片之间漂移。某个桶记录存在即为 `any`（即便全为零），
+ *  真正免费的范围因此显示 ¥0.00 而不是破折号。 */
+export function estimateSessionCostByBucket(
   usage: SessionCostUsage | null | undefined,
   book: ModelBook | null | undefined,
-): CostByPeriod {
-  const out: CostByPeriod = { peak: 0, off: 0, any: false }
+  rates?: ThirdPartyRates | null,
+): CostByBucket {
+  const out: CostByBucket = {
+    cacheRead: 0, uncached: 0, cacheWrite: 0, output: 0, total: 0,
+    peak: 0, off: 0, any: false,
+  }
   if (usage === null || usage === undefined) return out
   for (const provider of Object.keys(usage)) {
     const models = asRecord(usage[provider])
     if (models === null) continue
     for (const model of Object.keys(models)) {
       // 官方价目表对它所收录的内容是权威；峰值翻倍的时段
-      // 走同一处接缝。其余一切按价目册计价。
+      // 走同一处接缝。其余一切按用户的第三方费率（若声明）再按价目册计价。
       const official = officialRateOf(model)
-      const rate = official ?? priceOf(book, provider, model)
+      const rate = official ?? priceOf(book, provider, model, rates)
       const periods = asRecord(models[model])
       if (rate === null || periods === null) continue
-      // 桶标签沿用 **host** 的记账规则：只有 DeepSeek provider
-      // 按北京时间的窗口拆分，因此只有它的 `peak` 桶是翻倍
-      // 时段。其他 provider 的 `peak` 桶始终按普通牌价记账。
-      const doubles = isDeepSeekProvider(provider)
+      // 桶标签沿用 **host** 的记账规则：只有按官方峰谷计费的结算才拆时段
+      // （官方价目表收录的模型，或 DeepSeek 自家路由），因此只有它的 `peak`
+      // 桶携带翻倍时段。其他 provider 的 `peak` 桶始终按普通牌价记账。
+      const doubles = pricedByOfficialPeriod(provider, model)
       for (const period of ['peak', 'off'] as const) {
         const bucket = asRecord(periods[period])
         if (bucket === null) continue
-        const price = (numOf(bucket.cacheRead) * rate.hit + numOf(bucket.uncached) * rate.miss
-          + numOf(bucket.cacheWrite) * rate.write + numOf(bucket.output) * rate.out) / 1e6
-        out[period] += doubles && period === 'peak' ? price * PEAK_FACTOR : price
+        // 翻倍施加在整段上，所以逐桶同样按比例放大，分桶之和与时段之和才严丝合缝。
+        const scale = (doubles && period === 'peak' ? PEAK_FACTOR : 1) / 1e6
+        const hit = numOf(bucket.cacheRead) * rate.hit * scale
+        const miss = numOf(bucket.uncached) * rate.miss * scale
+        const write = numOf(bucket.cacheWrite) * rate.write * scale
+        const outCost = numOf(bucket.output) * rate.out * scale
+        out.cacheRead += hit
+        out.uncached += miss
+        out.cacheWrite += write
+        out.output += outCost
+        out[period] += hit + miss + write + outCost
         out.any = true
       }
     }
   }
+  out.total = out.cacheRead + out.uncached + out.cacheWrite + out.output
   return out
+}
+
+/** 为一个账本定价，并按 **host** 的定价时段标签拆分。
+ *  时段两项取自 {@link estimateSessionCostByBucket}，与分桶拆分同源。 */
+export function estimateSessionCostByPeriod(
+  usage: SessionCostUsage | null | undefined,
+  book: ModelBook | null | undefined,
+): CostByPeriod {
+  const { peak, off, any } = estimateSessionCostByBucket(usage, book)
+  return { peak, off, any }
 }
 
 /** 为 session 的累计计费总额定价。

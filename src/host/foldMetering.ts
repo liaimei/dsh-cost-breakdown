@@ -4,7 +4,7 @@
  */
 
 import type { CostBucketTotals, CostModelUsage, SessionCostUsage, TimingTotals, ToolTimingTotals } from '../shared/types'
-import { isDeepSeekProvider } from '../shared/providers'
+import { pricedByOfficialPeriod } from '../shared/providers'
 import { DEFAULT_HOLIDAYS, isPeakBeijing } from '../shared/officialRates'
 import type { DecodeKind } from './logShapes'
 import type { TimelineState } from './foldState'
@@ -43,10 +43,17 @@ export function tokenCountOf(value: unknown): number | null {
 
 /** 某个瞬间是否按峰时费率记账：用 DeepSeek 自己的北京时段
  *  （shared/officialRates.ts），扣掉周末和全天按谷时计费的中国法定节假日。
- *  其他 provider 一律记 `peak`，因为这套拆分是对 DeepSeek 峰谷翻倍的照搬，
+ *  是否参与这套拆分由**模型**决定（见 {@link pricedByOfficialPeriod}）：
+ *  官方价目表收录的模型无论走哪条 provider 路由都按它计费；
+ *  其余 provider 一律记 `peak`，因为这套拆分是对 DeepSeek 峰谷翻倍的照搬，
  *  而不是替别家厂商另发明一套。 */
-export function isPeakAt(time: number, provider: string, holidays: readonly string[] = DEFAULT_HOLIDAYS): boolean {
-  return !isDeepSeekProvider(provider) || isPeakBeijing(time, holidays)
+export function isPeakAt(
+  time: number,
+  provider: string,
+  holidays: readonly string[] = DEFAULT_HOLIDAYS,
+  model?: string,
+): boolean {
+  return !pricedByOfficialPeriod(provider, model) || isPeakBeijing(time, holidays)
 }
 
 /** 只克隆被改动的那条路径——未触及的分支继续与持久化的旧 state 共享，
@@ -60,7 +67,7 @@ export function addBilledUsage(
   usage: BilledUsage,
   holidays: readonly string[] = DEFAULT_HOLIDAYS,
 ): SessionCostUsage {
-  const period = isPeakAt(time, provider, holidays) ? 'peak' : 'off'
+  const period = isPeakAt(time, provider, holidays, model) ? 'peak' : 'off'
   const models = prev?.[provider] ?? {}
   const periods = models[model] ?? {}
   const b = periods[period] ?? { uncached: 0, cacheRead: 0, cacheWrite: 0, output: 0 }

@@ -652,7 +652,7 @@ describe('session-cost accumulation', () => {
   })
 
   test('usage keys by provider, then by model', () => {
-    const flash = driveTimeline([header(1, { model: 'deepseek-v4-flash' }), assistantMessage(2, { usage })]).state.cost
+    const flash = driveTimeline([header(1, { model: 'deepseek-v4-flash' }), at100(2, PEAK)]).state.cost
     assert.equal(flash?.['']?.['deepseek-v4-flash']?.peak?.uncached, 100, 'a provider-less header books under the empty key')
     const pro = driveTimeline([header(1, { provider: 'deepseek-official', model: 'deepseek-v4-pro' }), at100(2, PEAK)]).state.cost
     assert.equal(pro?.['deepseek-official']?.['deepseek-v4-pro']?.peak?.uncached, 100)
@@ -718,7 +718,7 @@ describe('session-cost accumulation', () => {
   test('a request/context provider switch rekeys the following samples', () => {
     const { state } = driveTimeline([
       header(1, { model: 'deepseek-v4-flash' }),
-      assistantMessage(2, { usage }),
+      at100(2, PEAK),
       requestContext(3, { provider: 'deepseek-official', model: 'deepseek-v4-flash' }),
       at100(4, PEAK),
     ])

@@ -24,7 +24,7 @@ describe('contextActivity unit: shape', () => {
   test('the definition carries the contract fields', () => {
     const def = createContextActivityDefinition()
     assert.equal(def.key, 'contextActivity')
-    assert.equal(def.stateVersion, 5, 'the holiday-aware pricing record is the fifth shape')
+    assert.equal(def.stateVersion, 6, 'the model-keyed pricing record is the sixth shape')
     assert.deepEqual(def.init(), { days: {} })
   })
 
@@ -538,6 +538,37 @@ describe('applyActivity: the per-day pricing record', () => {
     assert.deepEqual(state.days[dayKeyOf(nationalDay) ?? '']?.cost, {
       'zai-coding-cn': { 'glm-5': { peak: { uncached: 7, cacheRead: 0, cacheWrite: 0, output: 0 } } },
     }, 'the split exists to mirror DeepSeek, not to invent one for other vendors')
+  })
+
+  test('an official model bills by the Beijing window even under a third-party route', () => {
+    // The workbuddy shape: a proxy route carrying an official DeepSeek model id.
+    // The official table prices it unconditionally, so the period must follow the
+    // model - a provider-keyed split books every settlement peak while the client
+    // prices it off-peak, and undercharges the peak window by half.
+    const sundayOff = Date.UTC(2026, 9, 11, 9) // Sunday 17:00 Beijing
+    const weekdayPeak = Date.UTC(2026, 9, 8, 2) // Thursday 10:00 Beijing
+    assert.equal(isPeakBeijing(sundayOff), false)
+    assert.equal(isPeakBeijing(weekdayPeak), true)
+    let state = applyActivity({ days: {} }, requestHeader('deepseek-v4.1-flash', 'workbuddy'))
+    state = applyActivity(state, assistantMessage(sundayOff, { inputTokens: 5 }))
+    state = applyActivity(state, assistantMessage(weekdayPeak, { inputTokens: 7 }))
+    assert.deepEqual(state.days[dayKeyOf(sundayOff) ?? '']?.cost, {
+      workbuddy: { 'deepseek-v4.1-flash': { off: { uncached: 5, cacheRead: 0, cacheWrite: 0, output: 0 } } },
+    }, 'an official model off-peak books off, whatever route carried it')
+    assert.deepEqual(state.days[dayKeyOf(weekdayPeak) ?? '']?.cost, {
+      workbuddy: { 'deepseek-v4.1-flash': { peak: { uncached: 7, cacheRead: 0, cacheWrite: 0, output: 0 } } },
+    }, 'and its peak window books peak, so the doubling applies')
+  })
+
+  test('isPeakAt follows the model, not just the provider route', () => {
+    const weekdayPeak = Date.UTC(2026, 9, 8, 2)
+    const sundayOff = Date.UTC(2026, 9, 11, 9)
+    assert.equal(isPeakAt(weekdayPeak, 'workbuddy', [], 'deepseek-v4.1-flash'), true)
+    assert.equal(isPeakAt(sundayOff, 'workbuddy', [], 'deepseek-v4.1-flash'), false)
+    // A model outside the official table keeps the vendor-agnostic peak bucket.
+    assert.equal(isPeakAt(sundayOff, 'workbuddy', [], 'some-other-model'), true)
+    // A native DeepSeek route still follows its own window with no model in hand.
+    assert.equal(isPeakAt(sundayOff, 'deepseek-official', []), false)
   })
 
   test('same-day settlements accumulate into the day’s record', () => {

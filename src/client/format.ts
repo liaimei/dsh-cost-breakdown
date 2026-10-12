@@ -1,6 +1,8 @@
 /** 紧凑的 token/计数数字：`k`/`M`/`B` 量级保留一位小数，1000 以下为取整后的裸整数。
  *  `null`、`undefined` 与 `NaN` 一律显示长破折号，因为统计卡里
  *  缺失的数字和零不能看起来一样。 */
+import { countdownParts } from '../shared/officialRates'
+
 export function fmt(n: number | null | undefined): string {
   if (n === undefined || n === null || isNaN(n)) return '—'
   const sign = n < 0 ? '-' : ''
@@ -65,4 +67,33 @@ export function fmtDuration(ms: number): string {
   const s = totalSec % 60
   if (ms < 3_600_000) return `${m}m${s}s`
   return `${Math.floor(m / 60)}h${m % 60}m`
+}
+
+/**
+ * 峰谷倒计时的时长文案，按语言取单位词（`2 小时 0 分` / `2h 0m`）。
+ *
+ * 不复用 {@link fmtDuration}：那是给耗时曲线读的、刻意与 locale 无关的紧凑写法
+ * （`2h0m`），放进中文句子里会显得突兀。单位词住在词典里，这里只做拼装。
+ */
+export function fmtCountdown(t: (key: string, params?: Record<string, string | number>) => string, ms: number | null): string | null {
+  const parts = countdownParts(ms)
+  if (parts === null) return null
+  if (parts.hours > 0) return t('dock.dur.hm', { h: parts.hours, m: parts.minutes })
+  if (parts.minutes > 0) return t('dock.dur.ms', { m: parts.minutes, s: parts.seconds })
+  return t('dock.dur.s', { s: parts.seconds })
+}
+
+/**
+ * 窄状态栏里的紧凑倒计时（`6h38m` / `38m` / `45s`），与语言无关。
+ *
+ * 窄到放不下「6 小时 38 分 后进入峰时」时，改用时钟图标 + 这个紧凑写法：
+ * 数字仍然每秒在动，但占宽只有几个字符。与 {@link fmtDuration} 同一套单位，
+ * 两个读数因此不会各写各的。
+ */
+export function fmtCountdownCompact(ms: number | null): string | null {
+  const parts = countdownParts(ms)
+  if (parts === null) return null
+  if (parts.hours > 0) return `${parts.hours}h${parts.minutes}m`
+  if (parts.minutes > 0) return `${parts.minutes}m`
+  return `${parts.seconds}s`
 }

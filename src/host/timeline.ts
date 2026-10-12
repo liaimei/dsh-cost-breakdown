@@ -317,7 +317,9 @@ export function createContextTimelineDefinition(config: Config, slim: () => bool
     // 这会让缓存行失效并促使它们从持久日志重新折叠。日志仍能补算的字段、
     // 或 view 在服务时推导的字段，则「不能」抬高：
     // 让同代所有行失效会让空闲 session 的键孤悬，而它们在重新活跃之前没有刷新通道。
-    stateVersion: 28,
+    // 29：峰谷分桶改为按模型判定（官方价目表收录的模型无论走哪条路由都按时段计费），
+    // 已有的 `peak` 桶需要按同一规则重折，否则代理路由下的历史用量会一直算错。
+    stateVersion: 29,
   }
   return definition
 }

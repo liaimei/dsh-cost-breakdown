@@ -490,3 +490,8 @@ export interface PlatformBalance {
   /** 账户持有的每个币种各一条；至少一条。 */
   balances: PlatformBalanceEntry[]
 }
+
+/** 每 100 万 token 的费率（美元）；注册表缺失的缓存字段回退到输入费率。
+ *  放在 shared：`client/cost.ts` 的价目册与 `shared/thirdPartyRates.ts`
+ *  的用户费率表是同一个形状，两边因此不会各写一份。 */
+export interface PriceTriple { hit: number; miss: number; write: number; out: number }

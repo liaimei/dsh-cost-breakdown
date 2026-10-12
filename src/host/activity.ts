@@ -244,7 +244,8 @@ export function applyActivity(
 }
 
 /** 每日活动 projection 单元，与时间线、headers 单元一起注册（host/index.ts）。
- * `stateVersion` 为 5：每日计价记录开始感知节假日（节假日按谷时计费），
+ * `stateVersion` 为 6：每日计价记录改为按模型判定峰谷
+ * （官方价目表收录的模型无论走哪条 provider 路由都按时段分桶），
  * 而后续事件无法为已折叠的那些天补算，
  * 因此升级时缓存行会读作版本过期，由 Context Insights 预热重新冷折叠。 */
 export function createContextActivityDefinition(holidays: readonly string[] = DEFAULT_HOLIDAYS): ProjectionDefinition<'contextActivity', ActivityState> {
@@ -268,6 +269,6 @@ export function createContextActivityDefinition(holidays: readonly string[] = DE
         }])),
       }),
     },
-    stateVersion: 5,
+    stateVersion: 6,
   }
 }

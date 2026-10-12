@@ -111,6 +111,16 @@ export function isPeakBeijing(time: number, holidays: readonly string[] = DEFAUL
   return PEAK_WINDOWS.some(([from, to]) => parts.hour >= from && parts.hour < to)
 }
 
+/** 这一天为什么全天谷时；不是这种日子则返回 null。
+ *  与 {@link isPeakBeijing} 共用同一份周末/节假日规则，
+ *  界面因此能说「今天为什么没有峰时」，而不是报一个指向下一个工作日的倒计时。 */
+export function allDayOffReason(time: number, holidays: readonly string[] = DEFAULT_HOLIDAYS): 'weekend' | 'holiday' | null {
+  const parts = beijingParts(time)
+  if (parts.weekday === 0 || parts.weekday === 6) return 'weekend'
+  if (holidays.includes(parts.date)) return 'holiday'
+  return null
+}
+
 /**
  * 某个 wire 模型 id 对应的官方价目行；
  * 价目表里没有的 id 返回 null。
@@ -175,4 +185,44 @@ export function holidaysFrom(value: unknown): string[] | undefined {
   const valid = value.filter((entry): entry is string =>
     typeof entry === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(entry))
   return valid.length > 0 ? valid : undefined
+}
+
+/** 峰时时段的可读写法，例如 `09:00–12:00, 14:00–18:00`。
+ *  由 {@link PEAK_WINDOWS} 派生，改表即改文案，不会各说各话。
+ *  `separator` 由调用方按语言给出——这里不写死分隔符，
+ *  否则中文顿号会被带到英文界面上。 */
+export function peakWindowsText(separator = ', '): string {
+  return PEAK_WINDOWS
+    .map(([from, to]) => `${String(from).padStart(2, '0')}:00–${String(to).padStart(2, '0')}:00`)
+    .join(separator)
+}
+
+/**
+ * 下一次时段边界距离 `time` 还有多少毫秒；扫描窗口内找不到翻转时返回 null。
+ * 边界已过或恰好踩线时返回 0 而不是负数——调用方的节拍可能刚好晚于边界一瞬，
+ * 报一个负的剩余时间只会让人怀疑读数坏了。
+ */
+export function msUntilFlip(time: number, holidays: readonly string[] = DEFAULT_HOLIDAYS): number | null {
+  const now = Number.isFinite(time) ? time : 0
+  const next = periodAt(now, holidays).next
+  return next === null ? null : Math.max(0, next.at - now)
+}
+
+/** 倒计时的时分秒拆解，供调用方按语言拼装文案；
+ *  这里只做算术，不含任何语言的单位词。 */
+export interface CountdownParts {
+  hours: number
+  minutes: number
+  seconds: number
+}
+
+/** 把剩余毫秒拆成时分秒；负值与非有限值一律按 0 处理。 */
+export function countdownParts(remainingMs: number | null): CountdownParts | null {
+  if (remainingMs === null || !Number.isFinite(remainingMs)) return null
+  const total = Math.max(0, Math.floor(remainingMs / 1000))
+  return {
+    hours: Math.floor(total / 3600),
+    minutes: Math.floor((total % 3600) / 60),
+    seconds: total % 60,
+  }
 }
