@@ -42,10 +42,14 @@ import { makeStatsTokens } from './statsTokens'
  *  剩下的空间，好让卡片滚动而不是跑出屏幕。 */
 interface Anchor { left: number; top: number; width: number; maxHeight: number }
 
-/** 卡片宽度（px）：对齐 harness 官方面板的上限（`stat-dialog.module.css` 的
- *  `max-width: min(440px, 100vw - 24px)`），两张复用卡的环形图与图例因此能并排
- *  放下且不与官方弹窗抢宽度。实际宽度再受触发条与视口约束（见 `place()`）。 */
-const CARD_WIDTH = 440
+/** 卡片宽度（px）：对齐**同一行**那个官方浮层的宽度——`ContextMeter.module.css`
+ *  的 `width: min(264px, 100vw - 24px)`。
+ *
+ *  这里曾经取 440px（`stat-dialog` 的宽度）。那个参照物是错的选择：`stat-dialog` 是
+ *  居中弹窗，而这一行的邻居是窄的锚定浮层（264px）。两个浮层都会挂在同一层级上，
+ *  宽出一大截的那张会压到侧栏上，看起来像被切了一块。
+ *  实际宽度再受触发条与视口约束（见 `dockPlacement.ts`）。 */
+const CARD_WIDTH = 264
 
 /** 视口两侧各留的边距（px）：卡片是 `position: fixed`，留出它才不会贴边。
  *  与官方面板的 `100vw - 24px` 同源（每侧 12px）。 */

@@ -406,10 +406,10 @@ describe('ComposerDock — the expanded card', () => {
     await m.unmount()
   })
 
-  test('a narrow trigger still yields a card wide enough for the reused cards', async () => {
-    // The composer line can be short, but the two embedded cards each carry a donut
-    // plus a legend. Following the trigger's width clipped their right-hand figures, so
-    // the card takes its own preferred width instead.
+  test('a narrow trigger still yields the card its own preferred width', async () => {
+    // The composer line can be short while the card's content is not. Following the
+    // trigger's width alone clipped the reused cards' right-hand figures, so the card
+    // falls back to its own preferred width (matching the official neighbour's).
     const D = Dock()
     const m = await mount(h(D, { sessionId: 's1', ...seatOf(timelineWith(DEEPSEEK_PEAK)) }))
     await flush()
@@ -418,7 +418,9 @@ describe('ComposerDock — the expanded card', () => {
     await click(trigger)
     const style = query(m.container, '.lc-dock-card').getAttribute('style') ?? ''
     const minWidth = Number(/min-width:\s*(\d+)px/.exec(style)?.[1] ?? '0')
-    assert.equal(minWidth, 440, 'the card takes its preferred width, not the 120px trigger')
+    // 264px 是同一行那个官方浮层的宽度（`ContextMeter.module.css`），因此两个浮层
+    // 同时出现时不会互相压住。
+    assert.equal(minWidth, 264, 'the card takes its preferred width, not the 120px trigger')
     await m.unmount()
   })
 
@@ -665,6 +667,7 @@ describe('ComposerDock — the expanded card', () => {
 
 describe('ComposerDock — the expanded card matches the official popup layer', () => {
   const css = readFileSync(join(process.cwd(), 'src/client/styles/composerDock.css'), 'utf8')
+  const src = readFileSync(join(process.cwd(), 'src/client/components/composerDock.tsx'), 'utf8')
   const ruleOf = (selector: string): string => {
     // Anchor at the line start: the variables rule near the top also ends in `.lc-dock-card`.
     const m = new RegExp(`^${selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\{([^}]*)\\}`, 'm').exec(css)
@@ -692,6 +695,17 @@ describe('ComposerDock — the expanded card matches the official popup layer', 
     assert.match(body, /--dsw-elevation-prominent/, 'the official popup elevation')
     assert.match(body, /z-index:\s*1100/, 'the same stacking level as the official popup')
     assert.doesNotMatch(body, /border:\s*1px/, 'the official surface carries its hairline in the elevation, not a 1px border')
+  })
+
+  test('the card is sized and padded like the official popover beside it', () => {
+    // This card lives on the same row as the official context meter, and both open at
+    // z-index 1100 — so when both are up, the wider one simply covers the other. The
+    // naive reference was `stat-dialog` (440px), a centred dialog, which made this card
+    // overhang the sidebar. The right reference is the neighbour actually on this row:
+    // `ContextMeter.module.css` — `width: min(264px, 100vw - 24px)`, `padding: 12px`.
+    const body = ruleOf('.lc-dock-card')
+    assert.match(body, /padding:\s*12px/, 'the neighbour\u2019s padding')
+    assert.match(src, /const CARD_WIDTH = 264/, 'and its width, not the centred dialog\u2019s 440')
   })
 
   test('every block inside the card is border-box, so none of them overflow', () => {

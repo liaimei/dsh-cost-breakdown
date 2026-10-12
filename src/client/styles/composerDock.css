@@ -82,7 +82,8 @@ body[data-ds-dark-theme] .lc-dock-card {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 14px;
+  /* 内边距逐字对齐官方的同行浮层（`ContextMeter.module.css` 的 `.panel`：12px）。 */
+  padding: 12px;
   background: var(--dsw-specific-menu, var(--dsw-alias-bg-layer-2));
   backdrop-filter: var(--dsw-menu-backdrop-filter, none);
   border-radius: var(--dsw-radius-lg, 16px);
