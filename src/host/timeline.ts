@@ -159,6 +159,9 @@ const costModelsSchema = z.record(z.string(), costModelSchema)
 /** session 成本的 wire 形状——每个提供该值的 projection 共用（activity.ts 会 import 它）。 */
 export const costUsageSchema = z.record(z.string(), costModelsSchema)
 
+/** 会话级按 (provider, model) 的请求次数。 */
+export const callCountsSchema = z.record(z.string(), z.record(z.string(), z.number().int().nonnegative()))
+
 /** 平台按次积分费率：`<provider>:<model>` → 每次请求的积分。 */
 export const creditRatesSchema = z.record(z.string(), z.record(z.string(), z.number().nonnegative()))
 
@@ -243,6 +246,7 @@ export const contextTimelineSchema = z.object({
   events: z.array(contextEventSchema).optional(),
   cost: costUsageSchema.optional(),
   turnCost: turnCostUsageSchema.optional(),
+  calls: callCountsSchema.optional(),
   creditRates: creditRatesSchema.optional(),
   timing: timingTotalsSchema.optional(),
   systems: z.array(systemPromptNodeSchema).optional(),
@@ -281,6 +285,7 @@ const timelineStateSchema = z.object({
   archived: z.array(surfaceNodeSchema),
   cost: costUsageSchema.optional(),
   turnCost: turnCostUsageSchema.optional(),
+  calls: callCountsSchema.optional(),
   archiveFloor: z.number().optional(),
   timing: timingTotalsSchema.optional(),
   humanInputs: z.number().int().nonnegative().optional(),

@@ -517,7 +517,12 @@ export function makeContextView(
         )}
         <div className="lc-cols lc-head">
           <StatsTokens usage={usage} current={data.current} breakdown={breakdown} />
-          <StatsCost usage={data.cost ?? null} currency={activeLocale === 'zh' ? 'cny' : 'usd'} />
+          <StatsCost
+            usage={data.cost ?? null}
+            calls={data.calls ?? null}
+            creditRates={data.creditRates ?? null}
+            currency={activeLocale === 'zh' ? 'cny' : 'usd'}
+          />
           <StatsTiming timing={data.timing ?? null} spans={data.spans} />
         </div>
 

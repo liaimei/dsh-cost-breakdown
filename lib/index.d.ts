@@ -77,6 +77,8 @@ interface TimelineState {
   /** 每轮消费账本（见 TurnCostUsage）。与 `cost` 由同一次 `accumulateCost` 写出，
    *  因此两者对同一次结算永远一致。键是十进制 turn 字符串。 */
   turnCost?: TurnCostUsage;
+  /** 会话级按 (provider, model) 的请求次数（见 SessionCallCounts）。 */
+  calls?: SessionCallCounts;
   /** 整个 session 的人类输入计数（见 Snapshot.humanInputs）；与 `cost` 一样从不裁剪。 */
   humanInputs?: number;
   /** 整个 session 的回复计数（见 Snapshot.answers）；与 `humanInputs` 一样从不裁剪。 */
@@ -296,6 +298,9 @@ interface Snapshot {
   events: ContextEventRecord[];
   /** session 成本的累计原料（SessionCostUsage）；在出现已知模型且报告了 usage 的请求之前缺失。 */
   cost?: SessionCostUsage;
+  /** 会话级按 (provider, model) 的请求次数（SessionCallCounts）；积分平台的消费靠它。
+   *  在首个可计价请求之前缺失。 */
+  calls?: SessionCallCounts;
   /** 每轮（turn）的消费原料（TurnCostUsage）；在出现已知模型、报告了 usage 且带 `turn` 的
    *  请求之前缺失。与会话级 `cost` 由同一次定价写出，两者不会互相矛盾。 */
   turnCost?: TurnCostUsage;
@@ -458,6 +463,14 @@ interface CostModelUsage {
 interface SessionCostUsage {
   [provider: string]: {
     [model: string]: CostModelUsage;
+  };
+}
+/** 会话级按 (provider, model) 的**请求次数**。按次计费的平台（积分制）一次请求就是
+ *  一次扣费，与 token 量无关，因此这张表与 `cost` 分开记：它是「几次」而不是「多少 token」。
+ *  平台拆分的消费视图靠它把积分平台的用量也列出来。 */
+interface SessionCallCounts {
+  [provider: string]: {
+    [model: string]: number;
   };
 }
 /** 单轮（turn）的消费原料。

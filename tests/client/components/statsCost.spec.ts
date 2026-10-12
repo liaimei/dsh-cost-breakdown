@@ -9,7 +9,7 @@ import { Donut } from '../../../src/client/components/donut'
 import { makeStatsCost } from '../../../src/client/components/statsCost'
 import { resetModelPrices, setModelPricesLoader } from '../../../src/client/modelPrices'
 import { PLATFORM_BALANCE_STORAGE_KEY, resetPlatformBalance } from '../../../src/client/balance'
-import { makeKit, hover, mount, query, queryAll, text, unhover } from '../helpers/kit'
+import { flush, makeKit, hover, mount, query, queryAll, text, unhover } from '../helpers/kit'
 
 const kit = makeKit()
 const kitZh = makeKit('zh')
@@ -153,5 +153,72 @@ describe('StatsCost', () => {
     await unhover(rows[0])
     assert.ok(!rows[0].className.includes('lc-sl-row-on'))
     await m.unmount()
+  })
+})
+
+describe('StatsCost — the per-platform breakdown', () => {
+  async function render(extra: Record<string, unknown>) {
+    const kit = makeKit('zh')
+    const Card = makeStatsCost(kit, (() => h('div')) as never)
+    const usage = {
+      workbuddy: { 'glm-5.3': { peak: { uncached: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } } },
+      'deepseek-account': { 'deepseek-v4.1-flash': { off: { uncached: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } } },
+    }
+    const m = await mount(h(Card as never, { usage, currency: 'cny', ...extra } as never))
+    await flush()
+    return m
+  }
+
+  test('lists each platform in its own unit instead of one combined figure', async () => {
+    // Currency and credits cannot be added, so a platform that bills in credits gets
+    // its own row rather than being folded into the money total.
+    setModelPricesLoader(null)
+    resetModelPrices()
+    const m = await render({
+      calls: { workbuddy: { 'glm-5.3': 4 }, 'deepseek-account': { 'deepseek-v4.1-flash': 1 } },
+      creditRates: { workbuddy: { 'glm-5.3': 0.79 } },
+    })
+    try {
+      const rows = queryAll(m.container, '.lc-sc-platform')
+      assert.equal(rows.length, 2, 'one row per platform')
+      const creditRow = rows.find(r => r.getAttribute('data-unit') === 'credits')
+      const moneyRow = rows.find(r => r.getAttribute('data-unit') === 'money')
+      assert.ok(creditRow !== undefined, 'the credit platform has its own row')
+      assert.match(text(creditRow), /3\.16/, '4 calls x 0.79 credits')
+      assert.match(text(creditRow), /4 次/, 'and its call count')
+      assert.ok(moneyRow !== undefined, 'and so does the currency platform')
+      assert.match(text(moneyRow), /¥/, 'priced in CNY')
+    } finally { await m.unmount() }
+  })
+
+  test('a credit platform is billed by calls, never by its token volume', async () => {
+    setModelPricesLoader(null)
+    resetModelPrices()
+    const kit = makeKit('zh')
+    const Card = makeStatsCost(kit, (() => h('div')) as never)
+    // Enormous token buckets: they must not leak into the credit figure.
+    const usage = { workbuddy: { 'glm-5.3': { peak: { uncached: 999_999_999, cacheRead: 0, cacheWrite: 0, output: 999_999_999 } } } }
+    const m = await mount(h(Card as never, {
+      usage, currency: 'cny',
+      calls: { workbuddy: { 'glm-5.3': 2 } },
+      creditRates: { workbuddy: { 'glm-5.3': 0.5 } },
+    } as never))
+    try {
+      await flush()
+      assert.match(text(query(m.container, '.lc-sc-platform')), /1 积分/, '2 calls x 0.5')
+    } finally { await m.unmount() }
+  })
+
+  test('an unpriced platform contributes no row at all', async () => {
+    setModelPricesLoader(null)
+    resetModelPrices()
+    const kit = makeKit('zh')
+    const Card = makeStatsCost(kit, (() => h('div')) as never)
+    const usage = { mystery: { unknown: { peak: { uncached: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } } } }
+    const m = await mount(h(Card as never, { usage, currency: 'cny' } as never))
+    try {
+      await flush()
+      assert.equal(m.container.querySelector('.lc-sc-platforms'), null, 'no rows, no section')
+    } finally { await m.unmount() }
   })
 })

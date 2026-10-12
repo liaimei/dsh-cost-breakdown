@@ -14,10 +14,11 @@ import { dayKeyOf, endOfDayKey, startOfDayKey } from '../shared/days'
 import { billedParts } from './categories'
 import { cacheHitPercent } from './format'
 import { estimateSessionCost, estimateSessionCostByPeriod, mergeCostUsage } from './cost'
+import { mergeCallCounts, mergePlatformSpends, platformSpendsOf, type PlatformSpend } from './platformSpend'
 import type { CostCurrency, ModelBook } from './cost'
 import { agentRowOf } from './agentTree'
 import { activityOf, asRecord, timelineOf, type ClientCtx, type SessionsFace } from './services'
-import type { ActivityDay, ContextActivity, ContextTimeline, SessionCostUsage, TimingTotals, TokenUsage, ToolTimingTotals } from '../shared/types'
+import type { ActivityDay, ContextActivity, ContextTimeline, SessionCallCounts, SessionCostUsage, TimingTotals, TokenUsage, ToolTimingTotals } from '../shared/types'
 
 /** 一条 session 列表行在 Insights 页渲染时的形态。`family` 与 `familyCost`
  *  是**该行**的子树（自身排在首位），列表因此无需打开任何日志
@@ -36,6 +37,8 @@ export interface OverviewRow {
   family: (ContextTimeline | null)[]
   /** 子树合并后的计费用量；没有任何计费时为 null。 */
   familyCost: SessionCostUsage | null
+  /** 该会话家族的请求次数（按 provider → model）；积分平台的消费靠它。 */
+  familyCalls?: SessionCallCounts | null
 }
 
 /** 两个快照读取器背后带防护的标准 props 读取。在面板顶部
@@ -192,6 +195,7 @@ export function rowsOfSnapshot(snapshot: unknown, workspaces?: unknown): Overvie
         activity: activityOf(values?.contextActivity),
         family: [],
         familyCost: null,
+        familyCalls: null,
       })
     } catch {
       // 不可信的行（访问器抛错）整条丢弃；列表继续工作。
@@ -226,6 +230,7 @@ export function rowsOfSnapshot(snapshot: unknown, workspaces?: unknown): Overvie
     }
     row.family = timelines
     row.familyCost = mergeCostUsage(...timelines.map(t => t?.cost))
+    row.familyCalls = mergeCallCounts(...timelines.map(t => t?.calls))
     row.activity = mergeActivity(activities)
   }
   return rows
@@ -626,6 +631,8 @@ export interface BilledTotals {
   total: number
   /** 每个 host 定价时段的美元金额，尚未换算为显示货币。 */
   cost: { peak: number; off: number; any: boolean }
+  /** 按平台拆分的消费；空数组表示没有任何平台可定价。 */
+  platforms: PlatformSpend[]
 }
 
 /** 严格按上报值折叠该范围的计费桶。与 {@link tokenPartsOf} 不同，
@@ -635,10 +642,20 @@ export interface BilledTotals {
 export function billedTotalsOf(
   rows: readonly OverviewRow[],
   book: ModelBook | null | undefined,
+  credits?: Record<string, Record<string, number>> | null,
 ): BilledTotals | null {
   const usage = mergeCostUsage(...rows.map(row => row.familyCost))
   const totals = usageTotalsOf(usage)
   if (totals === null) return null
+  // 跨会话按平台汇总：积分平台与人民币平台各自成行，口径与单会话卡片完全一致
+  // （同一个 platformSpendsOf），因此两个页面不会对同一批数据给出不同的拆分。
+  const platforms = mergePlatformSpends(...rows.map(row => platformSpendsOf(
+    row.familyCost,
+    row.familyCalls ?? null,
+    book,
+    null,
+    credits ?? null,
+  )))
   return {
     cacheRead: totals.cacheRead,
     uncached: totals.input,
@@ -646,6 +663,7 @@ export function billedTotalsOf(
     output: totals.output,
     total: totals.total,
     cost: estimateSessionCostByPeriod(usage, book),
+    platforms,
   }
 }
 

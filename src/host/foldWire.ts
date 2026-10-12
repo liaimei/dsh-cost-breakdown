@@ -50,6 +50,12 @@ function headFieldsOf(state: TimelineState): Snapshot {
   if (state.cost !== undefined) {
     result.cost = copyCostUsage(state.cost)
   }
+  // 会话级请求次数：逐层复制，理由同上。
+  if (state.calls !== undefined) {
+    const calls: Record<string, Record<string, number>> = {}
+    for (const pv in state.calls) calls[pv] = { ...state.calls[pv] }
+    result.calls = calls
+  }
   // 每轮账本同样逐层复制：对外提供的值绝不能与持久 state 别名共享。
   if (state.turnCost !== undefined) {
     const perTurn: TurnCostUsage = {}

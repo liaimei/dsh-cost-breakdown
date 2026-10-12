@@ -117,6 +117,9 @@ export function accumulateCost(
   if (model === undefined) return
   const provider = st.provider ?? ''
   st.cost = addBilledUsage(st.cost, provider, model, time, usage, holidays)
+  // 会话级请求次数：与 `cost` 同源同点累加，因此「几次」与「多少 token」永远对应得上。
+  const callsFor = st.calls?.[provider] ?? {}
+  st.calls = { ...st.calls, [provider]: { ...callsFor, [model]: (callsFor[model] ?? 0) + 1 } }
   if (turn === undefined || !Number.isFinite(turn)) return
   const key = String(turn)
   const prev = st.turnCost?.[key]

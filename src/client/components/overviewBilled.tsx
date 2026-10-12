@@ -11,8 +11,8 @@
 
 import { useState, type ReactElement } from 'react'
 import type { BilledTotals } from '../overview'
-import type { CostCurrency } from '../cost'
-import { formatCost, toCurrency } from '../cost'
+import { formatCost, toCurrency, type CostCurrency } from '../cost'
+import { fmtCredits } from '../turnSpend'
 import type { ViewKit } from '../viewkit'
 
 import { SliceList } from './sliceList'
@@ -53,7 +53,9 @@ export function makeOverviewBilled(kit: ViewKit, Donut: (props: DonutProps) => R
     }
     // 只要有计费，零值分桶就会去掉，于是图例只列出真实发生过的部分。
     const buckets = BUCKETS.filter(b => billed[b.key] > 0)
-    if (buckets.length === 0) {
+    // 没有可画的 token 分桶时，只要还有平台明细就仍然要渲染外壳——纯积分消费
+    // 正是这种情况：它有花销，但一分钱都不按 token 计。
+    if (buckets.length === 0 && billed.platforms.length === 0) {
       return (
         <div className="lc-card lc-col-donut flex-1 min-w-[min(360px,100%)]">
           {head}
@@ -76,6 +78,7 @@ export function makeOverviewBilled(kit: ViewKit, Donut: (props: DonutProps) => R
     return (
       <div className="lc-card lc-col-donut flex-1 min-w-[min(360px,100%)]">
         {head}
+        {buckets.length > 0 ? (
         <div className="lc-donut-row flex items-center justify-start gap-3 min-w-0 @max-[320px]/lc-card:gap-2 @max-[240px]/lc-card:flex-wrap">
           <Donut
             segments={buckets.map(b => ({ key: b.key, color: b.color, value: billed[b.key] }))}
@@ -87,6 +90,7 @@ export function makeOverviewBilled(kit: ViewKit, Donut: (props: DonutProps) => R
           />
           <SliceList rows={rows} hoverKey={hoverKey} onHoverKey={setHoverKey} />
         </div>
+        ) : null}
         {/* 按时段拆分：这笔开销落在费率卡的哪一侧。
             已计量、但涉及的模型没有费率的区间没有可展示的拆分。 */}
         {periodSum > 0
@@ -106,6 +110,20 @@ export function makeOverviewBilled(kit: ViewKit, Donut: (props: DonutProps) => R
                 <b>{formatCost(off, props.currency)}</b>
                 <em>{fmtShare(off, periodSum)}</em>
               </span>
+            </div>
+          )
+          : null}
+        {/* 平台明细：各平台账单单位不同，因此分行列出、不相加。 */}
+        {billed.platforms.length > 0
+          ? (
+            <div className="lc-sc-platforms">
+              {billed.platforms.map(row => (
+                <span key={row.provider} className="lc-sc-platform" data-unit={row.unit}>
+                  <span className="lc-sc-platform-name" title={row.models.join(' · ')}>{row.provider}</span>
+                  <b>{row.unit === 'credits' ? t('costStat.credits', { n: fmtCredits(row.value) }) : formatCost(toCurrency(row.value, props.currency), props.currency)}</b>
+                  <em>{t('costStat.calls', { n: row.calls })}</em>
+                </span>
+              ))}
             </div>
           )
           : null}

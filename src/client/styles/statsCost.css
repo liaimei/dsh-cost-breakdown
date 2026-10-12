@@ -24,3 +24,42 @@
 .lc-sc-balance:hover .lc-sc-balance-label { text-decoration: underline; }
 .lc-sc-balance-label { color: var(--dsw-alias-label-secondary); white-space: nowrap; }
 .lc-sc-balance b { margin-left: auto; color: var(--dsw-alias-label-primary); font-variant-numeric: tabular-nums; }
+
+/* 平台明细：每个平台一行，各自带自己的单位。
+   积分行与金额行外观一致——读者要看到的是「哪个平台花了多少」，
+   而不是被配色暗示其中一种更次要。 */
+.lc-sc-platforms {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--dsw-alias-separator-primary, rgba(128, 128, 128, 0.2));
+}
+.lc-sc-platform {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  font-size: var(--dsh-content-font-size-secondary, 13px);
+  color: var(--dsw-alias-label-secondary);
+}
+.lc-sc-platform-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--dsw-alias-label-tertiary);
+}
+.lc-sc-platform b {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  color: var(--dsw-alias-label-primary);
+}
+.lc-sc-platform em {
+  flex: none;
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+  color: var(--dsw-alias-label-tertiary);
+}

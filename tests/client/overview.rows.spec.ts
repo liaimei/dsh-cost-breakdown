@@ -72,7 +72,7 @@ describe('rowsOfSnapshot', () => {
     const [b, c, d, e] = rows
     assert.deepEqual(b, {
       id: 'b', title: 'shown', updatedAt: 5, running: true, current: true,
-      timeline: null, activity: null, family: [null], familyCost: null,
+      timeline: null, activity: null, family: [null], familyCost: null, familyCalls: null,
     })
     assert.equal(c.title, 'titled')
     assert.equal(c.current, false)

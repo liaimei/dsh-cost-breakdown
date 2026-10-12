@@ -13,8 +13,10 @@
 
 import { useState, type ReactElement } from 'react'
 import { balanceEntryOf, readPlatformBalance } from '../balance'
-import type { PlatformBalance, SessionCostUsage } from '../../shared/types'
+import type { PlatformBalance, SessionCallCounts, SessionCostUsage } from '../../shared/types'
 import { estimateSessionCostByBucket, formatCost, toCurrency, type CostCurrency } from '../cost'
+import { platformSpendsOf } from '../platformSpend'
+import { fmtCredits } from '../turnSpend'
 import { useModelPrices } from '../modelPrices'
 import type { ViewKit } from '../viewkit'
 
@@ -54,11 +56,15 @@ const PERIODS: readonly { key: 'peak' | 'off'; color: string; label: string }[] 
  */
 export function makeStatsCost(kit: ViewKit, Donut: (props: DonutProps) => ReactElement): (props: {
   usage: SessionCostUsage | null
+  calls?: SessionCallCounts | null
+  creditRates?: Record<string, Record<string, number>> | null
   currency: CostCurrency
 }) => ReactElement {
   const { t, fmtShare } = kit
   return function StatsCost(props: {
     usage: SessionCostUsage | null
+    calls?: SessionCallCounts | null
+    creditRates?: Record<string, Record<string, number>> | null
     currency: CostCurrency
   }): ReactElement {
     // 图例行 ↔ 环图分段的悬停联动（共享 key，两侧都可设置）。
@@ -82,6 +88,8 @@ export function makeStatsCost(kit: ViewKit, Donut: (props: DonutProps) => ReactE
     const totalText = split.any ? money(split.total) : '—'
     // 分桶行：主行给占比（环图上的份额），次行给这笔钱本身——两者都是这张卡要回答的问题。
     // 只有真的花了钱的分桶才进环图与图例，环图因此不会画零弧。
+    // 按平台拆分：积分平台与人民币平台各自成行，绝不加成一个数（两种货币不能相加）。
+    const platforms = platformSpendsOf(props.usage, props.calls, book, null, props.creditRates)
     const buckets = BUCKETS.filter(b => split[b.key] > 0)
     const rows: SliceRow[] = buckets.map(b => ({
       key: b.key,
@@ -91,6 +99,10 @@ export function makeStatsCost(kit: ViewKit, Donut: (props: DonutProps) => ReactE
       count: money(split[b.key]),
     }))
     const periodSum = split.peak + split.off
+    // 卡片是否有内容：有钱可分桶，**或**有平台明细可列。只有积分平台时 `split.any`
+    // 为假（积分不能按 token 定价），但那正是最该显示平台明细的情况——此前它会被
+    // 当成「无数据」整卡收起，积分消费因此完全看不见。
+    const hasContent = split.any || platforms.length > 0
     return (
       <div className="lc-card lc-col-donut flex-1 min-w-[min(360px,100%)]">
         <div className="lc-card-title">
@@ -100,10 +112,11 @@ export function makeStatsCost(kit: ViewKit, Donut: (props: DonutProps) => ReactE
             ? <span className="lc-card-rate" title={t('costStat.note')}>{totalText}</span>
             : null}
         </div>
-        {!split.any
+        {!hasContent
           ? <div className="lc-empty">{unpriced ? t('stats.costUnavailable') : t('costStat.empty')}</div>
           : (
             <>
+              {split.any ? (
               <div className="lc-donut-row flex items-center justify-start gap-3 min-w-0 @max-[320px]/lc-card:gap-2 @max-[240px]/lc-card:flex-wrap">
                 <Donut
                   segments={buckets.map(b => ({ key: b.key, color: b.color, value: split[b.key] }))}
@@ -115,7 +128,9 @@ export function makeStatsCost(kit: ViewKit, Donut: (props: DonutProps) => ReactE
                 />
                 <SliceList rows={rows} hoverKey={hoverKey} onHoverKey={setHoverKey} />
               </div>
+              ) : null}
               {/* 时段拆分与分桶拆分出自同一次累加，所以两行的和恒等于总额。 */}
+              {split.any ? (
               <div className="lc-sc-periods">
                 {PERIODS.map(p => (
                   <span key={p.key} className={'lc-sc-period' + (split[p.key] <= 0 ? ' lc-sc-period-dim' : '')}>
@@ -126,6 +141,22 @@ export function makeStatsCost(kit: ViewKit, Donut: (props: DonutProps) => ReactE
                   </span>
                 ))}
               </div>
+              ) : null}
+              {/* 平台明细：回答「这笔钱花在哪个平台上」。只有一个平台时这行价值不大，
+                  但一旦用过积分平台，总额与平台之和就对不上——那时必须让读者看见为什么。 */}
+              {platforms.length > 0
+                ? (
+                  <div className="lc-sc-platforms">
+                    {platforms.map(row => (
+                      <span key={row.provider} className="lc-sc-platform" data-unit={row.unit}>
+                        <span className="lc-sc-platform-name" title={row.models.join(' · ')}>{row.provider}</span>
+                        <b>{row.unit === 'credits' ? t('costStat.credits', { n: fmtCredits(row.value) }) : money(row.value)}</b>
+                        <em>{t('costStat.calls', { n: row.calls })}</em>
+                      </span>
+                    ))}
+                  </div>
+                )
+                : null}
               {/* 余额：有则给出充值/赠送明细，取不到时整行不出现。 */}
               {entry !== null
                 ? (

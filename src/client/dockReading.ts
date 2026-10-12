@@ -16,7 +16,7 @@ import { useModelPrices } from './modelPrices'
 import { projectionOf, type SessionStandardProps } from './services'
 import { timelineOf } from './services'
 import { DEFAULT_HOLIDAYS, msUntilFlip, periodAt, type PricingPeriod } from '../shared/officialRates'
-import type { ContextTimeline, SessionCostUsage } from '../shared/types'
+import type { ContextTimeline, SessionCallCounts, SessionCostUsage } from '../shared/types'
 import { isDeepSeekProvider } from '../shared/providers'
 
 /** 停靠区那一行渲染的全部内容，已把当前 agent 及其后代合并进来——
@@ -33,6 +33,10 @@ export interface DockReading {
   tokens: number
   /** 是否有任何计费 provider 是 DeepSeek（此时时段划分才有意义）。 */
   deepseek: boolean
+  /** 会话级按 (provider, model) 的请求次数；积分平台的消费靠它。 */
+  calls: SessionCallCounts | null
+  /** 平台声明的按次积分费率（host 从平台目录读出）。 */
+  creditRates: Record<string, Record<string, number>> | null
   /** 当前定价时段及其下一次翻转。 */
   period: PricingPeriod
   failed: boolean
@@ -101,6 +105,8 @@ export function readDock(props: SessionStandardProps, deps: DockDeps, book: Mode
   return {
     timeline,
     usage: merged,
+    calls: timeline?.calls ?? null,
+    creditRates: timeline?.creditRates ?? null,
     cost: estimateSessionCost(merged, book, deps.currency),
     tokens: billedTokensOf(merged),
     // 峰/谷时只对 DeepSeek provider 有意义；其他厂商的 `peak`

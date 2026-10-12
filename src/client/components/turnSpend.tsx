@@ -18,7 +18,7 @@ import { useModelPrices } from '../modelPrices'
 import { formatCost, toCurrency, type CostCurrency } from '../cost'
 import type { ThirdPartyRates } from '../../shared/thirdPartyRates'
 import type { CreditRates, TurnSpend } from '../turnSpend'
-import { turnSpendOf } from '../turnSpend'
+import { fmtCredits, turnSpendOf } from '../turnSpend'
 import type { ViewKit } from '../viewkit'
 
 /** 该槽位的 props；messageId 是不可信输入。 */
@@ -52,13 +52,6 @@ function turnOfMessageId(nodes: readonly ConversationNodeLike[] | undefined, mes
     } catch { continue }
   }
   return null
-}
-
-/** 积分按平台习惯去尾零：小于 1 保留三位，否则两位。 */
-function fmtCredits(value: number): string {
-  if (value === 0) return '0'
-  const digits = Math.abs(value) < 1 ? 3 : 2
-  return value.toFixed(digits).replace(/\.?0+$/, '')
 }
 
 /** 悬停说明：这一轮按什么算的。用户看得出数字的来源，也看得出它是估算。 */

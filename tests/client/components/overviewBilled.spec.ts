@@ -23,6 +23,8 @@ const BILLED: BilledTotals = {
   output: 250,
   total: 1750,
   cost: { peak: 0.3, off: 0.1, any: true },
+  // 该范围里各平台的消费；这个 fixture 只有按 token 计费的量，因此没有平台行。
+  platforms: [],
 }
 
 function rowOf(container: HTMLElement, i: number): { pct: string; label: string; count: string } {
@@ -88,7 +90,7 @@ describe('OverviewBilled', () => {
 
   test('a billed range that priced nothing keeps its buckets and drops the split', async () => {
     // The buckets are metered even when no rate applied (an unpriced model).
-    const unpriced: BilledTotals = { ...BILLED, cost: { peak: 0, off: 0, any: false } }
+    const unpriced: BilledTotals = { ...BILLED, cost: { peak: 0, off: 0, any: false }, platforms: [] }
     const m = await mount(h(Billed, { billed: unpriced, currency: 'usd' }))
     assert.equal(queryAll(m.container, '.lc-sl-row').length, 3)
     assert.equal(queryAll(m.container, '.lc-ov-billed-period').length, 0)

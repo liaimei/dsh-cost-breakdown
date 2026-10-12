@@ -105,3 +105,10 @@ export function turnSpendOf(
   if (anyCredit) return { value: creditTotal, unit: 'credits' }
   return cost.any ? { value: cost.total, unit: 'money' } : null
 }
+
+/** 积分按平台习惯去尾零：小于 1 保留三位，否则两位。 */
+export function fmtCredits(value: number): string {
+  if (value === 0) return '0'
+  const digits = Math.abs(value) < 1 ? 3 : 2
+  return value.toFixed(digits).replace(/\.?0+$/, '')
+}

@@ -4,7 +4,7 @@
  * 写它的 reducer 归 `fold.ts` 所有。
  */
 
-import type { Category, ContextEventRecord, FileOpRecord, RequestRecord, SessionCostUsage, SurfaceNode, SystemPromptNode, TimingSpan, TimingTotals, TurnCostUsage } from '../shared/types'
+import type { Category, ContextEventRecord, FileOpRecord, RequestRecord, SessionCostUsage, SurfaceNode, SystemPromptNode, TimingSpan, TimingTotals, SessionCallCounts, TurnCostUsage } from '../shared/types'
 import type { FoldBounds } from './config'
 
 /** 本 fold 消费的运行时事件信封。核心 `SessionEvent` 联合类型只覆盖核心事件类型；
@@ -54,6 +54,8 @@ export interface TimelineState {
   /** 每轮消费账本（见 TurnCostUsage）。与 `cost` 由同一次 `accumulateCost` 写出，
    *  因此两者对同一次结算永远一致。键是十进制 turn 字符串。 */
   turnCost?: TurnCostUsage
+  /** 会话级按 (provider, model) 的请求次数（见 SessionCallCounts）。 */
+  calls?: SessionCallCounts
   /** 整个 session 的人类输入计数（见 Snapshot.humanInputs）；与 `cost` 一样从不裁剪。 */
   humanInputs?: number
   /** 整个 session 的回复计数（见 Snapshot.answers）；与 `humanInputs` 一样从不裁剪。 */

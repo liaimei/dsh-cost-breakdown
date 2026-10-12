@@ -364,7 +364,12 @@ export function makeComposerDock(
               {/* 余额不再单列：费用卡自带那行（与统计页一致），两处各写一遍会显得像两个数。 */}
               <div className="lc-dock-cards">
                 <StatsTokens usage={tokenUsage} current={reading.timeline.current} breakdown={breakdown} />
-                <StatsCost usage={reading.usage} currency={currency} />
+                <StatsCost
+                  usage={reading.usage}
+                  calls={reading.calls ?? null}
+                  creditRates={reading.creditRates ?? null}
+                  currency={currency}
+                />
               </div>
               <DockRates kit={kit} peak={period.peak} currency={currency} />
               <div className="lc-dock-note">{t('dock.note')}</div>
