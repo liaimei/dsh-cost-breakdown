@@ -25,9 +25,10 @@ afterEach(() => {
   setModelPricesLoader(null)
 })
 
-/** 一条真实的聊天节点形状：turn 在 `location.turn.turn` 上，不在顶层。 */
+/** 一条**真实**的聊天节点形状，抄自官方 `finalNode()`：turn 在顶层，
+ *  既没有 `location`，`requests` 也不在瘦身 head 上。 */
 function assistantNode(messageId: string, turn: number): unknown {
-  return { kind: 'assistant', seq: 42, messageId, location: { kind: 'turn', turn: { turn, status: 'closed' } } }
+  return { kind: 'assistant', seq: 42, messageId, turn, step: 1, time: 0 }
 }
 
 /** 座位：`useChat` 给出节点，`useProjection` 给出投影。都是真实形状的最小子集。 */
@@ -92,6 +93,22 @@ describe('the per-turn spend reading', () => {
     } finally { await m.unmount() }
   })
 
+  test('also accepts a turn nested under location', async () => {
+    // Defensive compatibility: some node shapes carry the turn in the rendering
+    // location object instead of at the top level.
+    setModelPricesLoader(null)
+    resetModelPrices()
+    setRateTables({ credits: { 'workbuddy:glm-5.3': 0.5 } })
+    const View = makeTurnSpend(kit, () => 'cny', () => null, () => ({ workbuddy: { 'glm-5.3': 0.5 } }))
+    const node = { kind: 'assistant', seq: 42, messageId: 'm1', location: { kind: 'turn', turn: { turn: 2 } } }
+    const timeline = timelineWithTurnCost({ '2': creditEntry('workbuddy', 'glm-5.3', 2) })
+    const m = await mount(h(View as never, seatOf([node], timeline) as never))
+    try {
+      await flush()
+      assert.equal(text(query(m.container, '.lc-turn-spend')), '1 积分')
+    } finally { await m.unmount() }
+  })
+
   test('renders nothing when the turn has no ledger', async () => {
     setModelPricesLoader(null)
     resetModelPrices()
@@ -107,7 +124,8 @@ describe('the per-turn spend reading', () => {
     setModelPricesLoader(null)
     resetModelPrices()
     const View = makeTurnSpend(kit, () => 'cny', () => null, () => null)
-    const node = { kind: 'assistant', seq: 1, messageId: 'm1', location: { kind: 'turn-process' } }
+    // 一个没有 turn 的节点（例如被截断的合成节点）：不得把别人的轮次算给它。
+    const node = { kind: 'assistant', seq: 1, messageId: 'm1' }
     const timeline = timelineWithTurnCost({ '1': creditEntry('workbuddy', 'glm-5.3', 1) })
     const m = await mount(h(View as never, seatOf([node], timeline) as never))
     try {

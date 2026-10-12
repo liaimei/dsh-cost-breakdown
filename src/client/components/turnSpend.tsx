@@ -29,23 +29,27 @@ export interface TurnSpendProps extends SessionStandardProps {
 
 /** 按 messageId 找出那条回复所属的 turn。
  *
- *  turn 号**直接来自聊天节点**（`node.location.turn.turn`，官方 AssistantNodeView
- *  用的就是它），而不是从请求记录里按 seq 反推：`requests` 在瘦身 head 上是空的
- *  （只在 detail 通道里），靠它匹配会永远落空——这正是此前读数不显示的原因。
- *  节点属于不可信输入，因此逐层自证后再借用。 */
+ *  turn 号就在聊天节点**顶层**的 `turn` 字段上（官方 `finalNode` 构造节点时写的是
+ *  `{ kind: "assistant", seq, messageId, turn, step, ... }`）。此前我读的是
+ *  `node.location.turn.turn`——那是**渲染层**的位置对象，`useChat` 给出的 legacy 切片里
+ *  根本没有 `location`，所以恒为 undefined，读数永远不显示。
+ *
+ *  节点属于不可信输入：既可能缺字段，也可能是恶意对象，因此逐层自证后再借用。 */
 function turnOfMessageId(nodes: readonly ConversationNodeLike[] | undefined, messageId: string): number | null {
   for (const node of nodes ?? []) {
     try {
       if (node.kind !== 'assistant' || node.messageId !== messageId) continue
+      const turn = (node as { turn?: unknown }).turn
+      if (typeof turn === 'number' && Number.isFinite(turn)) return turn
+      // 兼容：某些形态把轮次放在 location 上（`location.turn.turn`）。
       const location = (node as { location?: unknown }).location
       if (location === null || typeof location !== 'object') return null
       const loc = location as { kind?: unknown; turn?: unknown }
-      // 只有这两种位置带轮次；其余（如 turn-process）没有可用的 turn。
       if (loc.kind !== 'turn' && loc.kind !== 'step') return null
-      const turn = loc.turn !== null && typeof loc.turn === 'object'
+      const nested = loc.turn !== null && typeof loc.turn === 'object'
         ? (loc.turn as { turn?: unknown }).turn
         : undefined
-      return typeof turn === 'number' && Number.isFinite(turn) ? turn : null
+      return typeof nested === 'number' && Number.isFinite(nested) ? nested : null
     } catch { continue }
   }
   return null
