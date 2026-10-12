@@ -7,15 +7,10 @@ import { useState, type ReactElement } from 'react'
 import { balanceEntryOf, readPlatformBalance } from '../balance'
 import type { PlatformBalance } from '../../shared/types'
 import type { ClientCtx } from '../services'
+import { symbolOf } from '../cost'
 import type { ViewKit } from '../viewkit'
 
 /** 平台所支持币种的符号前缀；其余币种直接显示代码。 */
-function symbolOf(currency: string): string {
-  if (currency === 'CNY') return '¥'
-  if (currency === 'USD') return '$'
-  return currency + ' '
-}
-
 /** 药丸点击后打开的平台控制台页面。 */
 const USAGE_URL = 'https://platform.deepseek.com/usage'
 

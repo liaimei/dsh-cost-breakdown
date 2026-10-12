@@ -258,7 +258,11 @@ describe('ComposerDock — the expanded card', () => {
     assert.ok(body.includes('Token Stats'))
     assert.ok(body.includes('Cost Stats'))
     assert.ok(body.includes('Rate card'))
-    assert.equal(queryAll(card, '.lc-dock-cards > .lc-card').length, 2, 'token + cost, the same two cards the page draws')
+    // token + cost are the same two cards the page draws; any additional cards are the
+    // per-platform ones, which only appear when a platform is actually billable.
+    const cards = queryAll(card, '.lc-dock-cards > .lc-card')
+    const platformCards = queryAll(card, '.lc-dock-cards > .lc-pf-card').length
+    assert.equal(cards.length - platformCards, 2, 'token + cost, the same two cards the page draws')
     // The rate table quotes the period in force, so both official rows appear.
     const rows = queryAll(card, '.lc-dock-table tbody tr')
     assert.equal(rows.length, 2)

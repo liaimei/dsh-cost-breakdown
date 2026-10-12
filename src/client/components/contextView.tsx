@@ -8,6 +8,16 @@ import type { ClientCtx, ConversationNodeLike } from '../services'
 import { makeContentFetcher, makeHeaderFetcher, useHistoryFace } from '../historyPage'
 import { useTimelineSource } from '../timelineSource'
 import { makeDetailNote } from './detailNote'
+import { readPlatformBalance } from '../balance'
+import { useModelPrices } from '../modelPrices'
+import { balanceEntryOf } from '../balance'
+import { fmtCredits } from '../turnSpend'
+import { isDeepSeekProvider } from '../../shared/providers'
+import { symbolOf, type CostCurrency } from '../cost'
+import type { PlatformSpend } from '../platformSpend'
+import { readPlatformCredits, type PlatformCredits } from '../platformCredits'
+import { BALANCE_POLL_MS } from '../constants'
+import type { PlatformBalance } from '../../shared/types'
 import { canOpenPathsOf, openPathVia, openResourceVia, workspaceOf } from '../services'
 import { activityOf, activityOfOps, locateStepOf, previewAddressOf } from '../fileActivity'
 import type { FileEntry, FileOp } from '../fileActivity'
@@ -26,6 +36,8 @@ import { makeUpgradeGate } from './upgradeGate'
 import { makeRequestDetail } from './requestDetail'
 import { countsOfRecords, makeStatsContext, makeSubagentCost, toolTallyOf } from './statsContext'
 import { makeStatsCost } from './statsCost'
+import { makeStatsPlatforms } from './statsPlatforms'
+import { platformSpendsOf } from '../platformSpend'
 import { makeStatsTiming } from './statsTiming'
 import { makeStatsTokens } from './statsTokens'
 import { makeLegend, makeStackedBar } from './stackedBar'
@@ -67,6 +79,7 @@ export function makeContextView(
   const heads = makeAgentHeads()
   const StatsContext = makeStatsContext(kit, makeSubagentCost(ctx, heads))
   const StatsCost = makeStatsCost(kit, Donut)
+  const StatsPlatforms = makeStatsPlatforms(kit)
   const StatsTiming = makeStatsTiming(kit, Donut)
   const StatsTokens = makeStatsTokens(kit, Donut)
   const PluginInfo = makePluginInfo(kit)
@@ -76,7 +89,46 @@ export function makeContextView(
   const AgentGraph = makeAgentGraph(ctx, kit, heads)
   const ErrorBoundary = makeErrorBoundary(t)
 
+
+/** 各平台的剩余额度文案。余额只归自己那一张卡：DeepSeek 的账户余额给 DeepSeek，
+ *  剩余积分给积分平台；读不到的整行不出现（宁可少一个数字，也不显示错配的额度）。 */
+function platformBalanceTexts(
+  rows: readonly PlatformSpend[],
+  balance: PlatformBalance | null,
+  credits: PlatformCredits | null,
+  currency: CostCurrency,
+): Record<string, { text: string } | undefined> {
+  const deepseek = balanceEntryOf(balance, currency)
+  const out: Record<string, { text: string } | undefined> = {}
+  for (const row of rows) {
+    if (row.unit === 'credits') {
+      out[row.provider] = credits === null || credits.unlimited
+        ? undefined
+        : { text: fmtCredits(credits.total) }
+      continue
+    }
+    out[row.provider] = isDeepSeekProvider(row.provider) && deepseek !== null
+      ? { text: symbolOf(deepseek.currency) + deepseek.total.toFixed(2) }
+      : undefined
+  }
+  return out
+}
+
   function ContextViewBody(props: ContextViewProps): ReactElement {
+    // 价目册与平台余额：与输入框那行读数共用同一套读取器，两处因此不会对同一次
+    // 结算或同一个余额给出不同答案。
+    const { book } = useModelPrices()
+    const [balance, setBalance] = useState<PlatformBalance | null>(null)
+    const [credits, setCredits] = useState<PlatformCredits | null>(null)
+    useEffect(() => {
+      setBalance(readPlatformBalance(setBalance))
+      setCredits(readPlatformCredits(setCredits))
+      const timer = setInterval(() => {
+        setBalance(readPlatformBalance(setBalance))
+        setCredits(readPlatformCredits(setCredits))
+      }, BALANCE_POLL_MS)
+      return () => { clearInterval(timer) }
+    }, [])
     const sessionId = props.sessionId
     const inSidebar = props.host === 'sidebar'
     // 标签页与 /context 弹窗共享这份逐会话明细存储，所以已打开的标签页
@@ -522,6 +574,12 @@ export function makeContextView(
             calls={data.calls ?? null}
             creditRates={data.creditRates ?? null}
             currency={activeLocale === 'zh' ? 'cny' : 'usd'}
+          />
+          {/* 每个平台一张卡：单位不同，因此绝不合成一个总额。 */}
+          <StatsPlatforms
+            rows={platformSpendsOf(data.cost ?? null, data.calls ?? null, book, null, data.creditRates ?? null)}
+            currency={activeLocale === 'zh' ? 'cny' : 'usd'}
+            balances={platformBalanceTexts(platformSpendsOf(data.cost ?? null, data.calls ?? null, book, null, data.creditRates ?? null), balance, credits, activeLocale === 'zh' ? 'cny' : 'usd')}
           />
           <StatsTiming timing={data.timing ?? null} spans={data.spans} />
         </div>

@@ -169,7 +169,9 @@ describe('OverviewPanel', () => {
     // 500 cache read, 1000 uncached, 250 output) beside the Token Stats ring
     // folded into the Context tab's OWN composition categories, beside the
     // Timing Stats ring (the summed totals, un-split — no fixture carries a decode split).
-    const statsCards = queryAll(m.container, '.lc-ov-stats > .lc-card')
+    // The three summary cards, excluding the per-platform ones (which carry .lc-card too
+    // and only appear when a platform is billable — this fixture prices tokens, so none).
+    const statsCards = queryAll(m.container, '.lc-ov-stats > .lc-card:not(.lc-pf-card)')
     assert.equal(statsCards.length, 3)
     // Card 1: the exact platform buckets, ordered as the donut paints them.
     assert.equal(query(statsCards[0], '.lc-donut-center b').textContent, '1.8k')

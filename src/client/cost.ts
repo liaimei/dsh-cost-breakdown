@@ -426,6 +426,14 @@ export function mergeCostUsage(...usages: (SessionCostUsage | null | undefined)[
   return any ? out : null
 }
 
+/** 币种符号：只认平台会报的这两种，其余原样带一个空格。
+ *  / 工具提示里的余额明细都靠它，因此只有这一处实现。 */
+export function symbolOf(currency: string): string {
+  if (currency === 'CNY') return '¥'
+  if (currency === 'USD') return '$'
+  return currency + ' '
+}
+
 /** 低于 $1 时保留两位有效数字，之上则取到分：否则不到一分的
  *  单 session 数字会打印成 `$0.00`。货币符号直接拼接，不做本地化。 */
 export function formatCost(amount: number, currency: CostCurrency): string {

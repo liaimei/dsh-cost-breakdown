@@ -14,9 +14,8 @@
 import { useState, type ReactElement } from 'react'
 import { balanceEntryOf, readPlatformBalance } from '../balance'
 import type { PlatformBalance, SessionCallCounts, SessionCostUsage } from '../../shared/types'
-import { estimateSessionCostByBucket, formatCost, toCurrency, type CostCurrency } from '../cost'
+import {estimateSessionCostByBucket, formatCost, toCurrency, type CostCurrency, symbolOf } from '../cost'
 import { platformSpendsOf } from '../platformSpend'
-import { fmtCredits } from '../turnSpend'
 import { useModelPrices } from '../modelPrices'
 import type { ViewKit } from '../viewkit'
 
@@ -25,12 +24,6 @@ import type { SliceRow } from './sliceList'
 import type { DonutProps } from './donut'
 
 /** 平台所支持币种的符号前缀；其余币种直接显示代码。 */
-function symbolOf(currency: string): string {
-  if (currency === 'CNY') return '¥'
-  if (currency === 'USD') return '$'
-  return currency + ' '
-}
-
 /** 平台控制台页面，点余额行时打开。 */
 const USAGE_URL = 'https://platform.deepseek.com/usage'
 
@@ -142,22 +135,8 @@ export function makeStatsCost(kit: ViewKit, Donut: (props: DonutProps) => ReactE
                 ))}
               </div>
               ) : null}
-              {/* 平台明细：回答「这笔钱花在哪个平台上」。只有一个平台时这行价值不大，
-                  但一旦用过积分平台，总额与平台之和就对不上——那时必须让读者看见为什么。 */}
-              {platforms.length > 0
-                ? (
-                  <div className="lc-sc-platforms">
-                    {platforms.map(row => (
-                      <span key={row.provider} className="lc-sc-platform" data-unit={row.unit}>
-                        <span className="lc-sc-platform-name" title={row.models.join(' · ')}>{row.provider}</span>
-                        <b>{row.unit === 'credits' ? t('costStat.credits', { n: fmtCredits(row.value) }) : money(row.value)}</b>
-                        <em>{t('costStat.calls', { n: row.calls })}</em>
-                      </span>
-                    ))}
-                  </div>
-                )
-                : null}
-              {/* 余额：有则给出充值/赠送明细，取不到时整行不出现。 */}
+              {/* 余额：有则给出充值/赠送明细，取不到时整行不出现。
+                  它**不属于平台明细**——那是「各平台花了多少」，这是「账户还剩多少」。 */}
               {entry !== null
                 ? (
                   <a

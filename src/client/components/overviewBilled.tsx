@@ -12,7 +12,6 @@
 import { useState, type ReactElement } from 'react'
 import type { BilledTotals } from '../overview'
 import { formatCost, toCurrency, type CostCurrency } from '../cost'
-import { fmtCredits } from '../turnSpend'
 import type { ViewKit } from '../viewkit'
 
 import { SliceList } from './sliceList'
@@ -113,20 +112,9 @@ export function makeOverviewBilled(kit: ViewKit, Donut: (props: DonutProps) => R
             </div>
           )
           : null}
-        {/* 平台明细：各平台账单单位不同，因此分行列出、不相加。 */}
-        {billed.platforms.length > 0
-          ? (
-            <div className="lc-sc-platforms">
-              {billed.platforms.map(row => (
-                <span key={row.provider} className="lc-sc-platform" data-unit={row.unit}>
-                  <span className="lc-sc-platform-name" title={row.models.join(' · ')}>{row.provider}</span>
-                  <b>{row.unit === 'credits' ? t('costStat.credits', { n: fmtCredits(row.value) }) : formatCost(toCurrency(row.value, props.currency), props.currency)}</b>
-                  <em>{t('costStat.calls', { n: row.calls })}</em>
-                </span>
-              ))}
-            </div>
-          )
-          : null}
+        {/* 平台明细交给同一组平台卡渲染（与单会话页同一个组件），
+            因此两处不会对同一批数据给出不同的拆分与措辞。 */}
+        {null}
       </div>
     )
   }

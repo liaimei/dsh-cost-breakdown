@@ -39,6 +39,7 @@ import { Donut } from './donut'
 import { useHoverTip } from './hoverTip'
 import { makeOverviewTokens } from './overviewTokens'
 import { makeOverviewBilled } from './overviewBilled'
+import { makeStatsPlatforms } from './statsPlatforms'
 import { makeOverviewUsage } from './overviewUsage'
 import { makeStatsTiming } from './statsTiming'
 import { makeOverviewCard } from './overviewCard'
@@ -73,6 +74,7 @@ export function makeOverviewPanel(ctx: ClientCtx, kit: ViewKit): (props: Overvie
   const BalanceCapsule = makeBalanceCapsule(ctx, kit)
   const DateRange = makeDateRange(kit)
   const OverviewBilled = makeOverviewBilled(kit, Donut)
+  const StatsPlatforms = makeStatsPlatforms(kit)
   const OverviewTokens = makeOverviewTokens(kit, Donut)
   const StatsTiming = makeStatsTiming(kit, Donut)
   const OverviewUsage = makeOverviewUsage(kit)
@@ -255,6 +257,8 @@ export function makeOverviewPanel(ctx: ClientCtx, kit: ViewKit): (props: Overvie
                 </div>
                 <div className="lc-ov-stats">
                   <OverviewBilled billed={kpi.billed} currency={currency} />
+                  {/* 每个平台一张卡：跨会话按平台汇总，与单会话页同一个组件。 */}
+                  <StatsPlatforms rows={kpi.billed?.platforms ?? []} currency={currency} />
                   <OverviewTokens tokens={kpi.tokenParts} />
                   <StatsTiming timing={kpi.timing} />
                 </div>

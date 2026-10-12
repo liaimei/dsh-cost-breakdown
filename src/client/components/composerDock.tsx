@@ -13,13 +13,14 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactElement } from 'react'
 import { balanceEntryOf, readPlatformBalance } from '../balance'
-import { formatCost, formatPriceRate, fromCny, toCurrency, type CostCurrency } from '../cost'
+import {formatCost, formatPriceRate, fromCny, toCurrency, type CostCurrency, symbolOf } from '../cost'
 import { readDock, useDockBook, usePricingPeriod } from '../dockReading'
 import { fmtCountdown } from '../format'
 import { contextBreakdownOf, projectionOf, tokenUsageOf } from '../services'
 import type { ClientCtx, SessionStandardProps } from '../services'
 import type { ViewKit } from '../viewkit'
 import { allDayOffReason, OFFICIAL_MODELS, peakWindowsText } from '../../shared/officialRates'
+import { BALANCE_POLL_MS } from '../constants'
 import { isDeepSeekProvider } from '../../shared/providers'
 import type { PlatformBalance, PlatformBalanceEntry } from '../../shared/types'
 import { fmtCredits } from '../turnSpend'
@@ -27,18 +28,13 @@ import { platformSpendsOf, type PlatformSpend } from '../platformSpend'
 import { readPlatformCredits, type PlatformCredits } from '../platformCredits'
 import { Donut } from './donut'
 import { makeStatsCost } from './statsCost'
+import { makeStatsPlatforms } from './statsPlatforms'
 import { makeStatsTokens } from './statsTokens'
 
 /** 平台所支持币种的符号前缀；其余币种直接显示代码。 */
-function symbolOf(currency: string): string {
-  if (currency === 'CNY') return '¥'
-  if (currency === 'USD') return '$'
-  return currency + ' '
-}
-
 /** 余额自己的轮询节奏：收起那一行长期存活，而余额随着每一笔计费请求变化，
  *  只有周期性读取才能让这行保持诚实。 */
-const BALANCE_POLL_MS = 60_000
+
 
 /** 固定定位卡片的落点，以视口像素计；`maxHeight` 是翻转方向
  *  剩下的空间，好让卡片滚动而不是跑出屏幕。 */
@@ -90,6 +86,27 @@ function balanceCellFor(
   return <span className="lc-dock-balance">{symbolOf(balance.currency) + balance.total.toFixed(2)}</span>
 }
 
+
+/** 各平台在展开卡里的余额文案。归属规则与统计页一致：DeepSeek 的账户余额只给
+ *  DeepSeek，剩余积分只给积分平台；读不到的整行不出现。 */
+function dockBalanceTexts(
+  rows: readonly PlatformSpend[],
+  entry: PlatformBalanceEntry | null,
+  credits: PlatformCredits | null,
+): Record<string, { text: string } | undefined> {
+  const out: Record<string, { text: string } | undefined> = {}
+  for (const row of rows) {
+    if (row.unit === 'credits') {
+      out[row.provider] = credits === null || credits.unlimited ? undefined : { text: fmtCredits(credits.total) }
+      continue
+    }
+    out[row.provider] = isDeepSeekProvider(row.provider) && entry !== null
+      ? { text: symbolOf(entry.currency) + entry.total.toFixed(2) }
+      : undefined
+  }
+  return out
+}
+
 /**
  * 绑定 `ctx`（语言 → 展示货币）与 `kit`，返回 composer 槽位的入口。
  * 宿主在切换语言时会重新渲染每个槽位入口，所以货币可以在每次渲染时读取
@@ -103,6 +120,7 @@ export function makeComposerDock(
   // 明细卡里复用汇总统计页的那两张卡，同一份数据、同一种排版——两处因此不会各说各话。
   const StatsTokens = makeStatsTokens(kit, Donut)
   const StatsCost = makeStatsCost(kit, Donut)
+  const StatsPlatforms = makeStatsPlatforms(kit)
   /** 当前语言决定展示货币，与其他每个成本界面一样；
    *  harness 在切换语言时会重新渲染每个槽位入口，所以每次渲染读一次就是精确的。 */
   const localeNow = (): string => {
@@ -335,6 +353,12 @@ export function makeComposerDock(
                   calls={reading.calls ?? null}
                   creditRates={reading.creditRates ?? null}
                   currency={currency}
+                />
+                {/* 每个平台一张卡，与统计页同一个组件、同一份数据。 */}
+                <StatsPlatforms
+                  rows={platforms}
+                  currency={currency}
+                  balances={dockBalanceTexts(platforms, entry, credits)}
                 />
               </div>
               <DockRates kit={kit} peak={period.peak} currency={currency} />
