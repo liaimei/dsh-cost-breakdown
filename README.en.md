@@ -197,6 +197,13 @@ From the GitHub source (the repository ships its build output, so no build step)
 dsh plugin --profile web add github:liaimei/dsh-cost-breakdown
 ```
 
+> **Never add a `prepare`/`postinstall` lifecycle script to `package.json`.**
+> `lib/` is committed, so installation needs no build; but pnpm runs those scripts for
+> git dependencies, and their presence is rejected with
+> `ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED`. The only way out for a consumer is to add the
+> package — keyed by commit SHA — to `allowBuilds`, i.e. re-edit the allowlist on every
+> push. Build through the explicit `pnpm run build` instead.
+
 From a local checkout (for development; `link:` means a rebuilt `lib/` takes effect on
 a page refresh):
 

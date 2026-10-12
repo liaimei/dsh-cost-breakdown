@@ -173,6 +173,12 @@ DSH 记录的 `inputTokens` 是**缓存未命中**的输入，`cacheReadTokens` 
 dsh plugin --profile web add github:liaimei/dsh-cost-breakdown
 ```
 
+> **不要在 `package.json` 里加 `prepare`/`postinstall` 之类的生命周期脚本。**
+> `lib/` 是入库的产物，安装时无需构建；而 pnpm 从 git 拉依赖时会执行这些脚本，
+> 一旦存在就会被 `ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED` 拦下——消费端只能把
+> 带 commit SHA 的包名加进 `allowBuilds`，等于每推一次改一次白名单。
+> 构建请走显式的 `pnpm run build`。
+
 从本地检出安装（开发时用，`link:` 让改完 `lib/` 刷新页面即生效）：
 
 ```bash
