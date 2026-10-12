@@ -376,7 +376,9 @@ describe('ComposerDock — the expanded card', () => {
     await click(query(m.container, '.lc-dock'))
     const card = query(m.container, '.lc-dock-card')
     // The cost card always lists both bands; the empty one still reports its zero.
-    const periods = queryAll(card, '.lc-sc-period')
+    // Scoped to that card: the per-platform cards reuse the same row class for their
+    // call and balance details.
+    const periods = queryAll(card, '.lc-col-donut:not(.lc-pf-card) .lc-sc-period')
     assert.equal(periods.length, 2)
     const peak = periods.find(p => text(p).includes('Peak'))
     assert.ok(peak !== undefined && peak.className.includes('lc-sc-period-dim'), 'the unspent period reads as a dim zero')

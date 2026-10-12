@@ -8,10 +8,12 @@
  *  余额**只归自己**那一张卡——把某家的余额放在别家名下是错的。
  */
 
-import { type ReactElement } from 'react'
+import { useState, type ReactElement } from 'react'
 import type { PlatformSpend } from '../platformSpend'
 import { formatCost, toCurrency, type CostCurrency } from '../cost'
 import { fmtCredits } from '../turnSpend'
+import { SliceList, type SliceRow } from './sliceList'
+import type { DonutProps } from './donut'
 import type { ViewKit } from '../viewkit'
 
 /** 一个平台的剩余额度。金额平台用币种符号，积分平台用积分数。 */
@@ -34,52 +36,99 @@ export function platformDisplayName(provider: string, t: ViewKit['t']): string {
     : provider
 }
 
-/** 绑定 `kit`，返回这一组平台卡。 */
-export function makeStatsPlatforms(kit: ViewKit): (props: StatsPlatformsProps) => ReactElement | null {
-  const { t } = kit
+/** 环图分段的调色板：沿用全局分桶的那几色，因此同一张卡里的颜色含义与别处一致。 */
+const SEGMENT_COLORS = [
+  'var(--color-green-500)',
+  'var(--color-amber-500)',
+  'var(--color-purple-500)',
+  'var(--color-pink-500)',
+  'var(--color-blue-500)',
+  'var(--color-teal-500)',
+]
+
+/** 绑定 `kit` 与共享的 `Donut`，返回这一组平台卡。
+ *
+ *  骨架刻意与「费用统计」卡一字不差：标题 + 右角总额、环图 + 图例、明细行、页脚。
+ *  两张卡回答的是同一类问题（这个平台花了多少、由什么构成），排版一致读者才不用
+ *  为每张卡重新找数字在哪。
+ *
+ *  `Donut` 由调用方传入而不是在这里 import：各页面必须复用同一个实例，
+ *  自己 import 会拿到第二份实现，悬停联动之类的行为就会分叉。 */
+export function makeStatsPlatforms(
+  kit: ViewKit,
+  Donut: (props: DonutProps) => ReactElement,
+): (props: StatsPlatformsProps) => ReactElement | null {
+  const { t, fmt, fmtShare } = kit
   return function StatsPlatforms(props: StatsPlatformsProps): ReactElement | null {
+    // 每张卡各自的悬停联动：一张卡的图例不该点亮另一张卡的分段。
+    const [hoverKey, setHoverKey] = useState<string | null>(null)
     if (props.rows.length === 0) return null
     const money = (usd: number): string => formatCost(toCurrency(usd, props.currency), props.currency)
     return (
       <>
         {props.rows.map(row => {
           const balance = props.balances?.[row.provider]
+          const isCredit = row.unit === 'credits'
+          const valueText = isCredit ? fmtCredits(row.value) : money(row.value)
+          // 分段按**该平台各模型的消费**分配，与右角总额同源，因此各段之和恒等于它。
+          // 只列出真的花了钱/积分的模型——零值分段进环图只会画出一条零弧。
+          const segments = row.models
+            .map((model, i) => ({
+              key: model,
+              color: SEGMENT_COLORS[i % SEGMENT_COLORS.length],
+              value: row.byModel?.[model] ?? 0,
+              calls: row.callsByModel?.[model] ?? 0,
+            }))
+            .filter(s => s.value > 0)
+          const segTotal = segments.reduce((n, s) => n + s.value, 0)
+          const rowsForLegend: SliceRow[] = segments.map(s => ({
+            key: s.key,
+            color: s.color,
+            label: s.key,
+            pct: fmtShare(s.value, segTotal),
+            count: isCredit ? fmtCredits(s.value) : money(s.value),
+          }))
           return (
-            <div key={row.provider} className="lc-card lc-col-monet lc-pf-card" data-unit={row.unit}>
+            <div key={row.provider} className="lc-card lc-col-donut lc-pf-card" data-unit={row.unit}>
               <div className="lc-card-title">
                 <span className="lc-card-title-text">{platformDisplayName(row.provider, t)}</span>
-                {/* 角标给出单位，读者一眼知道这个数字是钱还是积分。
-                    积分数值本身不带单位词，所以这里补上；金额自带货币符号，无需重复。 */}
-                {row.unit === 'credits'
-                  ? <span className="lc-card-sub">{t('costStat.unit.credits')}</span>
-                  : null}
-              </div>
-              <div className="lc-pf-body">
-                {/* 金额自带货币符号，积分则补上「积分」二字——同一个数字在不同单位下
-                    含义完全不同，标签不能省。 */}
-                <span className="lc-pf-value">
-                  {row.unit === 'credits' ? fmtCredits(row.value) : money(row.value)}
+                {/* 与费用卡一致：右角放这张卡最该先被读到的数字。
+                    单位必须写出来——同一个数字在积分与人民币下含义完全不同。 */}
+                <span className="lc-card-rate" title={t('costStat.balanceTip')}>
+                  {valueText}
+                  {isCredit ? ' ' + t('costStat.unit.credits') : ''}
                 </span>
               </div>
-              <div className="lc-pf-meta">
-                {/* 调用次数：积分平台就是「几次 × 倍率」里的那个「几次」。 */}
-                <span className="lc-pf-calls">{t('costStat.calls', { n: row.calls })}</span>
-                {balance !== undefined
-                  ? <span className="lc-pf-balance" title={t('costStat.balanceTip')}>{balance.text}</span>
-                  : null}
-              </div>
-              {/* 用到的模型：短列表直接列出，长列表截断并把全名放进 title，
-                  卡片高度因此不会被某个用得多的平台撑破。 */}
-              {row.models.length > 0
+              {segments.length > 0
                 ? (
-                  <div className="lc-pf-models" title={row.models.join(' · ')}>
-                    {row.models.slice(0, 3).map(m => <span key={m} className="lc-pf-model">{m}</span>)}
-                    {row.models.length > 3
-                      ? <span className="lc-pf-model lc-pf-model-more">+{row.models.length - 3}</span>
-                      : null}
+                  <div className="lc-donut-row flex items-center justify-start gap-3 min-w-0 @max-[320px]/lc-card:gap-2 @max-[240px]/lc-card:flex-wrap">
+                    <Donut
+                      segments={segments.map(s => ({ key: s.key, color: s.color, value: s.value }))}
+                      size={96}
+                      centerTop={valueText}
+                      centerSub={t('costStat.total')}
+                      hoverKey={hoverKey}
+                      onHoverKey={setHoverKey}
+                    />
+                    <SliceList rows={rowsForLegend} hoverKey={hoverKey} onHoverKey={setHoverKey} />
                   </div>
                 )
                 : null}
+              {/* 明细行：沿用费用卡「峰/谷」那两行的样式，这里放调用次数与剩余额度。 */}
+              <div className="lc-sc-periods">
+                <span className="lc-sc-period">
+                  <span className="lc-sc-period-label">{t('costStat.callsLabel')}</span>
+                  <b>{fmt(row.calls)}</b>
+                </span>
+                {balance !== undefined
+                  ? (
+                    <span className="lc-sc-period" title={t('costStat.balanceTip')}>
+                      <span className="lc-sc-period-label">{t('costStat.balanceLabel')}</span>
+                      <b>{balance.text}</b>
+                    </span>
+                  )
+                  : null}
+              </div>
             </div>
           )
         })}

@@ -79,7 +79,7 @@ export function makeContextView(
   const heads = makeAgentHeads()
   const StatsContext = makeStatsContext(kit, makeSubagentCost(ctx, heads))
   const StatsCost = makeStatsCost(kit, Donut)
-  const StatsPlatforms = makeStatsPlatforms(kit)
+  const StatsPlatforms = makeStatsPlatforms(kit, Donut)
   const StatsTiming = makeStatsTiming(kit, Donut)
   const StatsTokens = makeStatsTokens(kit, Donut)
   const PluginInfo = makePluginInfo(kit)

@@ -121,7 +121,7 @@ export function makeComposerDock(
   // 明细卡里复用汇总统计页的那两张卡，同一份数据、同一种排版——两处因此不会各说各话。
   const StatsTokens = makeStatsTokens(kit, Donut)
   const StatsCost = makeStatsCost(kit, Donut)
-  const StatsPlatforms = makeStatsPlatforms(kit)
+  const StatsPlatforms = makeStatsPlatforms(kit, Donut)
   /** 当前语言决定展示货币，与其他每个成本界面一样；
    *  harness 在切换语言时会重新渲染每个槽位入口，所以每次渲染读一次就是精确的。 */
   const localeNow = (): string => {

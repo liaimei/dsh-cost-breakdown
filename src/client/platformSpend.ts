@@ -26,6 +26,11 @@ export interface PlatformSpend {
   calls: number
   /** 该平台出现的模型 id，按名称排序。 */
   models: string[]
+  /** 该平台每个模型各自的消费（金额按美元，或积分数）——环图按它分段。
+   *  只含能定价的模型；两者的键集不要求相同。 */
+  byModel?: Record<string, number>
+  /** 该平台每个模型的调用次数——与 `byModel` 同源，是分段占比的另一种口径。 */
+  callsByModel?: Record<string, number>
 }
 
 /**
@@ -87,19 +92,37 @@ export function platformSpendsOf(
       ? 0
       : Object.values(perProviderCalls).reduce((n, c) => n + c, 0)
     if (isCreditProvider(provider, models, credits)) {
+      // 逐模型给出积分数：环图按它分段，读者才能看出「这一次花在哪个模型上」。
+      const byModel: Record<string, number> = {}
+      const callsByModel: Record<string, number> = {}
+      for (const model of models) {
+        const n = perProviderCalls?.[model] ?? 0
+        callsByModel[model] = n
+        const rate = creditRateOf(credits, provider, model)
+        if (rate !== null) byModel[model] = rate * n
+      }
       out.push({
         provider,
         unit: 'credits',
         value: creditCallsOf(provider, perProviderCalls, credits),
         calls: callTotal,
         models,
+        byModel,
+        callsByModel,
       })
       continue
     }
     // 金额一路：把这一个 provider 的账本单独交给共用定价函数，得到的数只属于它。
     const cost = estimateSessionCostByBucket({ [provider]: usage[provider] }, book, rates)
     if (!cost.any) continue
-    out.push({ provider, unit: 'money', value: cost.total, calls: callTotal, models })
+    // 逐模型的金额：把每个模型单独定价即可，与上面同一个函数，因此分项之和恒等于总额。
+    const byModel: Record<string, number> = {}
+    const callsByModel: Record<string, number> = {}
+    for (const model of models) {
+      byModel[model] = estimateSessionCostByBucket({ [provider]: { [model]: usage[provider][model] } }, book, rates).total
+      callsByModel[model] = perProviderCalls?.[model] ?? 0
+    }
+    out.push({ provider, unit: 'money', value: cost.total, calls: callTotal, models, byModel, callsByModel })
   }
   // 消费高的在前；同额时按平台名，保证渲染顺序稳定。
   return out.sort((a, b) => b.value - a.value || a.provider.localeCompare(b.provider))
@@ -122,6 +145,19 @@ export function mergePlatformSpends(
       prev.value += row.unit === prev.unit ? row.value : 0
       prev.calls += row.calls
       for (const model of row.models) if (!prev.models.includes(model)) prev.models.push(model)
+      // 逐模型的分项同样累加，环图在跨会话视图下才与总额一致。
+      if (row.byModel !== undefined) {
+        const byModel = prev.byModel ?? {}
+        const callsByModel = prev.callsByModel ?? {}
+        for (const model of Object.keys(row.byModel)) {
+          byModel[model] = (byModel[model] ?? 0) + (row.unit === prev.unit ? row.byModel[model] : 0)
+        }
+        for (const model of Object.keys(row.callsByModel ?? {})) {
+          callsByModel[model] = (callsByModel[model] ?? 0) + (row.callsByModel?.[model] ?? 0)
+        }
+        prev.byModel = byModel
+        prev.callsByModel = callsByModel
+      }
     }
   }
   const rows = [...byProvider.values()]

@@ -74,7 +74,7 @@ export function makeOverviewPanel(ctx: ClientCtx, kit: ViewKit): (props: Overvie
   const BalanceCapsule = makeBalanceCapsule(ctx, kit)
   const DateRange = makeDateRange(kit)
   const OverviewBilled = makeOverviewBilled(kit, Donut)
-  const StatsPlatforms = makeStatsPlatforms(kit)
+  const StatsPlatforms = makeStatsPlatforms(kit, Donut)
   const OverviewTokens = makeOverviewTokens(kit, Donut)
   const StatsTiming = makeStatsTiming(kit, Donut)
   const OverviewUsage = makeOverviewUsage(kit)
