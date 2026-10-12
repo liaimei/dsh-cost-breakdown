@@ -16,7 +16,6 @@ import { conversationNodesOf } from '../services'
 import type { ContextTimeline, TurnCostEntry } from '../../shared/types'
 import { useModelPrices } from '../modelPrices'
 import { formatCost, toCurrency, type CostCurrency } from '../cost'
-import { fmt } from '../format'
 import type { ThirdPartyRates } from '../../shared/thirdPartyRates'
 import type { CreditRates, TurnSpend } from '../turnSpend'
 import { turnSpendOf } from '../turnSpend'
@@ -90,7 +89,9 @@ export function makeTurnSpend(
     const turn = turnOfMessageId(conversationNodesOf(props), messageId)
     if (turn === null) return null
     const entry: TurnCostEntry | undefined = timeline?.turnCost?.[String(turn)]
-    const spend = turnSpendOf(entry, book, rates(), credits())
+    // 积分费率优先取**平台自己声明的**那份（host 读平台目录后随投影下发）；
+    // 用户在设置里声明的表作为覆盖——用户知道自己的套餐，插件不知道。
+    const spend = turnSpendOf(entry, book, rates(), credits() ?? timeline?.creditRates ?? null)
     if (spend === null) return null
     // 金额必须走 `formatCost`：`fmt` 是 token 计数的格式（千以下取整），
     // 用它会把不到五分的单轮金额显示成 `0`——这正是此前实际渲染出的内容。

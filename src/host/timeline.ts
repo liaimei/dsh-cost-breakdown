@@ -159,6 +159,9 @@ const costModelsSchema = z.record(z.string(), costModelSchema)
 /** session 成本的 wire 形状——每个提供该值的 projection 共用（activity.ts 会 import 它）。 */
 export const costUsageSchema = z.record(z.string(), costModelsSchema)
 
+/** 平台按次积分费率：`<provider>:<model>` → 每次请求的积分。 */
+export const creditRatesSchema = z.record(z.string(), z.record(z.string(), z.number().nonnegative()))
+
 /** 每轮消费账本：turn 字符串 → { 该轮的会话级同形账本, 按 provider/model 的请求次数 }。 */
 export const turnCostUsageSchema = z.record(z.string(), z.object({
   usage: costUsageSchema,
@@ -240,6 +243,7 @@ export const contextTimelineSchema = z.object({
   events: z.array(contextEventSchema).optional(),
   cost: costUsageSchema.optional(),
   turnCost: turnCostUsageSchema.optional(),
+  creditRates: creditRatesSchema.optional(),
   timing: timingTotalsSchema.optional(),
   systems: z.array(systemPromptNodeSchema).optional(),
   nodes: z.array(surfaceNodeSchema).optional(),

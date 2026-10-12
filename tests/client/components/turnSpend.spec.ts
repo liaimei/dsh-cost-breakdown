@@ -197,3 +197,43 @@ describe('the credit table is not a money table', () => {
     } finally { await m.unmount() }
   })
 })
+
+describe('the platform decides the unit end to end', () => {
+  test('a workbuddy turn shows credits from the platform-declared rates', async () => {
+    // The rates travel with the projection because only the platform's own host can
+    // read its catalog. A per-call platform bills per request, so 3 calls at 0.11
+    // is 0.33 credits — the token buckets below must not affect it.
+    setModelPricesLoader(null)
+    resetModelPrices()
+    const View = makeTurnSpend(kit, () => 'cny', () => null, () => null)
+    const usage = { workbuddy: { 'deepseek-v4.1-flash': { peak: { uncached: 9_999_999, cacheRead: 0, cacheWrite: 0, output: 9_999_999 } } } }
+    const timeline = timelineWithTurnCost(
+      { '7': { usage, requests: { workbuddy: { 'deepseek-v4.1-flash': 3 } } } },
+    ) as ContextTimeline & { creditRates?: unknown }
+    timeline.creditRates = { workbuddy: { 'deepseek-v4.1-flash': 0.11 } }
+    const m = await mount(h(View as never, seatOf([assistantNode('m1', 7)], timeline) as never))
+    try {
+      await flush()
+      const pill = query(m.container, '.lc-turn-spend')
+      assert.equal(text(pill), '0.33 积分', '3 calls x 0.11 credits')
+      assert.equal(pill.getAttribute('data-unit'), 'credits')
+    } finally { await m.unmount() }
+  })
+
+  test('a DeepSeek turn still shows money, unaffected by any credit table', async () => {
+    setModelPricesLoader(null)
+    resetModelPrices()
+    const View = makeTurnSpend(kit, () => 'cny', () => null, () => null)
+    const usage = { 'deepseek-account': { 'deepseek-v4.1-flash': { off: { uncached: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } } } }
+    const timeline = timelineWithTurnCost({ '1': { usage, requests: {} } }) as ContextTimeline & { creditRates?: unknown }
+    // A credit table for a completely different provider must not touch this path.
+    timeline.creditRates = { workbuddy: { 'glm-5.3': 0.79 } }
+    const m = await mount(h(View as never, seatOf([assistantNode('m1', 1)], timeline) as never))
+    try {
+      await flush()
+      const pill = query(m.container, '.lc-turn-spend')
+      assert.equal(pill.getAttribute('data-unit'), 'money', 'official models stay money')
+      assert.match(text(pill), /^¥/, `CNY official price, got ${text(pill)}`)
+    } finally { await m.unmount() }
+  })
+})

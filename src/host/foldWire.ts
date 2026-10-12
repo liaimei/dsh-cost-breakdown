@@ -5,6 +5,7 @@
 
 import type { ContextTimelineDetail, Snapshot, ToolTimingTotals, TurnCostEntry, TurnCostUsage } from '../shared/types'
 import { copyCostUsage } from './foldMetering'
+import { creditRatesForWire } from './creditRates'
 import type { FoldBounds } from './config'
 import type { TimelineState } from './foldState'
 
@@ -59,6 +60,11 @@ function headFieldsOf(state: TimelineState): Snapshot {
       perTurn[turn] = { usage: copyCostUsage(entry.usage), requests }
     }
     result.turnCost = perTurn
+  }
+  // 平台积分费率：host 读平台目录，客户端够不着那份数据（见 host/creditRates.ts）。
+  {
+    const credits = creditRatesForWire()
+    if (credits !== undefined) result.creditRates = credits
   }
   // 计时汇总同样以「副本」形式上 wire（含按名称的行）。
   if (state.timing !== undefined) {

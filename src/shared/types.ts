@@ -182,6 +182,14 @@ export interface Snapshot {
   /** 每轮（turn）的消费原料（TurnCostUsage）；在出现已知模型、报告了 usage 且带 `turn` 的
    *  请求之前缺失。与会话级 `cost` 由同一次定价写出，两者不会互相矛盾。 */
   turnCost?: TurnCostUsage
+  /** 按次计费的积分费率（`<provider>:<model>` → 每次请求的积分），由 host 从**平台自己的
+   *  目录**读出后下发。
+   *
+   *  为什么由 host 给而不是让用户手填：积分制平台把费率写在它自己的模型目录里
+   *  （workbuddy 的 `~/.dsh/.workbuddy-catalog.json`，字段 `billing.credits`），那份数据
+   *  只有它的宿主读得到，别家插件在客户端够不着。让用户抄一遍既容易错、也会随平台调价过期。
+   *  读不到时整个字段缺失，界面退回金额路径——**绝不猜一个费率**。 */
+  creditRates?: { [provider: string]: { [model: string]: number } }
   /** 整个 session 的计时汇总（TimingTotals）。首个 step 生命周期走完之前缺失。 */
   timing?: TimingTotals
   /** 存活的 system prompt 节点，由旧到新。在字段出现之前折叠出的行上缺失——
