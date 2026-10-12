@@ -21,6 +21,7 @@ import type { ClientCtx, SessionStandardProps } from '../services'
 import type { ViewKit } from '../viewkit'
 import { allDayOffReason, OFFICIAL_MODELS, peakWindowsText } from '../../shared/officialRates'
 import { BALANCE_POLL_MS } from '../constants'
+import { DOCK_CARD_MIN_HEIGHT, placeDockCard } from '../dockPlacement'
 import { isDeepSeekProvider } from '../../shared/providers'
 import type { PlatformBalance, PlatformBalanceEntry } from '../../shared/types'
 import { fmtCredits } from '../turnSpend'
@@ -48,9 +49,6 @@ const CARD_WIDTH = 440
 /** 视口两侧各留的边距（px）：卡片是 `position: fixed`，留出它才不会贴边。
  *  与官方面板的 `100vw - 24px` 同源（每侧 12px）。 */
 const VIEWPORT_GUTTER = 12
-
-/** 极窄视口下的兜底宽度（px），避免在异常环境下算出 0 或负数。 */
-const CARD_MIN_VIEWPORT_WIDTH = 200
 
 /** 平台在这一行里显示的名字。DeepSeek 官方路由显示为人熟知的「DeepSeek」，
  *  其余原样——平台名是事实标识，不该被翻译或美化。 */
@@ -177,21 +175,17 @@ export function makeComposerDock(
       const boxHeight = card?.getBoundingClientRect().height ?? 0
       const contentHeight = card?.scrollHeight ?? 0
       const natural = Math.max(boxHeight, contentHeight) || 260
-      const above = rect.top - natural - 8
-      const flip = above < 8
-      const available = Math.max(120, (flip ? window.innerHeight - rect.bottom : rect.top) - 16)
-      const height = Math.min(natural, available)
-      // 宽度：以内容偏好为准，再夹进视口（两侧各留边距），同时不窄于触发条。
-      // 只跟随触发条会把复用卡右列的数值挤出卡片；而宽度一旦超过视口又会长出
-      // 横向滚动条，所以这里主动夹好，配套 CSS 把横向溢出关死。
-      const viewportMax = Math.max(CARD_MIN_VIEWPORT_WIDTH, window.innerWidth - VIEWPORT_GUTTER * 2)
-      const width = Math.min(Math.max(rect.width, CARD_WIDTH), viewportMax)
-      const next: Anchor = {
-        left: Math.max(VIEWPORT_GUTTER, Math.min(rect.left, window.innerWidth - width - VIEWPORT_GUTTER)),
-        top: flip ? rect.bottom + 8 : rect.top - height - 8,
-        width,
-        maxHeight: available,
-      }
+      // 几何判据在 dockPlacement.ts 里（纯函数，可单测）：它负责「上方优先、确有必要
+      // 才翻转、且高度有下限」这三件事——此前把触发条贴底的情形算成了屏幕外的窄带。
+      const next: Anchor = placeDockCard({
+        trigger: { top: rect.top, left: rect.left, width: rect.width, bottom: rect.bottom },
+        viewport: { width: window.innerWidth, height: window.innerHeight },
+        natural,
+        preferredWidth: CARD_WIDTH,
+        gutter: VIEWPORT_GUTTER,
+        gap: 8,
+        minHeight: DOCK_CARD_MIN_HEIGHT,
+      })
       // 只有结果真的变了才 setState：否则观察者每回调一次就重渲染一次。
       const key = `${next.left}|${next.top}|${next.width}|${next.maxHeight}`
       if (appliedAnchor.current === key) return
