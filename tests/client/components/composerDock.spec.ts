@@ -1044,3 +1044,52 @@ describe('ComposerDock — yields to the official panel on the same row', () => 
     } finally { await m.unmount(); vi.useRealTimers() }
   })
 })
+
+describe('ComposerDock — peak/off and the rate table belong to DeepSeek only', () => {
+  const bj = (y: number, mo: number, d: number, h: number, mi = 0): number => Date.UTC(y, mo - 1, d, h - 8, mi)
+
+  /** One turn on the given route. */
+  function on(provider: string): ContextTimeline {
+    return {
+      ok: true, requests: [], events: [], nodes: [], archive: [],
+      current: { system: 0, tools: 0, user: 0, inject: 0, skill: 0, assistant: 0, tool: 0, total: 0 },
+      provider, model: 'deepseek-v4.1-flash',
+      cost: { [provider]: { 'deepseek-v4.1-flash': { peak: { uncached: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } } } },
+      calls: { [provider]: { 'deepseek-v4.1-flash': 1400 } },
+      creditRates: { workbuddy: { 'deepseek-v4.1-flash': 0.11 } },
+    } as unknown as ContextTimeline
+  }
+
+  async function open(provider: string) {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(bj(2026, 10, 12, 10)))
+    const D = Dock(new TestClientCtx({ locale: 'zh' }), kitZh)
+    const m = await mount(h(D, { sessionId: 's1', ...seatOf(on(provider)) }))
+    await flush()
+    const line = text(query(m.container, '.lc-dock'))
+    await click(query(m.container, '.lc-dock'))
+    await flush()
+    return { m, line, card: query(m.container, '.lc-dock-card') }
+  }
+
+  test('a credit platform carries no peak/off badge and no rate table', async () => {
+    // Peak/off-peak is DeepSeek's own billing window, and the rate table lists CNY
+    // prices. Showing either for a platform billed in credits would state a rule that
+    // does not apply to it — the reader would take the yuan figures for its bill.
+    const { m, line, card } = await open('workbuddy')
+    try {
+      assert.doesNotMatch(line, /[峰谷]/, 'no peak/off badge on the line')
+      assert.equal(queryAll(card, '.lc-dock-badge').length, 0, 'and none in the card')
+      assert.equal(queryAll(card, '.lc-dock-table').length, 0, 'nor a CNY rate table')
+    } finally { await m.unmount(); vi.useRealTimers() }
+  })
+
+  test('an official DeepSeek route keeps both', async () => {
+    const { m, line, card } = await open('deepseek-account')
+    try {
+      assert.match(line, /峰|谷/, 'the period badge stays where it means something')
+      assert.equal(queryAll(card, '.lc-dock-badge').length, 1, 'the card badge too')
+      assert.equal(queryAll(card, '.lc-dock-table').length, 1, 'and the rate table')
+    } finally { await m.unmount(); vi.useRealTimers() }
+  })
+})

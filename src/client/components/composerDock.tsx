@@ -305,6 +305,10 @@ export function makeComposerDock(
     // 也不要渲染一个误导性的 0。
     if (reading.timeline === null) return null
     const entry = balanceEntryOf(balance, currency)
+    // 峰谷只对**官方计价**的平台成立：其他平台的 `peak` 桶就是普通牌价，
+    // 给它们标「峰/谷」等于替别家发明一套时段规则。当前路由未知时按官方处理，
+    // 因为官方价目表是这套拆分的唯一来源。
+    const onOfficialRates = reading.active === undefined || isDeepSeekProvider(reading.active.provider)
     const periodLabel = t(period.peak ? 'dock.peak' : 'dock.off')
     // 峰时窗口由官方表派生，分隔符按语言给：中文用顿号，其余用逗号。
     const windows = peakWindowsText(activeLocale === 'zh' ? '、' : ', ')
@@ -340,7 +344,7 @@ export function makeComposerDock(
         ? t('dock.creditsSpent', { n: fmtCredits(row.value) })
         : t('dock.moneySpent', { n: formatCost(toCurrency(row.value, currency), currency) }))
       + (balanceCellFor(row, credits, entry, symbolOf, t) !== null ? ' ' + t('dock.creditsLeft', { n: '' }) : '')
-    )).join(' · ') + ' · ' + periodLabel
+    )).join(' · ') + (onOfficialRates ? ' · ' + periodLabel : '')
     const periodTip = [
       t('dock.peakWindows', { windows }),
       dayOff === 'weekend' ? t('dock.weekendOff') : null,
@@ -385,10 +389,17 @@ export function makeComposerDock(
                       : null}
                   </span>
                 ))}
-                {/* 时段徽标：峰/谷是这一行唯一保留语义色的地方，它回答「此刻贵不贵」，
-                    与旁边的消费读数互补。倒计时仍在悬停提示里，不占这一行。 */}
-                <span className="lc-dock-sep">·</span>
-                <span className="lc-dock-period">{periodLabel}</span>
+                {/* 时段徽标：峰/谷是这一行唯一保留语义色的地方，它回答「此刻贵不贵」。
+                    只对走官方峰谷计价的平台显示——其他平台没有这个概念，
+                    标上去等于替别家发明一套时段规则。 */}
+                {onOfficialRates
+                  ? (
+                    <>
+                      <span className="lc-dock-sep">·</span>
+                      <span className="lc-dock-period">{periodLabel}</span>
+                    </>
+                  )
+                  : null}
                   </>
             )}
           {/* 量宽探针：**始终**按完整读数排版，因此它的宽度与当前显示图标还是全文无关——
@@ -414,7 +425,9 @@ export function makeComposerDock(
             >
               <div className="lc-dock-head">
                 <span className="lc-dock-head-title">{t('dock.title')}</span>
-                <span className={'lc-dock-badge' + (period.peak ? ' lc-dock-badge-peak' : '')}>{periodLabel}</span>
+                {onOfficialRates
+                  ? <span className={'lc-dock-badge' + (period.peak ? ' lc-dock-badge-peak' : '')}>{periodLabel}</span>
+                  : null}
               </div>
               {/* 峰谷窗口与倒计时在展开卡里也写全：收起那一行只放得下一个倒计时，
                   而「峰时是哪几段」正是这张卡要回答的问题。 */}
@@ -446,7 +459,11 @@ export function makeComposerDock(
                   balances={dockBalanceTexts(platforms, entry, credits)}
                 />
               </div>
-              <DockRates kit={kit} peak={period.peak} currency={currency} />
+              {/* 价目表是**官方人民币**的费率表，只对走官方计价的平台显示：
+                  对积分平台列出人民币单价，读者会以为那就是它的账单。 */}
+              {onOfficialRates
+                ? <DockRates kit={kit} peak={period.peak} currency={currency} />
+                : null}
               <div className="lc-dock-note">{t('dock.note')}</div>
             </div>
           )
