@@ -15,7 +15,7 @@ import { fmtCredits } from '../turnSpend'
 import { isDeepSeekProvider } from '../../shared/providers'
 import { symbolOf, type CostCurrency } from '../cost'
 import type { PlatformSpend } from '../platformSpend'
-import { readPlatformCredits, type PlatformCredits } from '../platformCredits'
+import { readPlatformCredits, type PlatformCreditsTable } from '../platformCredits'
 import { BALANCE_POLL_MS } from '../constants'
 import type { PlatformBalance } from '../../shared/types'
 import { canOpenPathsOf, openPathVia, openResourceVia, workspaceOf } from '../services'
@@ -95,16 +95,16 @@ export function makeContextView(
 function platformBalanceTexts(
   rows: readonly PlatformSpend[],
   balance: PlatformBalance | null,
-  credits: PlatformCredits | null,
+  credits: PlatformCreditsTable | null,
   currency: CostCurrency,
 ): Record<string, { text: string } | undefined> {
   const deepseek = balanceEntryOf(balance, currency)
   const out: Record<string, { text: string } | undefined> = {}
   for (const row of rows) {
     if (row.unit === 'credits') {
-      out[row.provider] = credits === null || credits.unlimited
-        ? undefined
-        : { text: fmtCredits(credits.total) }
+      // 按 provider 取该版本自己的余额：两版是两套积分池，不能互相顶替。
+      const own = credits?.[row.provider]
+      out[row.provider] = own === undefined || own.unlimited ? undefined : { text: fmtCredits(own.total) }
       continue
     }
     out[row.provider] = isDeepSeekProvider(row.provider) && deepseek !== null
@@ -119,7 +119,7 @@ function platformBalanceTexts(
     // 结算或同一个余额给出不同答案。
     const { book } = useModelPrices()
     const [balance, setBalance] = useState<PlatformBalance | null>(null)
-    const [credits, setCredits] = useState<PlatformCredits | null>(null)
+    const [credits, setCredits] = useState<PlatformCreditsTable | null>(null)
     useEffect(() => {
       setBalance(readPlatformBalance(setBalance))
       setCredits(readPlatformCredits(setCredits))

@@ -56,22 +56,38 @@ describe('platformCredits — the transport', () => {
     assert.equal(await platformCredits(), null)
   })
 
-  test('a good answer is parsed and then served from cache', async () => {
-    let calls = 0
-    setPlatformCreditsFetcher(async () => {
-      calls += 1
-      return { ok: true, json: async () => ({ status: 'signed-in', credits: { total: 42 } }) }
+  test('each edition is read from its own route, and the pair is cached', async () => {
+    // The two editions are separate accounts with separate credit pools, so both routes
+    // are asked and their answers kept apart.
+    const seen: string[] = []
+    setPlatformCreditsFetcher(async (url) => {
+      seen.push(url)
+      const total = url.includes('/ai/status') ? 350 : 6352
+      return { ok: true, json: async () => ({ status: 'signed-in', credits: { total } }) }
     })
-    assert.deepEqual(await platformCredits(1000), { total: 42, unlimited: false })
-    assert.deepEqual(await platformCredits(2000), { total: 42, unlimited: false })
-    assert.equal(calls, 1, 'the second read inside the window does not hit the platform')
+    assert.deepEqual(await platformCredits(1000), {
+      workbuddy: { total: 6352, unlimited: false },
+      'workbuddy-ai': { total: 350, unlimited: false },
+    })
+    assert.equal(seen.length, 2, 'both editions are asked, not one')
+    await platformCredits(2000)
+    assert.equal(seen.length, 2, 'the second read inside the window does not hit the platform')
   })
 
-  test('a failure is cached too, so a missing platform is not retried every frame', async () => {
+  test('one edition failing leaves the other intact, never substituted', async () => {
+    setPlatformCreditsFetcher(async (url) => {
+      if (url.includes('/ai/status')) throw new Error('international not signed in')
+      return { ok: true, json: async () => ({ status: 'signed-in', credits: { total: 42 } }) }
+    })
+    // The missing edition is simply absent; the CN figure must not stand in for it.
+    assert.deepEqual(await platformCredits(), { workbuddy: { total: 42, unlimited: false } })
+  })
+
+  test('a total failure is cached too, so a missing platform is not retried every frame', async () => {
     let calls = 0
     setPlatformCreditsFetcher(async () => { calls += 1; throw new Error('gone') })
-    await platformCredits(1000)
-    await platformCredits(2000)
-    assert.equal(calls, 1)
+    assert.equal(await platformCredits(1000), null)
+    assert.equal(await platformCredits(2000), null)
+    assert.equal(calls, 2, 'one attempt per edition, then nothing until the window passes')
   })
 })

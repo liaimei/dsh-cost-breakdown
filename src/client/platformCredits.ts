@@ -11,11 +11,15 @@ import { asRecord } from './services'
 
 const CREDITS_ROUTE = '/api/dsh-cost-breakdown/credits'
 
-/** 一次可展示的余额：剩余积分合计，以及是否不限量。 */
+/** 一个版本的余额：剩余积分合计，以及是否不限量。 */
 export interface PlatformCredits {
   total: number
   unlimited: boolean
 }
+
+/** provider → 该版本的余额（`workbuddy` / `workbuddy-ai`）。
+ *  两版是两套账号、两个积分池，因此各存各的——绝不用一版的数字顶另一版。 */
+export type PlatformCreditsTable = Record<string, PlatformCredits>
 
 /** 只做形状收窄：不可信 wire。`total` 必须是有限非负数，否则视为无值。 */
 export function platformCreditsOf(value: unknown): PlatformCredits | null {
@@ -26,12 +30,12 @@ export function platformCreditsOf(value: unknown): PlatformCredits | null {
   return { total, unlimited: r.unlimited === true }
 }
 
-let cached: PlatformCredits | null = null
+let cached: PlatformCreditsTable | null = null
 let refreshing: Promise<void> | null = null
-const landingCallbacks = new Set<(value: PlatformCredits) => void>()
+const landingCallbacks = new Set<(value: PlatformCreditsTable) => void>()
 
 /** 一次路由 POST，并经 `platformCreditsOf` 收窄。永不 reject。 */
-async function readRoute(): Promise<PlatformCredits | null> {
+async function readRoute(): Promise<PlatformCreditsTable | null> {
   try {
     const response = await fetch(CREDITS_ROUTE, {
       method: 'POST',
@@ -40,7 +44,15 @@ async function readRoute(): Promise<PlatformCredits | null> {
     if (!response.ok) return null
     const r = asRecord(await response.json())
     if (r === null || r.ok !== true) return null
-    return platformCreditsOf(r.value)
+    // wire 上是 provider → 余额；逐条收窄，坏项丢掉而不牵连其它版本。
+    const raw = asRecord(r.value)
+    if (raw === null) return null
+    const out: PlatformCreditsTable = {}
+    for (const [provider, value] of Object.entries(raw)) {
+      const one = platformCreditsOf(value)
+      if (one !== null) out[provider] = one
+    }
+    return Object.keys(out).length > 0 ? out : null
   } catch {
     return null
   }
@@ -49,7 +61,7 @@ async function readRoute(): Promise<PlatformCredits | null> {
 /** 读一次余额，拿到后回调 `onRefresh`；与 balance 同一套「搭车」语义：
  *  进行中的读取不会被重复发起，失败时不通知任何人（沿用上一次的数字）。
  *  返回记忆中的值，供首帧直接渲染。 */
-export function readPlatformCredits(onRefresh: (value: PlatformCredits) => void): PlatformCredits | null {
+export function readPlatformCredits(onRefresh: (value: PlatformCreditsTable) => void): PlatformCreditsTable | null {
   landingCallbacks.add(onRefresh)
   if (refreshing === null) {
     refreshing = (async () => {

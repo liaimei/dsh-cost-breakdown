@@ -37,6 +37,9 @@ export interface DockReading {
   calls: SessionCallCounts | null
   /** 平台声明的按次积分费率（host 从平台目录读出）。 */
   creditRates: Record<string, Record<string, number>> | null
+  /** 当前实际在用的 (provider, model)；harness 未报告时缺失。
+   *  输入框那行读数只讲**这个**平台，而不是把用过的每个平台都列一遍。 */
+  active?: { provider: string; model: string }
   /** 当前定价时段及其下一次翻转。 */
   period: PricingPeriod
   failed: boolean
@@ -107,6 +110,10 @@ export function readDock(props: SessionStandardProps, deps: DockDeps, book: Mode
     usage: merged,
     calls: timeline?.calls ?? null,
     creditRates: timeline?.creditRates ?? null,
+    // 当前路由：harness 逐请求更新，因此这就是「此刻在用什么」。
+    ...(typeof timeline?.provider === 'string' && typeof timeline?.model === 'string'
+      ? { active: { provider: timeline.provider, model: timeline.model } }
+      : {}),
     cost: estimateSessionCost(merged, book, deps.currency),
     tokens: billedTokensOf(merged),
     // 峰/谷时只对 DeepSeek provider 有意义；其他厂商的 `peak`

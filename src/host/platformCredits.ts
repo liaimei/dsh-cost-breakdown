@@ -21,7 +21,15 @@ export interface PlatformCredits {
   cycleResetTime?: string
 }
 
-const STATUS_URL = 'http://127.0.0.1:19387/plugins/dsh-workbuddy-connect/status'
+/**
+ * 两版各有一条余额路由，**必须分别读**：国内版与国际版是两套账号、两个积分池
+ * （实测 `…/status` 报 `www.workbuddy.cn` 的额度，`…/ai/status` 报 `www.workbuddy.ai` 的）。
+ * 把其中一条的余额贴到另一条的路由上，会让用户看到两行一样的数字——那比不显示更糟。
+ */
+const CREDITS_ROUTES: readonly { provider: string; url: string }[] = [
+  { provider: 'workbuddy', url: 'http://127.0.0.1:19387/plugins/dsh-workbuddy-connect/status' },
+  { provider: 'workbuddy-ai', url: 'http://127.0.0.1:19387/plugins/dsh-workbuddy-connect/ai/status' },
+]
 
 /** 缓存时长：余额变动不频繁，而每次读取都会让平台去打一次上游。 */
 const CACHE_MS = 60_000
@@ -52,7 +60,10 @@ type Fetcher = (url: string, init?: { signal?: AbortSignal }) => Promise<{ ok: b
 const defaultFetcher: Fetcher = (url, init) => fetch(url, init) as unknown as ReturnType<Fetcher>
 
 let fetcher: Fetcher = defaultFetcher
-let cached: { at: number; value: PlatformCredits | null } | null = null
+/** provider → 该版本的余额；读不到的版本不出现在表里。 */
+export type PlatformCreditsTable = Record<string, PlatformCredits>
+
+let cached: { at: number; value: PlatformCreditsTable | null } | null = null
 
 /** 替换 fetcher（供测试用），传 `null` 恢复默认。 */
 export function setPlatformCreditsFetcher(next: Fetcher | null): void {
@@ -64,14 +75,20 @@ export function resetPlatformCredits(): void {
   cached = null
 }
 
-/** 读平台剩余积分；超时、连接失败、未登录、形状变了都返回 `null`。 */
-export async function platformCredits(now = Date.now()): Promise<PlatformCredits | null> {
+/** 读**两版各自**的剩余积分；某个版本超时、连接失败、未登录或形状变了，
+ *  它就整条缺席——绝不拿另一版的数字顶上。 */
+export async function platformCredits(now = Date.now()): Promise<PlatformCreditsTable | null> {
   if (cached !== null && now - cached.at < CACHE_MS) return cached.value
-  let value: PlatformCredits | null = null
-  try {
-    const response = await fetcher(STATUS_URL, { signal: AbortSignal.timeout(8_000) })
-    if (response.ok) value = creditsOfPayload(await response.json())
-  } catch { /* 平台未安装、未登录或不可达：没有余额可显示 */ }
+  const table: PlatformCreditsTable = {}
+  await Promise.all(CREDITS_ROUTES.map(async ({ provider, url }) => {
+    try {
+      const response = await fetcher(url, { signal: AbortSignal.timeout(8_000) })
+      if (!response.ok) return
+      const value = creditsOfPayload(await response.json())
+      if (value !== null) table[provider] = value
+    } catch { /* 该版本未安装或未登录：它这一条没有余额 */ }
+  }))
+  const value = Object.keys(table).length > 0 ? table : null
   cached = { at: now, value }
   return value
 }

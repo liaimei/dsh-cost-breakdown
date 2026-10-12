@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, test, vi } from 'vitest'
 import { makeComposerDock } from '../../../src/client/components/composerDock'
 import { resetModelPrices, setModelPricesLoader } from '../../../src/client/modelPrices'
 import { PLATFORM_BALANCE_STORAGE_KEY, resetPlatformBalance } from '../../../src/client/balance'
+import { resetPlatformCredits } from '../../../src/client/platformCredits'
 import type { ContextTimeline } from '../../../src/shared/types'
 import { asClientCtx, TestClientCtx } from '../helpers/harness'
 import { click, flush, keydown, makeKit, mount, query, queryAll, text } from '../helpers/kit'
@@ -834,5 +835,57 @@ describe('ComposerDock — the status bar reports spend per platform', () => {
       assert.equal(rows.length, 1)
       assert.match(text(rows[0]), /DeepSeek/, 'the lone platform is still named')
     } finally { await m.unmount(); vi.useRealTimers() }
+  })
+})
+
+describe('ComposerDock — the line speaks for the platform in use', () => {
+  /** Two editions, each with its own spend and its own credit pool. */
+  const BOTH: ContextTimeline = {
+    ok: true, requests: [], events: [], nodes: [], archive: [],
+    current: { system: 0, tools: 0, user: 0, inject: 0, skill: 0, assistant: 0, tool: 0, total: 0 },
+    provider: 'workbuddy-ai', model: 'deepseek-v4.1-flash',
+    cost: {
+      workbuddy: { 'glm-5.3': { peak: { uncached: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } } },
+      'workbuddy-ai': { 'deepseek-v4.1-flash': { peak: { uncached: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } } },
+    },
+    calls: { workbuddy: { 'glm-5.3': 4 }, 'workbuddy-ai': { 'deepseek-v4.1-flash': 2 } },
+    creditRates: { workbuddy: { 'glm-5.3': 0.79 }, 'workbuddy-ai': { 'deepseek-v4.1-flash': 0.03 } },
+  } as unknown as ContextTimeline
+
+  test('shows only the active platform, not every platform ever used', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(Date.UTC(2026, 9, 12, 2)))
+    const D = Dock(new TestClientCtx({ locale: 'zh' }), kitZh)
+    const m = await mount(h(D, { sessionId: 's1', ...seatOf(BOTH) }))
+    try {
+      await flush()
+      const rows = queryAll(m.container, '.lc-dock-platform')
+      assert.equal(rows.length, 1, 'one segment, for the route in use')
+      assert.match(text(rows[0]), /workbuddy-ai/, 'the active edition')
+      const line = text(query(m.container, '.lc-dock'))
+      assert.doesNotMatch(line, /glm-5\.3/, 'not the idle one')
+    } finally { await m.unmount(); vi.useRealTimers() }
+  })
+
+  test('each edition reports its OWN credit balance', async () => {
+    // The regression: one route's total was shown under both editions' names, so the
+    // international row claimed the CN pool. The two are separate accounts.
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(Date.UTC(2026, 9, 12, 2)))
+    resetPlatformCredits()
+    vi.stubGlobal('fetch', async () => ({
+      ok: true,
+      json: async () => ({ ok: true, value: { workbuddy: { total: 6352, unlimited: false }, 'workbuddy-ai': { total: 350, unlimited: false } } }),
+    }))
+    try {
+      const D = Dock(new TestClientCtx({ locale: 'zh' }), kitZh)
+      const m = await mount(h(D, { sessionId: 's1', ...seatOf(BOTH) }))
+      await flush()
+      await flush()
+      const line = text(query(m.container, '.lc-dock'))
+      assert.match(line, /350/, 'the international pool')
+      assert.doesNotMatch(line, /6352/, 'never the CN pool on the international route')
+      await m.unmount()
+    } finally { resetPlatformCredits(); vi.unstubAllGlobals(); vi.useRealTimers() }
   })
 })

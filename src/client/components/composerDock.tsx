@@ -25,7 +25,7 @@ import { isDeepSeekProvider } from '../../shared/providers'
 import type { PlatformBalance, PlatformBalanceEntry } from '../../shared/types'
 import { fmtCredits } from '../turnSpend'
 import { platformSpendsOf, type PlatformSpend } from '../platformSpend'
-import { readPlatformCredits, type PlatformCredits } from '../platformCredits'
+import { readPlatformCredits, type PlatformCreditsTable } from '../platformCredits'
 import { Donut } from './donut'
 import { makeStatsCost } from './statsCost'
 import { makeStatsPlatforms } from './statsPlatforms'
@@ -72,14 +72,16 @@ function platformLabel(row: PlatformSpend, t: ViewKit['t']): string {
  *  余额沿用既有的 `.lc-dock-balance` 类名，因此配色与既有样式一致。 */
 function balanceCellFor(
   row: PlatformSpend,
-  credits: PlatformCredits | null,
+  credits: PlatformCreditsTable | null,
   balance: PlatformBalanceEntry | null,
   symbolOf: (currency: string) => string,
   t: ViewKit['t'],
 ): ReactElement | null {
   if (row.unit === 'credits') {
-    if (credits === null || credits.unlimited) return null
-    return <span className="lc-dock-left">{t('dock.creditsLeft', { n: fmtCredits(credits.total) })}</span>
+    // 按 provider 取**该版本自己的**余额：两版是两套积分池。
+    const own = credits?.[row.provider]
+    if (own === undefined || own.unlimited) return null
+    return <span className="lc-dock-left">{t('dock.creditsLeft', { n: fmtCredits(own.total) })}</span>
   }
   // 金额平台：只有 DeepSeek 的余额我们读得到，因此只给它这一行。
   if (!isDeepSeekProvider(row.provider) || balance === null) return null
@@ -92,12 +94,13 @@ function balanceCellFor(
 function dockBalanceTexts(
   rows: readonly PlatformSpend[],
   entry: PlatformBalanceEntry | null,
-  credits: PlatformCredits | null,
+  credits: PlatformCreditsTable | null,
 ): Record<string, { text: string } | undefined> {
   const out: Record<string, { text: string } | undefined> = {}
   for (const row of rows) {
     if (row.unit === 'credits') {
-      out[row.provider] = credits === null || credits.unlimited ? undefined : { text: fmtCredits(credits.total) }
+      const own = credits?.[row.provider]
+      out[row.provider] = own === undefined || own.unlimited ? undefined : { text: fmtCredits(own.total) }
       continue
     }
     out[row.provider] = isDeepSeekProvider(row.provider) && entry !== null
@@ -142,7 +145,7 @@ export function makeComposerDock(
     const [anchor, setAnchor] = useState<Anchor | null>(null)
     const [balance, setBalance] = useState<PlatformBalance | null>(null)
     // 平台的剩余积分（积分制平台）；与余额同一套「先画记住的数字、再后台校正」的语义。
-    const [credits, setCredits] = useState<PlatformCredits | null>(() => readPlatformCredits((v: PlatformCredits) => { setCredits(v) }))
+    const [credits, setCredits] = useState<PlatformCreditsTable | null>(() => readPlatformCredits((v: PlatformCreditsTable) => { setCredits(v) }))
     const triggerRef = useRef<HTMLButtonElement | null>(null)
     const cardRef = useRef<HTMLDivElement | null>(null)
     // 收起那一行自己也要显示余额，所以这份读取不能省：先画记住的数字，
@@ -271,7 +274,14 @@ export function makeComposerDock(
     const costTextFallback = reading.cost === null ? '—' : formatCost(reading.cost, currency)
     // 按平台拆分本会话消费：每个平台各自带自己的单位与余额。
     // 这是这行读数的主内容——不同平台的账单单位不同，合成一个数字没有意义。
-    const platforms = platformSpendsOf(reading.usage, reading.calls, reading.book, null, reading.creditRates)
+    // 只讲**当前在用**的那个平台：这一行是「此刻的状态」，不是账单。
+    // 用过的其他平台仍完整地留在展开卡与统计页里，那里才是看总账的地方。
+    // 当前路由未知时才回退到全部平台（宁可多讲，也不要因为缺一个字段就不说话）。
+    const allPlatforms = platformSpendsOf(reading.usage, reading.calls, reading.book, null, reading.creditRates)
+    const active = reading.active
+    const platforms = active === undefined
+      ? allPlatforms
+      : allPlatforms.filter(row => row.provider === active.provider)
     const periodTip = [
       t('dock.peakWindows', { windows }),
       dayOff === 'weekend' ? t('dock.weekendOff') : null,
