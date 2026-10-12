@@ -13,15 +13,18 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactElement } from 'react'
 import { balanceEntryOf, readPlatformBalance } from '../balance'
-import { formatCost, formatPriceRate, fromCny, type CostCurrency } from '../cost'
+import { formatCost, formatPriceRate, fromCny, toCurrency, type CostCurrency } from '../cost'
 import { readDock, useDockBook, usePricingPeriod } from '../dockReading'
-import { fmtCountdown, fmtCountdownCompact } from '../format'
+import { fmtCountdown } from '../format'
 import { contextBreakdownOf, projectionOf, tokenUsageOf } from '../services'
 import type { ClientCtx, SessionStandardProps } from '../services'
 import type { ViewKit } from '../viewkit'
 import { allDayOffReason, OFFICIAL_MODELS, peakWindowsText } from '../../shared/officialRates'
-import { IconClock } from '../primitives'
-import type { PlatformBalance } from '../../shared/types'
+import { isDeepSeekProvider } from '../../shared/providers'
+import type { PlatformBalance, PlatformBalanceEntry } from '../../shared/types'
+import { fmtCredits } from '../turnSpend'
+import { platformSpendsOf, type PlatformSpend } from '../platformSpend'
+import { readPlatformCredits, type PlatformCredits } from '../platformCredits'
 import { Donut } from './donut'
 import { makeStatsCost } from './statsCost'
 import { makeStatsTokens } from './statsTokens'
@@ -53,48 +56,38 @@ const VIEWPORT_GUTTER = 12
 /** 极窄视口下的兜底宽度（px），避免在异常环境下算出 0 或负数。 */
 const CARD_MIN_VIEWPORT_WIDTH = 200
 
-/** 这一行放不放得下**完整读数**。
- *
- *  判据是「留给本行的空间」与「完整内容需要的宽度」之比，而不是拿一个写死的
- *  断点去比这一行的总宽：官方那一行里还有用量读数与上下文环，它们先占掉一截，
- *  所以**总宽够、留给本行的却可能不够**——线上正是这种情况（行宽约 860px，
- *  官方两块占掉约 260px，留给本行的约 570px，而整句需要约 600px）。
- *
- *  `have` 由「父级内容宽 − 其它条目宽度」算出，`need` 由一句**始终渲染但不可见**
- *  的量宽探针给出——两者都与当前渲染的是整句还是紧凑形态无关，因此不会自激。 */
-export type IsRowTooNarrow = (trigger: HTMLElement) => boolean
+/** 平台在这一行里显示的名字。DeepSeek 官方路由显示为人熟知的「DeepSeek」，
+ *  其余原样——平台名是事实标识，不该被翻译或美化。 */
+function platformLabel(row: PlatformSpend, t: ViewKit['t']): string {
+  return row.provider === 'deepseek-account' || row.provider === 'deepseek-official'
+    ? t('dock.platform.deepseek')
+    : row.provider
+}
 
-/** 量宽探针的类名；JSX 里始终渲染，CSS 里挪出可视区。 */
-export const PROBE_CLASS = 'lc-dock-probe'
-
-export const isRowTooNarrow: IsRowTooNarrow = (trigger) => {
-  const parent = trigger.parentElement
-  const probe = trigger.querySelector<HTMLElement>('.' + PROBE_CLASS)
-  if (parent === null || probe === null) return false
-  // 探针始终按整句排版，所以它的宽度与当前渲染哪种形态无关——这是不自激的关键。
-  const full = probe.offsetWidth
-  const row = parent.clientWidth
-  if (full <= 0 || row <= 0) return false
-  // 本行除倒计时以外的部分。整句形态下 = 总宽 − 整句宽；紧凑形态下 = 总宽 − 紧凑宽；
-  // 两者都等于同一份核心读数宽度，因此同样与形态无关。
-  const countdown = trigger.querySelector<HTMLElement>('.lc-dock-countdown')
-  const core = trigger.offsetWidth - (countdown?.offsetWidth ?? 0)
-  // 兄弟条目（官方用量读数、上下文环）占掉的宽度。本行自己的浮层卡不算：
-  // 它是 `position: fixed`，不参与这一行的排布。
-  let others = 0
-  let count = 0
-  for (const child of Array.from(parent.children)) {
-    if (child === trigger || child.classList.contains('lc-dock-card')) continue
-    const width = (child as HTMLElement).offsetWidth
-    if (width > 0) {
-      others += width
-      count += 1
-    }
+/** 该平台的剩余额度：积分平台用 host 转发的剩余积分（DeepSeek 余额在上面单独一截）。
+ *  取不到就返回 null，那一截不渲染——宁可少一个数字，也不显示过期的额度。 */
+/** 该平台的剩余额度：积分平台用 host 转发的剩余积分，DeepSeek 用平台余额。
+ *  两者都只归到自己那一行——把某个平台的余额挂到别家名下会是错的。
+ *  取不到就返回 null，那一截不渲染：宁可少一个数字，也不显示过期或错配的额度。 */
+/** 该平台的剩余额度那一截（余额或剩余积分）。
+ *
+ *  两者都**只归到自己那一行**：把某个平台的余额挂到别家名下会是错的。
+ *  取不到就返回 null，那一截不渲染——宁可少一个数字，也不显示过期或错配的额度。
+ *  余额沿用既有的 `.lc-dock-balance` 类名，因此配色与既有样式一致。 */
+function balanceCellFor(
+  row: PlatformSpend,
+  credits: PlatformCredits | null,
+  balance: PlatformBalanceEntry | null,
+  symbolOf: (currency: string) => string,
+  t: ViewKit['t'],
+): ReactElement | null {
+  if (row.unit === 'credits') {
+    if (credits === null || credits.unlimited) return null
+    return <span className="lc-dock-left">{t('dock.creditsLeft', { n: fmtCredits(credits.total) })}</span>
   }
-  // 条目之间各有一个 gap；兄弟有 count 个，加上本行共 count 个间隔。
-  const gap = Number.parseFloat(getComputedStyle(parent).columnGap) || 0
-  const have = row - others - gap * count
-  return core + full > have
+  // 金额平台：只有 DeepSeek 的余额我们读得到，因此只给它这一行。
+  if (!isDeepSeekProvider(row.provider) || balance === null) return null
+  return <span className="lc-dock-balance">{symbolOf(balance.currency) + balance.total.toFixed(2)}</span>
 }
 
 /**
@@ -105,7 +98,6 @@ export const isRowTooNarrow: IsRowTooNarrow = (trigger) => {
 export function makeComposerDock(
   ctx: ClientCtx,
   kit: ViewKit,
-  tooNarrow: IsRowTooNarrow = isRowTooNarrow,
 ): (props: SessionStandardProps) => ReactElement | null {
   const { t } = kit
   // 明细卡里复用汇总统计页的那两张卡，同一份数据、同一种排版——两处因此不会各说各话。
@@ -131,36 +123,10 @@ export function makeComposerDock(
     const [open, setOpen] = useState(false)
     const [anchor, setAnchor] = useState<Anchor | null>(null)
     const [balance, setBalance] = useState<PlatformBalance | null>(null)
-    const [narrow, setNarrow] = useState(false)
+    // 平台的剩余积分（积分制平台）；与余额同一套「先画记住的数字、再后台校正」的语义。
+    const [credits, setCredits] = useState<PlatformCredits | null>(() => readPlatformCredits((v: PlatformCredits) => { setCredits(v) }))
     const triggerRef = useRef<HTMLButtonElement | null>(null)
     const cardRef = useRef<HTMLDivElement | null>(null)
-    // 按钮只在 timeline 到位后才渲染（见下面那个提前返回）。首帧它是 null，
-    // 所以这个 effect 必须在它出现时**重跑**一次：把 `hasTrigger` 放进依赖。
-    // 否则 `triggerRef.current === null` 那一帧会直接 return，而依赖永不变化，
-    // 观察者就永远挂不上——判据永远停在初始的「够宽」，也就是线上表现出的「不生效」。
-    const hasTrigger = reading.timeline !== null
-
-    // 状态栏放不下完整读数时切到紧凑形态。判据见 `isRowTooNarrow`：
-    // 比的是「留给本行的空间」与「完整内容需要的宽度」，因此官方那两块先占位、
-    // 本行只剩一点空间的情况也能正确降级。用 ResizeObserver 观察父级：
-    // 它的宽度由对话栏决定，与我们的内容无关，所以不会自激。
-    useLayoutEffect(() => {
-      if (!hasTrigger) return
-      const trigger = triggerRef.current
-      if (trigger === null) return
-      const apply = (): void => { setNarrow(tooNarrow(trigger)) }
-      apply()
-      // 父级宽度变化（对话栏伸缩、侧栏开合）都要重新判定。
-      const target = trigger.parentElement
-      if (target === null || typeof ResizeObserver === 'undefined') {
-        window.addEventListener('resize', apply)
-        return () => { window.removeEventListener('resize', apply) }
-      }
-      const observer = new ResizeObserver(apply)
-      observer.observe(target)
-      return () => { observer.disconnect() }
-    }, [tooNarrow, hasTrigger])
-
     // 收起那一行自己也要显示余额，所以这份读取不能省：先画记住的数字，
     // 随后在 dock 保持挂载期间由轮询让它保持诚实，切换会话时清理计时器。
     // （展开卡里的余额行由费用卡自己承担，见下面的 StatsCost。）
@@ -267,7 +233,6 @@ export function makeComposerDock(
     // 也不要渲染一个误导性的 0。
     if (reading.timeline === null) return null
     const entry = balanceEntryOf(balance, currency)
-    const costText = reading.cost === null ? '—' : formatCost(reading.cost, currency)
     const periodLabel = t(period.peak ? 'dock.peak' : 'dock.off')
     // 峰时窗口由官方表派生，分隔符按语言给：中文用顿号，其余用逗号。
     const windows = peakWindowsText(activeLocale === 'zh' ? '、' : ', ')
@@ -282,8 +247,13 @@ export function makeComposerDock(
     // 窄状态栏的退化形态：整句「6 小时 38 分 后进入峰时」放不下时，
     // 换成一个时钟图标 + 紧凑读数（`6h38m`）。两者由 CSS 按容器宽度二选一，
     // 数字都来自同一个 `remainingMs`，不会各走各的。
-    const compactCountdown = dayOff === null ? fmtCountdownCompact(period.remainingMs) : null
     // 悬停提示把两件事说全：峰时窗口是哪几段，以及还有多久翻转。
+    // 一个平台都定不出价时的兜底读数：那时没有平台行可显示，但这一行仍有话要说
+    // （「还没有可计价的量」或「有量但拿不到费率」），用破折号如实表达。
+    const costTextFallback = reading.cost === null ? '—' : formatCost(reading.cost, currency)
+    // 按平台拆分本会话消费：每个平台各自带自己的单位与余额。
+    // 这是这行读数的主内容——不同平台的账单单位不同，合成一个数字没有意义。
+    const platforms = platformSpendsOf(reading.usage, reading.calls, reading.book, null, reading.creditRates)
     const periodTip = [
       t('dock.peakWindows', { windows }),
       dayOff === 'weekend' ? t('dock.weekendOff') : null,
@@ -302,33 +272,29 @@ export function makeComposerDock(
           title={periodTip}
           onClick={() => { setOpen(v => !v) }}
         >
-          <span className="lc-dock-cost">{costText}</span>
-          {entry !== null
-            ? <span className="lc-dock-sep">·</span>
+          {/* 每个平台一小段：平台名 + 累计消耗 + 剩余额度。单位各自不同，因此分行
+              列出、绝不相加。倒计时不在这一行——它属于时段，不属于消费，仍留在悬停里。 */}
+          {platforms.length === 0
+            ? <span className="lc-dock-cost">{costTextFallback}</span>
             : null}
-          {entry !== null
-            ? <span className="lc-dock-balance">{symbolOf(entry.currency) + entry.total.toFixed(2)}</span>
-            : null}
+          {platforms.map((row, i) => (
+            <span key={row.provider} className="lc-dock-platform" data-unit={row.unit}>
+              {i > 0 ? <span className="lc-dock-sep">·</span> : null}
+              <span className="lc-dock-platform-name">{platformLabel(row, t)}</span>
+              <span className="lc-dock-spend">
+                {row.unit === 'credits'
+                  ? t('dock.creditsSpent', { n: fmtCredits(row.value) })
+                  : t('dock.moneySpent', { n: formatCost(toCurrency(row.value, currency), currency) })}
+              </span>
+              {balanceCellFor(row, credits, entry, symbolOf, t) !== null
+                ? balanceCellFor(row, credits, entry, symbolOf, t)
+                : null}
+            </span>
+          ))}
+          {/* 时段徽标：峰/谷是这一行唯一保留语义色的地方，它回答「此刻贵不贵」，
+              与旁边的消费读数互补。倒计时仍在悬停提示里，不占这一行。 */}
           <span className="lc-dock-sep">·</span>
           <span className="lc-dock-period">{periodLabel}</span>
-          {/* 宽时读整句，窄时读时钟图标 + 紧凑读数。两者互斥渲染，
-              数字都来自同一个 `remainingMs`，所以不会各走各的。 */}
-          {countdownText !== null && !narrow
-            ? <span className="lc-dock-countdown">{countdownText}</span>
-            : null}
-          {compactCountdown !== null && narrow
-            ? (
-              <span className="lc-dock-countdown" title={countdownText ?? undefined}>
-                <IconClock size={12} />
-                {compactCountdown}
-              </span>
-            )
-            : null}
-          {/* 量宽探针：**始终**按整句排版，因此它的宽度与当前显示的是整句还是
-              紧凑形态无关——判据靠它才不自激。CSS 把它移出可视区，不占排布。 */}
-          {countdownText !== null
-            ? <span className={PROBE_CLASS} aria-hidden="true">{countdownText}</span>
-            : null}
         </button>
         {/* 只在 `open` 时挂载：`place()` 需要在同一个布局趟里量到真实高度，
             所以卡片不能等 `anchor` 就绪才出现（那时 ref 还是 null，只能退回兜底高度，

@@ -35,8 +35,6 @@ body[data-ds-dark-theme] .lc-dock-card {
   align-items: center;
   gap: 6px;
   flex: none;
-  /* 量宽探针是绝对定位的，需要这一行当它的包含块。 */
-  position: relative;
   border: 0;
   background: transparent;
   /* 配色逐项对齐官方同排组件（`StatsPills.module.css` 的 `.pill` 与
@@ -60,23 +58,6 @@ body[data-ds-dark-theme] .lc-dock-card {
 .lc-dock-cost { color: inherit; font-weight: inherit; font-variant-numeric: tabular-nums; }
 .lc-dock-balance { color: inherit; font-variant-numeric: tabular-nums; }
 .lc-dock-sep { color: var(--dsw-alias-separator-primary, var(--dsw-alias-label-tertiary)); }
-/* 倒计时比时段徽标更弱一档：它是说明，不是读数本身。
-   `tabular-nums` 让每秒跳动时宽度不抖。
-   窄状态栏下这里换成「时钟图标 + 紧凑读数」，图标因此跟着继承同一档灰。 */
-.lc-dock-countdown { display: inline-flex; align-items: center; gap: 3px; color: var(--dsw-alias-label-tertiary); font-variant-numeric: tabular-nums; }
-.lc-dock-countdown svg { flex: none; }
-/* 量宽探针：始终按整句排版，好让判据（`isRowTooNarrow`）量到「完整读数需要多宽」，
-   而不管当前显示的是整句还是紧凑形态——判据靠它才不自激。
-   移出可视区且不参与排布，因此既看不见也不撑宽这一行。 */
-.lc-dock-probe {
-  position: absolute;
-  left: -9999px;
-  top: 0;
-  visibility: hidden;
-  pointer-events: none;
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
-}
 /* 绿色表示谷时（此刻更便宜）；`data-peak` 属性无需换类即可把它翻成红色。
    峰/谷是这一行唯一保留语义色的地方，其余一律走官方灰阶。 */
 .lc-dock-period { color: var(--lc-dock-off); }
@@ -170,3 +151,10 @@ body[data-ds-dark-theme] .lc-dock-card {
 .lc-dock-rate-miss { color: var(--lc-rate-miss); }
 .lc-dock-rate-out { color: var(--lc-rate-out); }
 .lc-dock-note { color: var(--dsw-alias-label-tertiary); font-size: 11px; line-height: 1.5; }
+
+/* 状态栏里的每个平台一小段：平台名 + 本次消耗 + 剩余额度。
+   积分与金额用同一档灰——两者都是读数，没有一个更该抢眼。 */
+.lc-dock-platform { display: inline-flex; align-items: center; gap: 4px; }
+.lc-dock-platform-name { color: var(--dsw-alias-label-tertiary); }
+.lc-dock-spend { color: inherit; font-variant-numeric: tabular-nums; }
+.lc-dock-left { color: var(--dsw-alias-label-tertiary); font-variant-numeric: tabular-nums; }

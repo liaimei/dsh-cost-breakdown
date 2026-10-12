@@ -15,6 +15,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { createContextActivityDefinition } from './activity'
 import { createToolAttribution } from './attribution'
 import { watchBalanceChannel } from './balance'
+import { watchPlatformCreditsChannel } from './platformCredits'
 import { watchActivityBackfill } from './backfill'
 import { makeColdReadGate } from './coldRead'
 import { Config, resolveBounds } from './config'
@@ -42,6 +43,7 @@ export function apply(ctx: Context, config: Config): void {
   // 两条路由只读运行时已验证的接口，且在闸门两侧都要工作，
   // 因此必须在下面闸门的提前返回之前武装好。
   watchBalanceChannel(ctx)
+  watchPlatformCreditsChannel(ctx)
   watchSkillCatalog(ctx)
   // 低于基线的 harness 永远拿不到真实 fold（它的日志形状和接缝接口都在兼容矩阵之外）；
   // 回退单元提供全零数据加闸门记录。版本探测不出来时按放行处理，

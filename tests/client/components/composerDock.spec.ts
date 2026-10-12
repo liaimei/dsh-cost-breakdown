@@ -7,7 +7,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, test, vi } from 'vitest'
-import { isRowTooNarrow, makeComposerDock } from '../../../src/client/components/composerDock'
+import { makeComposerDock } from '../../../src/client/components/composerDock'
 import { resetModelPrices, setModelPricesLoader } from '../../../src/client/modelPrices'
 import { PLATFORM_BALANCE_STORAGE_KEY, resetPlatformBalance } from '../../../src/client/balance'
 import type { ContextTimeline } from '../../../src/shared/types'
@@ -130,8 +130,9 @@ describe('ComposerDock — the collapsed readout', () => {
     const DZh = Dock(new TestClientCtx({ locale: 'zh' }), kitZh)
     const m2 = await mount(h(DZh, { sessionId: 's1', ...seatOf(timelineWith(DEEPSEEK_PEAK)) }))
     await flush()
-    assert.equal(query(m.container, '.lc-dock-cost')?.textContent, '$0.30')
-    assert.equal(query(m2.container, '.lc-dock-cost')?.textContent, '¥2.00')
+    // 金额现在挂在各自的平台行上（DeepSeek 那条），不再是一个未标注的裸总额。
+    assert.equal(query(m.container, '.lc-dock-spend')?.textContent, '$0.30')
+    assert.equal(query(m2.container, '.lc-dock-spend')?.textContent, '¥2.00')
     await m.unmount()
     await m2.unmount()
   })
@@ -597,7 +598,7 @@ describe('ComposerDock — the expanded card', () => {
     const D = makeComposerDock(asClientCtx(ctx), kit)
     const m = await mount(h(D, { sessionId: 's1', ...seatOf(timelineWith(DEEPSEEK_PEAK)) }))
     await flush()
-    assert.equal(query(m.container, '.lc-dock-cost')?.textContent, '$0.30', 'USD is the fallback')
+    assert.equal(query(m.container, '.lc-dock-spend')?.textContent, '$0.30', 'USD is the fallback')
     await m.unmount()
   })
 
@@ -607,7 +608,7 @@ describe('ComposerDock — the expanded card', () => {
     const D = makeComposerDock(asClientCtx(ctx), kit)
     const m = await mount(h(D, { sessionId: 's1', ...seatOf(timelineWith(DEEPSEEK_PEAK)) }))
     await flush()
-    assert.equal(query(m.container, '.lc-dock-cost')?.textContent, '$0.30')
+    assert.equal(query(m.container, '.lc-dock-spend')?.textContent, '$0.30')
     await m.unmount()
   })
 
@@ -780,322 +781,54 @@ describe('ComposerDock — the readout wears the official status-bar palette', (
   })
 })
 
-describe('ComposerDock — the peak window and its countdown', () => {
+describe('ComposerDock — the status bar reports spend per platform', () => {
   /** Beijing wall-clock instant as epoch ms (UTC+8). */
   const bj = (y: number, mo: number, d: number, h: number, mi = 0): number => Date.UTC(y, mo - 1, d, h - 8, mi)
 
-  async function at(time: number, locale: 'zh' | 'en' = 'zh') {
-    vi.useFakeTimers()
-    vi.setSystemTime(new Date(time))
-    const D = Dock(new TestClientCtx({ locale }), locale === 'zh' ? kitZh : kit)
-    const m = await mount(h(D, { sessionId: 's1', ...seatOf(timelineWith(DEEPSEEK_PEAK)) }))
-    await flush()
-    return m
+  /** One turn of workbuddy traffic plus one official DeepSeek turn. */
+  function mixedTimeline() {
+    return timelineWith({
+      workbuddy: { 'glm-5.3': { peak: { uncached: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } } },
+      'deepseek-account': { 'deepseek-v4.1-flash': { off: { uncached: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } } },
+    } as ContextTimeline['cost'], {
+      calls: { workbuddy: { 'glm-5.3': 4 }, 'deepseek-account': { 'deepseek-v4.1-flash': 1 } },
+      creditRates: { workbuddy: { 'glm-5.3': 0.79 } },
+    } as Partial<ContextTimeline>)
   }
 
-  test('spells out the peak windows, derived from the official table', async () => {
-    // The user asked to SEE when peak is, not just whether it is peak now. The text
-    // comes from PEAK_WINDOWS, so it cannot drift from the billing rule.
-    const m = await at(bj(2026, 10, 12, 10))
-    try {
-      const trigger = query(m.container, '.lc-dock')
-      assert.match(trigger.getAttribute('title') ?? '', /09:00–12:00/, 'the tooltip names the windows')
-      await click(trigger)
-      const row = text(query(m.container, '.lc-dock-period-row'))
-      assert.match(row, /09:00–12:00/, 'the card names them too')
-      assert.match(row, /14:00–18:00/, 'both windows, not just the first')
-    } finally {
-      await m.unmount(); vi.useRealTimers()
-    }
-  })
-
-  test('counts down to the next flip, in the active language', async () => {
-    // Monday 10:00 Beijing: peak, with the window ending at 12:00.
-    const zh = await at(bj(2026, 10, 12, 10), 'zh')
-    try {
-      const text0 = text(query(zh.container, '.lc-dock'))
-      assert.match(text0, /2 小时 0 分 后进入谷时/, `got ${text0}`)
-    } finally { await zh.unmount(); vi.useRealTimers() }
-
-    const en = await at(bj(2026, 10, 12, 10), 'en')
-    try {
-      const text1 = text(query(en.container, '.lc-dock'))
-      assert.match(text1, /Off-peak in 2h 0m/, `got ${text1}`)
-    } finally { await en.unmount(); vi.useRealTimers() }
-  })
-
-  test('counts down to the next peak window from the midday gap', async () => {
-    // Monday 12:30 sits between the two windows, so the next boundary is 14:00.
-    const m = await at(bj(2026, 10, 12, 12, 30))
-    try {
-      assert.match(text(query(m.container, '.lc-dock')), /1 小时 30 分 后进入峰时/)
-    } finally { await m.unmount(); vi.useRealTimers() }
-  })
-
-  test('says WHY there is no peak today instead of a misleading countdown', async () => {
-    // Sunday 2026-10-11: off-peak all day, so "peak in N" would be wrong — the next
-    // peak is Monday 09:00, and a bare countdown would read as if today still has one.
-    const m = await at(bj(2026, 10, 11, 10))
-    try {
-      const trigger = query(m.container, '.lc-dock')
-      assert.equal(maybe(m.container, '.lc-dock-countdown'), null, 'no countdown on an all-day-off day')
-      await click(trigger)
-      assert.match(text(query(m.container, '.lc-dock-period-row')), /周末全天谷时/)
-    } finally { await m.unmount(); vi.useRealTimers() }
-  })
-
-  test('the countdown ticks once per second', async () => {
-    // The whole point of a countdown is that it moves; a frozen reading would be worse
-    // than none, so pin the one-second cadence.
-    const m = await at(bj(2026, 10, 12, 10))
-    try {
-      const before = text(query(m.container, '.lc-dock'))
-      await act(async () => { await vi.advanceTimersByTimeAsync(60_000) })
-      const after = text(query(m.container, '.lc-dock'))
-      assert.notEqual(before, after, 'the reading advanced with the clock')
-      assert.match(after, /1 小时 59 分 后进入谷时/, `got ${after}`)
-    } finally { await m.unmount(); vi.useRealTimers() }
-  })
-})
-
-describe('ComposerDock — the countdown degrades to an icon on a narrow status bar', () => {
-  const bj = (y: number, mo: number, d: number, h: number, mi = 0): number => Date.UTC(y, mo - 1, d, h - 8, mi)
-
-  /** Mount with a given status-bar available width, clock pinned to Monday 10:00 Beijing (peak). */
-  async function atWidth(width: number) {
+  test('lists each platform with its own unit, and no countdown', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date(bj(2026, 10, 12, 10)))
-    let current = width
-    // The seam is the "is this row too narrow?" predicate, so the test supplies the
-    // verdict directly instead of faking DOM geometry. Production's predicate compares
-    // the space LEFT for this row (after the official neighbours) with what the full
-    // reading needs.
-    const NARROW_PX = 620
-    const D = makeComposerDock(asClientCtx(new TestClientCtx({ locale: 'zh' })), kitZh, () => current < NARROW_PX)
-    const m = await mount(h(D, { sessionId: 's1', ...seatOf(timelineWith(DEEPSEEK_PEAK)) }))
-    await flush()
-    return {
-      m,
-      setWidth: async (next: number) => {
-        current = next
-        await act(async () => { window.dispatchEvent(new Event('resize')) })
-      },
-      restore: () => { vi.useRealTimers() },
-    }
-  }
-
-  test('a wide status bar reads the sentence', async () => {
-    const { m, restore } = await atWidth(1200)
-    try {
-      const trigger = query(m.container, '.lc-dock')
-      assert.match(text(trigger), /2 小时 0 分 后进入谷时/, 'the full sentence, not an icon')
-      assert.equal(maybe(trigger, '.lc-dock-countdown svg'), null, 'no icon while there is room')
-    } finally { await m.unmount(); restore() }
-  })
-
-  test('a narrow status bar swaps the sentence for a clock icon plus a compact reading', async () => {
-    // The whole point: the same information in a fraction of the width, so the line
-    // cannot push the official meter off the bar.
-    const { m, restore } = await atWidth(560)
-    try {
-      const trigger = query(m.container, '.lc-dock')
-      const cd = maybe(trigger, '.lc-dock-countdown')
-      assert.ok(cd !== null, 'the countdown slot is rendered')
-      assert.match(text(cd), /2h0m/, 'the compact reading')
-      assert.equal(cd.querySelector('svg') !== null, true, 'the clock icon stands in for the sentence')
-      // The VISIBLE countdown carries the compact form. (The full sentence still lives
-      // in the hidden measuring probe, which is what keeps the verdict stable.)
-      assert.doesNotMatch(text(cd), /后进入谷时/, 'the visible label is the compact one')
-      assert.equal(trigger.querySelector('.lc-dock-probe') !== null, true, 'the probe stays for measuring')
-    } finally { await m.unmount(); restore() }
-  })
-
-  test('the narrow form keeps the sentence in its tooltip', async () => {
-    // Degrading the label must not lose the meaning; hovering still spells it out.
-    const { m, restore } = await atWidth(560)
-    try {
-      const cd = query(m.container, '.lc-dock-countdown')
-      assert.match(cd.getAttribute('title') ?? '', /2 小时 0 分 后进入谷时/, 'the tooltip carries the sentence')
-    } finally { await m.unmount(); restore() }
-  })
-
-  test('the core readings survive the narrow form', async () => {
-    // Only the countdown degrades: cost, balance and the peak/off badge are what the
-    // line exists for and must stay legible.
-    const { m, restore } = await atWidth(560)
-    try {
-      const trigger = query(m.container, '.lc-dock')
-      assert.ok(maybe(trigger, '.lc-dock-cost') !== null, 'the cost stays')
-      assert.ok(maybe(trigger, '.lc-dock-period') !== null, 'the peak/off badge stays')
-      assert.match(text(trigger), /峰/, 'and it still says which period is in force')
-    } finally { await m.unmount(); restore() }
-  })
-
-  test('widening the window brings the sentence back', async () => {
-    const { m, setWidth, restore } = await atWidth(560)
-    try {
-      assert.match(text(query(m.container, '.lc-dock')), /2h0m/)
-      await setWidth(1200)
-      assert.match(text(query(m.container, '.lc-dock')), /2 小时 0 分 后进入谷时/, 'the full sentence returns')
-    } finally { await m.unmount(); restore() }
-  })
-})
-
-describe('ComposerDock — the narrow check reads the status-bar row, not the viewport', () => {
-  const bj = (y: number, mo: number, d: number, h: number, mi = 0): number => Date.UTC(y, mo - 1, d, h - 8, mi)
-
-  /** jsdom reports 0 for every layout box. Give the row a real geometry so the
-   *  production predicate can be exercised end-to-end: the row width, the width the
-   *  full reading needs (the probe), and the width of the official neighbours. */
-  function fakeRowGeometry(trigger: HTMLElement, o: { row: number; probe: number; core: number; sibling: number }) {
-    const parent = trigger.parentElement!
-    Object.defineProperty(parent, 'clientWidth', { value: o.row, configurable: true })
-    const probe = trigger.querySelector<HTMLElement>('.lc-dock-probe')
-    assert.ok(probe !== null, 'the probe is rendered')
-    Object.defineProperty(probe, 'offsetWidth', { value: o.probe, configurable: true })
-    // A stand-in for the official usage pill living in the same row.
-    const sib = document.createElement('span')
-    Object.defineProperty(sib, 'offsetWidth', { value: o.sibling, configurable: true })
-    parent.insertBefore(sib, trigger)
-    Object.defineProperty(trigger, 'offsetWidth', { value: o.core + o.probe, configurable: true })
-  }
-
-  test('a wide window with a narrow chat column still degrades', async () => {
-    // The reported bug: the browser window was wide (~1144px) while the conversation
-    // column was narrow, so a viewport-based check never fired. The production predicate
-    // looks at the space LEFT for this row instead, so it fires either way.
-    vi.useFakeTimers()
-    vi.setSystemTime(new Date(bj(2026, 10, 12, 10)))
-    // A wide viewport, so a viewport-based check would say "there is room".
-    vi.stubGlobal('innerWidth', 1440)
-    const D = makeComposerDock(asClientCtx(new TestClientCtx({ locale: 'zh' })), kitZh)
-    const m = await mount(h(D, { sessionId: 's1', ...seatOf(timelineWith(DEEPSEEK_PEAK)) }))
-    try {
-      const trigger = query(m.container, '.lc-dock')
-      // 820px row, official neighbours take 260px, the full reading needs 600px:
-      // only 560px is left, so the sentence cannot fit.
-      fakeRowGeometry(trigger, { row: 820, probe: 470, core: 130, sibling: 260 })
-      await act(async () => { window.dispatchEvent(new Event('resize')) })
-      const cd = query(m.container, '.lc-dock-countdown')
-      assert.match(text(cd), /2h0m/, 'the narrow form despite the wide window')
-      assert.ok(cd.querySelector('svg') !== null, 'the clock icon stands in')
-    } finally {
-      vi.unstubAllGlobals()
-      await m.unmount()
-      vi.useRealTimers()
-    }
-  })
-
-  test('a wide chat column keeps the full sentence', async () => {
-    vi.useFakeTimers()
-    vi.setSystemTime(new Date(bj(2026, 10, 12, 10)))
-    const D = makeComposerDock(asClientCtx(new TestClientCtx({ locale: 'zh' })), kitZh)
-    const m = await mount(h(D, { sessionId: 's1', ...seatOf(timelineWith(DEEPSEEK_PEAK)) }))
-    try {
-      const trigger = query(m.container, '.lc-dock')
-      // 1400px row with the same neighbours: plenty of room.
-      fakeRowGeometry(trigger, { row: 1400, probe: 470, core: 130, sibling: 260 })
-      await act(async () => { window.dispatchEvent(new Event('resize')) })
-      assert.match(text(query(m.container, '.lc-dock-countdown')), /2 小时 0 分 后进入谷时/)
-    } finally {
-      await m.unmount()
-      vi.useRealTimers()
-    }
-  })
-})
-
-describe('ComposerDock — the narrow check survives the empty first frame', () => {
-  const bj = (y: number, mo: number, d: number, h: number, mi = 0): number => Date.UTC(y, mo - 1, d, h - 8, mi)
-
-  test('the row is measured once the trigger actually mounts', async () => {
-    // In production the projection arrives AFTER the first render, so the first frame
-    // renders nothing (no button, no ref). The measuring effect must re-run when the
-    // button appears — with a stable dependency list it ran once against a null ref and
-    // never observed anything, so the compact form never appeared. Mount empty, push
-    // the timeline, then narrow the row.
-    vi.useFakeTimers()
-    vi.setSystemTime(new Date(bj(2026, 10, 12, 10)))
-    let timeline: unknown
-    const seat = { useProjection: (key: string) => (key === 'contextTimeline' ? timeline : undefined) }
-    const D = makeComposerDock(asClientCtx(new TestClientCtx({ locale: 'zh' })), kitZh)
-    const m = await mount(h(D, { sessionId: 's1', ...seat }))
+    const D = Dock(new TestClientCtx({ locale: 'zh' }), kitZh)
+    const m = await mount(h(D, { sessionId: 's1', ...seatOf(mixedTimeline()) }))
     try {
       await flush()
-      assert.equal(text(m.container), '', 'nothing renders before the first push')
-      // The push lands: the button mounts now.
-      timeline = timelineWith(DEEPSEEK_PEAK)
-      await m.update(h(D, { sessionId: 's1', ...seat }))
+      const rows = queryAll(m.container, '.lc-dock-platform')
+      assert.equal(rows.length, 2, 'one segment per platform')
+      const byUnit = (u: string) => rows.find(r => r.getAttribute('data-unit') === u)
+      const credit = byUnit('credits')
+      const money = byUnit('money')
+      assert.ok(credit !== undefined, 'the credit platform is listed')
+      assert.match(text(credit), /workbuddy/, 'named, not folded into one figure')
+      assert.match(text(credit), /3\.16/, '4 calls x 0.79 credits')
+      assert.ok(money !== undefined, 'and so is the official one')
+      assert.match(text(money), /DeepSeek/, 'the official platform is labelled too')
+      assert.match(text(money), /¥/, 'in CNY')
+      // The countdown moved out of this line: it describes the period, not the spend.
+      assert.equal(m.container.querySelector('.lc-dock-countdown'), null, 'no countdown')
+    } finally { await m.unmount(); vi.useRealTimers() }
+  })
+
+  test('a single platform still says which one it is', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(bj(2026, 10, 12, 10)))
+    const D = Dock(new TestClientCtx({ locale: 'zh' }), kitZh)
+    const m = await mount(h(D, { sessionId: 's1', ...seatOf(timelineWith(DEEPSEEK_PEAK)) }))
+    try {
       await flush()
-      const trigger = query(m.container, '.lc-dock')
-      const parent = trigger.parentElement!
-      // A narrow column, which the effect must pick up now that the ref exists.
-      Object.defineProperty(parent, 'clientWidth', { value: 820, configurable: true })
-      const probe = trigger.querySelector<HTMLElement>('.lc-dock-probe')!
-      Object.defineProperty(probe, 'offsetWidth', { value: 470, configurable: true })
-      Object.defineProperty(trigger, 'offsetWidth', { value: 600, configurable: true })
-      await act(async () => { window.dispatchEvent(new Event('resize')) })
-      assert.match(text(query(m.container, '.lc-dock-countdown')), /2h0m/, 'the compact form appears after the trigger mounts')
-      assert.ok(maybe(trigger, '.lc-dock-countdown svg') !== null, 'with the clock icon')
-    } finally {
-      await m.unmount()
-      vi.useRealTimers()
-    }
-  })
-})
-
-describe('ComposerDock — the row decides from how much space is LEFT for it', () => {
-  /** A minimal status-bar row: official siblings plus the trigger (with its probe). */
-  function buildRow(o: { rowWidth: number; sibling: number; core: number; shown: number; probe: number }) {
-    const parent = document.createElement('div')
-    const sib = document.createElement('span')
-    Object.defineProperty(sib, 'offsetWidth', { value: o.sibling, configurable: true })
-    parent.appendChild(sib)
-    const trigger = document.createElement('button')
-    const countdown = document.createElement('span')
-    countdown.className = 'lc-dock-countdown'
-    Object.defineProperty(countdown, 'offsetWidth', { value: o.shown, configurable: true })
-    const probe = document.createElement('span')
-    probe.className = 'lc-dock-probe'
-    Object.defineProperty(probe, 'offsetWidth', { value: o.probe, configurable: true })
-    trigger.append(countdown, probe)
-    Object.defineProperty(trigger, 'offsetWidth', { value: o.core + o.shown, configurable: true })
-    parent.appendChild(trigger)
-    Object.defineProperty(parent, 'clientWidth', { value: o.rowWidth, configurable: true })
-    return trigger
-  }
-
-  test('the official neighbours are subtracted before deciding', () => {
-    // The reported shape: an ~860px row whose official usage pill and context ring
-    // take ~260px, leaving ~600px for this line — exactly the full reading's width.
-    assert.equal(isRowTooNarrow(buildRow({ rowWidth: 860, sibling: 260, core: 130, shown: 470, probe: 470 })), false)
-    // Shave 40px off the row and the full reading no longer fits.
-    assert.equal(isRowTooNarrow(buildRow({ rowWidth: 820, sibling: 260, core: 130, shown: 470, probe: 470 })), true)
-  })
-
-  test('the verdict does not depend on which form is currently shown', () => {
-    // The whole reason the probe exists: measuring our own rendered width would say
-    // "it fits" the moment we switch to the compact form, and the row would flap.
-    const full = { rowWidth: 820, sibling: 260, core: 130, probe: 470, shown: 470 }
-    const compact = { rowWidth: 820, sibling: 260, core: 130, probe: 470, shown: 60 }
-    assert.equal(isRowTooNarrow(buildRow(full)), isRowTooNarrow(buildRow(compact)))
-    assert.equal(isRowTooNarrow(buildRow(full)), true, 'both report too narrow')
-  })
-
-  test('a wide row keeps the sentence', () => {
-    assert.equal(isRowTooNarrow(buildRow({ rowWidth: 1200, sibling: 260, core: 130, shown: 470, probe: 470 })), false)
-  })
-
-  test('unmeasurable input reads as "there is room", never as "degrade"', () => {
-    // jsdom and the pre-layout frame both report zero boxes; showing a plausible full
-    // reading beats flashing an icon because the environment could not be measured.
-    assert.equal(isRowTooNarrow(buildRow({ rowWidth: 0, sibling: 0, core: 0, shown: 0, probe: 0 })), false)
-  })
-
-  test('the probe is rendered even while the compact form is shown', () => {
-    // The probe must never be rendered only in the wide branch, or the verdict would
-    // flip the moment the compact form appears (see the "does not depend" case above).
-    const css = readFileSync(join(process.cwd(), 'src/client/styles/composerDock.css'), 'utf8')
-    assert.match(css, /\.lc-dock-probe\s*\{[^}]*visibility:\s*hidden/, 'the probe is invisible')
-    assert.match(css, /\.lc-dock-probe\s*\{[^}]*position:\s*absolute/, 'and out of flow, so it cannot widen the row')
+      const rows = queryAll(m.container, '.lc-dock-platform')
+      assert.equal(rows.length, 1)
+      assert.match(text(rows[0]), /DeepSeek/, 'the lone platform is still named')
+    } finally { await m.unmount(); vi.useRealTimers() }
   })
 })
