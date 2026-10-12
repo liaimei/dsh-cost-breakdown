@@ -427,6 +427,8 @@ function platformBalanceTexts(
     // 两者因此不会各算各的。
     const displayCurrency: CostCurrency = activeLocale === 'zh' ? 'cny' : 'usd'
     const platformRows = platformSpendsOf(data.cost ?? null, data.calls ?? null, book, null, data.creditRates ?? null)
+    // 当前在用的平台：`Snapshot.provider` 是 harness 逐请求更新的路由。
+    const activePlatform = platformRows.find(r => r.provider === data.provider) ?? null
     const subtitle = (data.model ?? '') + (data.provider ? ' · ' + data.provider : '')
     const gate = unsupportedOf(data.unsupported)
 
@@ -573,10 +575,15 @@ function platformBalanceTexts(
         )}
         <div className="lc-cols lc-head">
           <StatsTokens usage={usage} current={data.current} breakdown={breakdown} />
+          {/* 只算**当前在用**的平台：积分平台的用量不能按人民币计价，混算出来的
+              数字没有意义。用过的其他平台由下面的平台卡各自呈现。 */}
           <StatsCost
             usage={data.cost ?? null}
             calls={data.calls ?? null}
             creditRates={data.creditRates ?? null}
+            provider={activePlatform?.provider ?? null}
+            unit={activePlatform?.unit}
+            creditsValue={activePlatform?.unit === 'credits' ? activePlatform.value : undefined}
             currency={displayCurrency}
           />
           <StatsTiming timing={data.timing ?? null} spans={data.spans} />

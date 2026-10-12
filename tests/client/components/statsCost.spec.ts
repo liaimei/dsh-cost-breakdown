@@ -181,3 +181,55 @@ describe('StatsCost — the platform breakdown lives in its own cards now', () =
     } finally { await m.unmount() }
   })
 })
+
+describe('StatsCost — it speaks for the platform currently in use', () => {
+  const BOTH = {
+    workbuddy: { 'deepseek-v4.1-flash': { peak: { uncached: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } } },
+    'deepseek-account': { 'deepseek-v4.1-flash': { off: { uncached: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } } },
+  }
+  const CALLS = { workbuddy: { 'deepseek-v4.1-flash': 1400 }, 'deepseek-account': { 'deepseek-v4.1-flash': 612 } }
+
+  test('a credit platform is never priced as currency', async () => {
+    // The regression this guards: `deepseek-v4.1-flash` happens to be listed in the
+    // official CNY table, so a workbuddy turn was being priced as money — a plausible
+    // but meaningless figure, since that platform bills in credits.
+    setModelPricesLoader(null)
+    resetModelPrices()
+    const Card = makeStatsCost(makeKit('zh'), Donut)
+    const m = await mount(h(Card as never, {
+      usage: BOTH, calls: CALLS, provider: 'workbuddy', unit: 'credits', creditsValue: 155.65, currency: 'cny',
+    } as never))
+    try {
+      await flush()
+      const body = text(query(m.container, '.lc-card'))
+      assert.match(body, /155\.65/, 'the credit figure')
+      assert.match(body, /积分/, 'labelled in credits')
+      assert.doesNotMatch(body, /¥/, 'and NOT converted to currency')
+      assert.match(body, /1\.4k/, 'with the call count')
+    } finally { await m.unmount() }
+  })
+
+  test('a currency platform shows only that platform\u2019s cost', async () => {
+    // Two platforms that BOTH price in money, so the scoping is observable: the card
+    // must report the selected platform's own figure, not the sum. (Using a credit
+    // platform here would not discriminate — that one is unpriced either way.)
+    setModelPricesLoader(null)
+    resetModelPrices()
+    const Card = makeStatsCost(makeKit('zh'), Donut)
+    const twoMoney = {
+      'deepseek-account': { 'deepseek-v4.1-flash': { off: { uncached: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } } },
+      'other-route': { 'deepseek-v4.1-flash': { off: { uncached: 3_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } } },
+    }
+    const m = await mount(h(Card as never, {
+      usage: twoMoney, calls: CALLS, provider: 'deepseek-account', unit: 'money', currency: 'cny',
+    } as never))
+    try {
+      await flush()
+      const body = text(query(m.container, '.lc-card'))
+      // 1M at the official off-peak ¥1/M. The other route's 3M would make it ¥4.00 if
+      // the card priced the whole ledger instead of just the selected platform.
+      assert.match(body, /¥1\.00/, 'only the selected platform')
+      assert.doesNotMatch(body, /¥4\.00/, 'never the whole ledger')
+    } finally { await m.unmount() }
+  })
+})

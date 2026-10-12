@@ -429,10 +429,14 @@ export function makeComposerDock(
               {/* 余额不再单列：费用卡自带那行（与统计页一致），两处各写一遍会显得像两个数。 */}
               <div className="lc-dock-cards">
                 <StatsTokens usage={tokenUsage} current={reading.timeline.current} breakdown={breakdown} />
+                {/* 只算当前平台（`platforms` 此刻已按当前路由过滤）。 */}
                 <StatsCost
                   usage={reading.usage}
                   calls={reading.calls ?? null}
                   creditRates={reading.creditRates ?? null}
+                  provider={platforms[0]?.provider ?? null}
+                  unit={platforms[0]?.unit}
+                  creditsValue={platforms[0]?.unit === 'credits' ? platforms[0].value : undefined}
                   currency={currency}
                 />
                 {/* 每个平台一张卡，与统计页同一个组件、同一份数据。 */}

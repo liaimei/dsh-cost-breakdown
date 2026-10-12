@@ -41,3 +41,16 @@
 .lc-pf-card .lc-card-rate { white-space: nowrap; }
 /* 模型名那行已随骨架改到 title 里，这里只留环图下方的图例间距。 */
 .lc-pf-card .lc-sl { min-width: 0; }
+
+/* 积分平台的费用卡：这里不画金额。积分不是钱，把 token 用量按人民币换算出来的
+   数字没有意义（实测会把 workbuddy 的 1M token 算成 ¥0.30）。因此改画
+   「本会话积分 + 调用次数」，与平台卡同一套单位口径。 */
+.lc-sc-credits { display: flex; flex-direction: column; gap: 8px; }
+.lc-sc-credits-value {
+  font-size: calc(var(--dsh-content-font-size-title, 16px) * 1.6);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--dsw-alias-label-primary);
+  line-height: 1.2;
+}
+.lc-sc-credits-unit { font-size: var(--dsh-content-font-size-secondary, 13px); color: var(--dsw-alias-label-tertiary); }

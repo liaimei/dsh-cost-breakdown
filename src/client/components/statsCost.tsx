@@ -14,9 +14,9 @@
 import { useState, type ReactElement } from 'react'
 import { balanceEntryOf, readPlatformBalance } from '../balance'
 import type { PlatformBalance, SessionCallCounts, SessionCostUsage } from '../../shared/types'
-import {estimateSessionCostByBucket, formatCost, toCurrency, type CostCurrency, symbolOf } from '../cost'
-import { platformSpendsOf } from '../platformSpend'
+import { estimateSessionCostByBucket, formatCost, toCurrency, type CostCurrency, symbolOf } from '../cost'
 import { useModelPrices } from '../modelPrices'
+import { fmtCredits } from '../turnSpend'
 import type { ViewKit } from '../viewkit'
 
 import { SliceList } from './sliceList'
@@ -51,13 +51,23 @@ export function makeStatsCost(kit: ViewKit, Donut: (props: DonutProps) => ReactE
   usage: SessionCostUsage | null
   calls?: SessionCallCounts | null
   creditRates?: Record<string, Record<string, number>> | null
+  provider?: string | null
+  unit?: 'money' | 'credits'
+  creditsValue?: number
   currency: CostCurrency
 }) => ReactElement {
-  const { t, fmtShare } = kit
+  const { t, fmt, fmtShare } = kit
   return function StatsCost(props: {
     usage: SessionCostUsage | null
     calls?: SessionCallCounts | null
     creditRates?: Record<string, Record<string, number>> | null
+    /** 当前在用的平台（账本里的 provider 键）。给定时这张卡只算它——
+     *  积分平台的用量不能按人民币计价，混在一起算出来的数没有意义。 */
+    provider?: string | null
+    /** 该平台的单位；`credits` 时这张卡不画金额（积分不是钱）。 */
+    unit?: 'money' | 'credits'
+    /** 积分平台本会话的积分数（由调用方按当前平台算好）。 */
+    creditsValue?: number
     currency: CostCurrency
   }): ReactElement {
     // 图例行 ↔ 环图分段的悬停联动（共享 key，两侧都可设置）。
@@ -68,11 +78,20 @@ export function makeStatsCost(kit: ViewKit, Donut: (props: DonutProps) => ReactE
     // 因此这里不会先闪一帧空白。
     const [balance, setBalance] = useState<PlatformBalance | null>(() => readPlatformBalance((v) => { setBalance(v) }))
     const currency = props.currency
-    const split = estimateSessionCostByBucket(props.usage, book)
+    // 只算当前平台：不同平台的账单单位不同，把积分平台的用量按人民币算出来
+    // 会给出一个看起来合理却错的数字（实测：workbuddy 的 1M token 被算成 ¥0.30）。
+    // 积分平台整卡不画金额，改用平台卡那一组呈现。
+    const scope = props.provider === undefined || props.provider === null
+      ? props.usage
+      : (props.usage?.[props.provider] !== undefined ? { [props.provider]: props.usage[props.provider] } : null)
+    const isCredits = props.unit === 'credits'
+    const split = isCredits
+      ? { cacheRead: 0, uncached: 0, cacheWrite: 0, output: 0, total: 0, peak: 0, off: 0, any: false }
+      : estimateSessionCostByBucket(scope, book)
     const entry = balanceEntryOf(balance, currency)
     // 「有计费、却一行都定不了价」与「压根没有计费」是两件事：前者要说清是价格拿不到，
     // 而不是让读者以为这个会话没花过钱。`split.any` 为假时两者都无图可画。
-    const hasLedger = props.usage !== null && props.usage !== undefined && Object.keys(props.usage).length > 0
+    const hasLedger = scope !== null && scope !== undefined && Object.keys(scope).length > 0
     const unpriced = !split.any && hasLedger
     // wire 处处是美元，只在展示时换算；格式沿用插件既有的费用写法
     // （不到 1 元取两位有效数字，其余取到分），因此同一笔钱在这张卡、
@@ -81,8 +100,6 @@ export function makeStatsCost(kit: ViewKit, Donut: (props: DonutProps) => ReactE
     const totalText = split.any ? money(split.total) : '—'
     // 分桶行：主行给占比（环图上的份额），次行给这笔钱本身——两者都是这张卡要回答的问题。
     // 只有真的花了钱的分桶才进环图与图例，环图因此不会画零弧。
-    // 按平台拆分：积分平台与人民币平台各自成行，绝不加成一个数（两种货币不能相加）。
-    const platforms = platformSpendsOf(props.usage, props.calls, book, null, props.creditRates)
     const buckets = BUCKETS.filter(b => split[b.key] > 0)
     const rows: SliceRow[] = buckets.map(b => ({
       key: b.key,
@@ -92,10 +109,9 @@ export function makeStatsCost(kit: ViewKit, Donut: (props: DonutProps) => ReactE
       count: money(split[b.key]),
     }))
     const periodSum = split.peak + split.off
-    // 卡片是否有内容：有钱可分桶，**或**有平台明细可列。只有积分平台时 `split.any`
-    // 为假（积分不能按 token 定价），但那正是最该显示平台明细的情况——此前它会被
-    // 当成「无数据」整卡收起，积分消费因此完全看不见。
-    const hasContent = split.any || platforms.length > 0
+    // 积分平台不在这张卡里画金额：积分不是钱，换算出来的数字没有意义。
+    // 它由平台卡那一组负责呈现（按次计费）。
+    const hasContent = split.any
     return (
       <div className="lc-card lc-col-donut flex-1 min-w-[min(360px,100%)]">
         <div className="lc-card-title">
@@ -105,7 +121,24 @@ export function makeStatsCost(kit: ViewKit, Donut: (props: DonutProps) => ReactE
             ? <span className="lc-card-rate" title={t('costStat.note')}>{totalText}</span>
             : null}
         </div>
-        {!hasContent
+        {isCredits
+          ? (
+            <div className="lc-sc-credits">
+              <span className="lc-sc-credits-value">
+                {props.creditsValue === undefined ? '—' : fmtCredits(props.creditsValue)}
+              </span>
+              <span className="lc-sc-credits-unit">{t('costStat.unit.credits')}</span>
+              <div className="lc-sc-periods">
+                <span className="lc-sc-period">
+                  <span className="lc-sc-period-label">{t('costStat.callsLabel')}</span>
+                  <b>{fmt(props.calls?.[props.provider ?? ''] !== undefined
+                    ? Object.values(props.calls[props.provider ?? '']).reduce((n, c) => n + c, 0)
+                    : 0)}</b>
+                </span>
+              </div>
+            </div>
+          )
+          : !hasContent
           ? <div className="lc-empty">{unpriced ? t('stats.costUnavailable') : t('costStat.empty')}</div>
           : (
             <>
