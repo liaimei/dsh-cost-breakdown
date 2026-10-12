@@ -4,6 +4,8 @@
 // 计价，积分平台按次扣积分。放进一张卡就得给总额，而那个总额是把两种货币相加。
 
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, test } from 'vitest'
 import { createElement as h } from 'react'
 import { makeStatsPlatforms, platformDisplayName } from '../../../src/client/components/statsPlatforms'
@@ -136,5 +138,37 @@ describe('platformDisplayName', () => {
   test('anything else keeps its own name verbatim', () => {
     // A platform key is a factual identifier, not a label to be prettified.
     assert.equal(platformDisplayName('workbuddy-ai', kitZh.t), 'workbuddy-ai')
+  })
+})
+
+describe('platform cards are not stretched to a common height', () => {
+  const css = readFileSync(join(process.cwd(), 'src/client/styles/statsCost.css'), 'utf8')
+
+  test('the row aligns cards to their own content height', () => {
+    // The cards hold different amounts of content: a platform with no spend has no
+    // donut to draw, and one with no readable balance has one row fewer. Stretching
+    // them to a common height left a large blank region inside the short card — which
+    // is exactly what a zero-spend platform card looked like.
+    const row = /\.lc-platform-row\s*\{([^}]*)\}/.exec(css)
+    assert.ok(row !== null, 'the platform row rule exists')
+    assert.match(row[1], /align-items:\s*flex-start/, 'each card keeps its own height')
+    assert.doesNotMatch(row[1], /align-items:\s*stretch/, 'not stretched to the tallest sibling')
+  })
+
+  test('every platform card still reports its balance', async () => {
+    // The card in question showed a balance; the complaint about it was positional.
+    // Pin that a zero-spend platform still carries its own remaining figure.
+    const Cards = makeStatsPlatforms(kitZh, Donut)
+    const zero = { ...ROWS[0], provider: 'workbuddy-ai', value: 0, byModel: { 'glm-5.3': 0 } }
+    const m = await mount(h(Cards as never, {
+      rows: [zero],
+      currency: 'cny',
+      balances: { 'workbuddy-ai': { text: '350' } },
+    } as never))
+    try {
+      const body = text(queryAll(m.container, '.lc-pf-card')[0])
+      assert.match(body, /350/, 'the balance is on the card')
+      assert.match(body, /475|1\.1k/, 'alongside its call count')
+    } finally { await m.unmount() }
   })
 })

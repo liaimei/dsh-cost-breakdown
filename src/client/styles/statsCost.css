@@ -27,8 +27,12 @@
 
 /* 平台卡所在的那一行：卡片按内容宽度排布、可换行，**不参与**头部三张卡的列宽分配。
    平台数量随使用情况变化（可能 1 张，也可能 4 张），因此让弹性行自己决定每行放几张；
-   每张卡保有一个下限宽度，避免被压成竖排窄柱。 */
-.lc-platform-row { align-items: stretch; }
+   每张卡保有一个下限宽度，避免被压成竖排窄柱。
+
+   `align-items: flex-start` 而不是 `stretch`：卡片的**内容**长度天然不同——积分平台可能
+   没有环图（消费为 0 时没有可分的段），也可能还有余额行。`stretch` 会把短卡拉到与最长
+   的那张等高，于是中间空出一大片没有任何内容的区域。这里让每张卡按自己的内容定高。 */
+.lc-platform-row { align-items: flex-start; }
 .lc-platform-row > .lc-pf-card {
   flex: 1 1 auto;
   min-width: min(240px, 100%);
