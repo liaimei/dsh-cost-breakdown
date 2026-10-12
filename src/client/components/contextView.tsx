@@ -429,6 +429,11 @@ function platformBalanceTexts(
     const platformRows = platformSpendsOf(data.cost ?? null, data.calls ?? null, book, null, data.creditRates ?? null)
     // 当前在用的平台：`Snapshot.provider` 是 harness 逐请求更新的路由。
     const activePlatform = platformRows.find(r => r.provider === data.provider) ?? null
+    // 会话里**出现过官方模型**吗？没有的话整块金额统计都不成立：峰谷时段、人民币
+    // 价目表、按 token 计价的拆分全都是官方计价才有的概念。一个只用了积分平台的
+    // 会话，显示一张人民币费用卡（外加峰谷徽标与价目表）等于凭空造出一笔账单。
+    const usedOfficial = data.cost !== null && data.cost !== undefined
+      && Object.keys(data.cost).some(provider => isDeepSeekProvider(provider))
     const subtitle = (data.model ?? '') + (data.provider ? ' · ' + data.provider : '')
     const gate = unsupportedOf(data.unsupported)
 
@@ -575,17 +580,22 @@ function platformBalanceTexts(
         )}
         <div className="lc-cols lc-head">
           <StatsTokens usage={usage} current={data.current} breakdown={breakdown} />
-          {/* 只算**当前在用**的平台：积分平台的用量不能按人民币计价，混算出来的
-              数字没有意义。用过的其他平台由下面的平台卡各自呈现。 */}
+          {/* 只在**用过官方模型**时才出现（见上面 `usedOfficial`）：没有官方用量时
+              这张卡连同峰谷拆分与价目表一起省略。只算当前在用的那个平台——
+              积分平台的用量不能按人民币计价。 */}
+          {usedOfficial
+            ? (
           <StatsCost
             usage={data.cost ?? null}
             calls={data.calls ?? null}
             creditRates={data.creditRates ?? null}
             provider={activePlatform?.provider ?? null}
             unit={activePlatform?.unit}
-            creditsValue={activePlatform?.unit === 'credits' ? activePlatform.value : undefined}
-            currency={displayCurrency}
-          />
+                creditsValue={activePlatform?.unit === 'credits' ? activePlatform.value : undefined}
+                currency={displayCurrency}
+              />
+            )
+            : null}
           <StatsTiming timing={data.timing ?? null} spans={data.spans} />
         </div>
 

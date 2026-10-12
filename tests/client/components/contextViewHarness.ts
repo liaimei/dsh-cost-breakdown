@@ -43,7 +43,9 @@ export const T0 = 1700000000000
 export function richTimeline(over: Record<string, unknown> = {}): ContextTimeline {
   return timeline({
     model: 'deepseek-v4-flash',
-    provider: 'deepseek',
+    provider: 'deepseek-account',
+    // 官方账本：费用卡只在这个会话用过官方模型时出现（见 contextView 的 `usedOfficial`）。
+    cost: { 'deepseek-account': { 'deepseek-v4-flash': { off: { uncached: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } } } },
     contextWindow: 128000,
     toolCalls: 3,
     images: 1,

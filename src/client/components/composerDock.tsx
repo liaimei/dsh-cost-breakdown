@@ -309,6 +309,10 @@ export function makeComposerDock(
     // 给它们标「峰/谷」等于替别家发明一套时段规则。当前路由未知时按官方处理，
     // 因为官方价目表是这套拆分的唯一来源。
     const onOfficialRates = reading.active === undefined || isDeepSeekProvider(reading.active.provider)
+    // 这个会话**用过官方模型**吗？整块金额统计（费用卡、峰谷、价目表）都只在
+    // 有过官方用量时才成立——它们描述的全是官方计价。
+    const usedOfficial = reading.usage !== null
+      && Object.keys(reading.usage).some(provider => isDeepSeekProvider(provider))
     const periodLabel = t(period.peak ? 'dock.peak' : 'dock.off')
     // 峰时窗口由官方表派生，分隔符按语言给：中文用顿号，其余用逗号。
     const windows = peakWindowsText(activeLocale === 'zh' ? '、' : ', ')
@@ -430,28 +434,39 @@ export function makeComposerDock(
                   : null}
               </div>
               {/* 峰谷窗口与倒计时在展开卡里也写全：收起那一行只放得下一个倒计时，
-                  而「峰时是哪几段」正是这张卡要回答的问题。 */}
-              <div className="lc-dock-period-row">
-                <span className="lc-dock-period-windows">{t('dock.peakWindows', { windows })}</span>
-                <span className="lc-dock-period-eta">
-                  {dayOff === 'weekend' ? t('dock.weekendOff') : null}
-                  {dayOff === 'holiday' ? t('dock.holidayOff') : null}
-                  {countdownText !== null ? countdownText : null}
-                </span>
-              </div>
+                  而「峰时是哪几段」正是这张卡要回答的问题。
+                  整块只对走官方峰谷计价的平台出现——其他平台没有这个概念。 */}
+              {onOfficialRates
+                ? (
+                  <div className="lc-dock-period-row">
+                    <span className="lc-dock-period-windows">{t('dock.peakWindows', { windows })}</span>
+                    <span className="lc-dock-period-eta">
+                      {dayOff === 'weekend' ? t('dock.weekendOff') : null}
+                      {dayOff === 'holiday' ? t('dock.holidayOff') : null}
+                      {countdownText !== null ? countdownText : null}
+                    </span>
+                  </div>
+                )
+                : null}
               {/* 余额不再单列：费用卡自带那行（与统计页一致），两处各写一遍会显得像两个数。 */}
               <div className="lc-dock-cards">
                 <StatsTokens usage={tokenUsage} current={reading.timeline.current} breakdown={breakdown} />
-                {/* 只算当前平台（`platforms` 此刻已按当前路由过滤）。 */}
+                {/* 费用卡只在**这个会话用过官方模型**时出现：峰谷、人民币价目表、
+                    按 token 的拆分都是官方计价才有的概念，一个只用积分平台的会话
+                    显示它等于凭空造出一笔账单。只算当前在用的那个平台。 */}
+                {usedOfficial
+                  ? (
                 <StatsCost
                   usage={reading.usage}
                   calls={reading.calls ?? null}
                   creditRates={reading.creditRates ?? null}
                   provider={platforms[0]?.provider ?? null}
                   unit={platforms[0]?.unit}
-                  creditsValue={platforms[0]?.unit === 'credits' ? platforms[0].value : undefined}
-                  currency={currency}
-                />
+                    creditsValue={platforms[0]?.unit === 'credits' ? platforms[0].value : undefined}
+                    currency={currency}
+                  />
+                  )
+                  : null}
                 {/* 每个平台一张卡，与统计页同一个组件、同一份数据。 */}
                 <StatsPlatforms
                   rows={platforms}
@@ -464,7 +479,11 @@ export function makeComposerDock(
               {onOfficialRates
                 ? <DockRates kit={kit} peak={period.peak} currency={currency} />
                 : null}
-              <div className="lc-dock-note">{t('dock.note')}</div>
+              {/* 估算值说明说的是「按官方价目表计算」——没有官方用量时那句话
+                  既不对也多余。 */}
+              {usedOfficial
+                ? <div className="lc-dock-note">{t('dock.note')}</div>
+                : null}
             </div>
           )
           : null}

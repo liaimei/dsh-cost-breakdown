@@ -1093,3 +1093,71 @@ describe('ComposerDock — peak/off and the rate table belong to DeepSeek only',
     } finally { await m.unmount(); vi.useRealTimers() }
   })
 })
+
+describe('ComposerDock — official billing UI appears only where it applies', () => {
+  const bj = (y: number, mo: number, d: number, h: number, mi = 0): number => Date.UTC(y, mo - 1, d, h - 8, mi)
+
+  /** A session's ledger, optionally including an official route. */
+  function session(provider: string, withOfficial: boolean): ContextTimeline {
+    const cost: Record<string, unknown> = {
+      workbuddy: { 'deepseek-v4.1-flash': { peak: { uncached: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } } },
+    }
+    if (withOfficial) {
+      cost['deepseek-account'] = { 'deepseek-v4.1-flash': { off: { uncached: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } } }
+    }
+    return {
+      ok: true, requests: [], events: [], nodes: [], archive: [],
+      current: { system: 0, tools: 0, user: 0, inject: 0, skill: 0, assistant: 0, tool: 0, total: 0 },
+      provider, model: 'deepseek-v4.1-flash', cost,
+      calls: { workbuddy: { 'deepseek-v4.1-flash': 1500 }, 'deepseek-account': { 'deepseek-v4.1-flash': 10 } },
+      creditRates: { workbuddy: { 'deepseek-v4.1-flash': 0.11 } },
+    } as unknown as ContextTimeline
+  }
+
+  async function open(provider: string, withOfficial: boolean) {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(bj(2026, 10, 12, 10)))
+    const D = makeComposerDock(asClientCtx(new TestClientCtx({ locale: 'zh' })), kitZh)
+    const m = await mount(h(D, { sessionId: 's1', ...seatOf(session(provider, withOfficial)) }))
+    await flush()
+    await click(query(m.container, '.lc-dock'))
+    await flush()
+    return { m, card: query(m.container, '.lc-dock-card') }
+  }
+
+  test('a session that never used an official model shows no cost card at all', async () => {
+    // Peak/off-peak, the CNY rate table and the per-bucket money split are all official
+    // billing concepts. A session that only ever ran on a credit platform has none of
+    // them, so rendering the card would invent a bill that does not exist.
+    const { m, card } = await open('workbuddy', false)
+    try {
+      const titles = queryAll(card, '.lc-card-title-text').map(el => el.textContent)
+      assert.ok(!titles.includes('费用统计'), `no cost card, got ${JSON.stringify(titles)}`)
+      assert.equal(queryAll(card, '.lc-dock-period-row').length, 0, 'no peak window row')
+      assert.equal(queryAll(card, '.lc-dock-table').length, 0, 'no rate table')
+      assert.equal(queryAll(card, '.lc-dock-note').length, 0, 'and no official-price disclaimer')
+      assert.ok(titles.includes('workbuddy'), 'the per-platform card still reports the spend')
+    } finally { await m.unmount(); vi.useRealTimers() }
+  })
+
+  test('a session that did use one keeps the cost card', async () => {
+    const { m, card } = await open('workbuddy', true)
+    try {
+      const titles = queryAll(card, '.lc-card-title-text').map(el => el.textContent)
+      assert.ok(titles.includes('费用统计'), `the card is back, got ${JSON.stringify(titles)}`)
+      // But the peak row and rate table stay off: the route IN USE is a credit one.
+      assert.equal(queryAll(card, '.lc-dock-period-row').length, 0, 'still no peak window row')
+      assert.equal(queryAll(card, '.lc-dock-table').length, 0, 'still no rate table')
+    } finally { await m.unmount(); vi.useRealTimers() }
+  })
+
+  test('an official route in use gets the whole set', async () => {
+    const { m, card } = await open('deepseek-account', true)
+    try {
+      const titles = queryAll(card, '.lc-card-title-text').map(el => el.textContent)
+      assert.ok(titles.includes('费用统计'), 'the cost card')
+      assert.equal(queryAll(card, '.lc-dock-period-row').length, 1, 'the peak window row')
+      assert.equal(queryAll(card, '.lc-dock-table').length, 1, 'the rate table')
+    } finally { await m.unmount(); vi.useRealTimers() }
+  })
+})
