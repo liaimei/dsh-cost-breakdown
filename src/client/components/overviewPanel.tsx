@@ -18,6 +18,10 @@ import { useEffect, useMemo, useState, type ReactElement } from 'react'
 import { estimateSessionCost, formatCost, moneyOnlyUsage, type CostCurrency, type ModelBook } from '../cost'
 import { fmt } from '../format'
 import { useModelPrices } from '../modelPrices'
+import { platformBalanceTexts } from '../platformBalances'
+import { BALANCE_POLL_MS } from '../constants'
+import { readPlatformBalance } from '../balance'
+import { readPlatformCredits, type PlatformCreditsTable } from '../platformCredits'
 import {
   aggregateDays, dayRangeWindow, filterRows, groupCountsOf, inGroup, kpisOf,
   pageOf, rangeWindowOf, refreshSessions, requestActivityBackfill, rowsOfSnapshot,
@@ -28,7 +32,7 @@ import {
 import { openSessionVia, type ClientCtx } from '../services'
 import { readSkillCatalog } from '../skills'
 import { openPluginSettings } from '../settingsJump'
-import type { SkillInfo } from '../../shared/types'
+import type { PlatformBalance, SkillInfo } from '../../shared/types'
 import { dayKeyOf } from '../../shared/days'
 import type { ViewKit } from '../viewkit'
 import { makeBalanceCapsule } from './balanceCapsule'
@@ -94,6 +98,18 @@ export function makeOverviewPanel(ctx: ClientCtx, kit: ViewKit): (props: Overvie
 
   function OverviewBody(props: OverviewPanelProps): ReactElement | null {
     const { book } = useModelPrices()
+    // 平台余额：与会话页那两张卡共用同一套读取器与同一个轮询周期，因此两个页面
+    // 不会对同一个余额给出不同答案。DeepSeek 走余额接口，积分平台各自的积分池
+    // 走积分接口（两版是两个池，不能互相顶替）。
+    const [balance, setBalance] = useState<PlatformBalance | null>(() => readPlatformBalance((v) => { setBalance(v) }))
+    const [credits, setCredits] = useState<PlatformCreditsTable | null>(() => readPlatformCredits((v) => { setCredits(v) }))
+    useEffect(() => {
+      const timer = setInterval(() => {
+        setBalance(readPlatformBalance(setBalance))
+        setCredits(readPlatformCredits(setCredits))
+      }, BALANCE_POLL_MS)
+      return () => { clearInterval(timer) }
+    }, [])
     const snapshot = sessionsSnapshotOf(props)
     const wsSnapshot = workspacesSnapshotOf(props)
     const [preset, setPreset] = useState<OverviewRange>('30d')
@@ -258,7 +274,11 @@ export function makeOverviewPanel(ctx: ClientCtx, kit: ViewKit): (props: Overvie
                 <div className="lc-ov-stats">
                   <OverviewBilled billed={kpi.billed} currency={currency} />
                   {/* 每个平台一张卡：跨会话按平台汇总，与单会话页同一个组件。 */}
-                  <StatsPlatforms rows={kpi.billed?.platforms ?? []} currency={currency} />
+                  <StatsPlatforms
+                    rows={kpi.billed?.platforms ?? []}
+                    currency={currency}
+                    balances={platformBalanceTexts(kpi.billed?.platforms ?? [], balance, credits, currency)}
+                  />
                   <OverviewTokens tokens={kpi.tokenParts} />
                   <StatsTiming timing={kpi.timing} />
                 </div>

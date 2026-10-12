@@ -10,11 +10,8 @@ import { useTimelineSource } from '../timelineSource'
 import { makeDetailNote } from './detailNote'
 import { readPlatformBalance } from '../balance'
 import { useModelPrices } from '../modelPrices'
-import { balanceEntryOf } from '../balance'
-import { fmtCredits } from '../turnSpend'
 import { isDeepSeekProvider } from '../../shared/providers'
-import { symbolOf, type CostCurrency } from '../cost'
-import type { PlatformSpend } from '../platformSpend'
+import type { CostCurrency } from '../cost'
 import { readPlatformCredits, type PlatformCreditsTable } from '../platformCredits'
 import { BALANCE_POLL_MS } from '../constants'
 import type { PlatformBalance } from '../../shared/types'
@@ -36,6 +33,7 @@ import { makeUpgradeGate } from './upgradeGate'
 import { makeRequestDetail } from './requestDetail'
 import { countsOfRecords, makeStatsContext, makeSubagentCost, toolTallyOf } from './statsContext'
 import { makeStatsCost } from './statsCost'
+import { platformBalanceTexts } from '../platformBalances'
 import { makeStatsPlatforms } from './statsPlatforms'
 import { platformSpendsOf } from '../platformSpend'
 import { makeStatsTiming } from './statsTiming'
@@ -92,27 +90,6 @@ export function makeContextView(
 
 /** 各平台的剩余额度文案。余额只归自己那一张卡：DeepSeek 的账户余额给 DeepSeek，
  *  剩余积分给积分平台；读不到的整行不出现（宁可少一个数字，也不显示错配的额度）。 */
-function platformBalanceTexts(
-  rows: readonly PlatformSpend[],
-  balance: PlatformBalance | null,
-  credits: PlatformCreditsTable | null,
-  currency: CostCurrency,
-): Record<string, { text: string } | undefined> {
-  const deepseek = balanceEntryOf(balance, currency)
-  const out: Record<string, { text: string } | undefined> = {}
-  for (const row of rows) {
-    if (row.unit === 'credits') {
-      // 按 provider 取该版本自己的余额：两版是两套积分池，不能互相顶替。
-      const own = credits?.[row.provider]
-      out[row.provider] = own === undefined || own.unlimited ? undefined : { text: fmtCredits(own.total) }
-      continue
-    }
-    out[row.provider] = isDeepSeekProvider(row.provider) && deepseek !== null
-      ? { text: symbolOf(deepseek.currency) + deepseek.total.toFixed(2) }
-      : undefined
-  }
-  return out
-}
 
   function ContextViewBody(props: ContextViewProps): ReactElement {
     // 价目册与平台余额：与输入框那行读数共用同一套读取器，两处因此不会对同一次
