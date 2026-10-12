@@ -385,7 +385,7 @@ function platformBalanceTexts(
     }, [activeReq, activeIdx, displayRequests])
 
     if (!data) {
-      return (
+    return (
         <div className="lc-root" ref={rootRef}>
           {source.detailState === 'failed'
             ? <DetailNote state="failed" onRetry={source.retryDetail} />
@@ -423,6 +423,10 @@ function platformBalanceTexts(
     const activeLocale = localeSvc !== undefined && typeof localeSvc.getLocale === 'function'
       ? localeSvc.getLocale().active
       : 'en'
+    // 显示货币与平台行：算一次供头部那三张卡与下面独立的平台行共用，
+    // 两者因此不会各算各的。
+    const displayCurrency: CostCurrency = activeLocale === 'zh' ? 'cny' : 'usd'
+    const platformRows = platformSpendsOf(data.cost ?? null, data.calls ?? null, book, null, data.creditRates ?? null)
     const subtitle = (data.model ?? '') + (data.provider ? ' · ' + data.provider : '')
     const gate = unsupportedOf(data.unsupported)
 
@@ -573,16 +577,25 @@ function platformBalanceTexts(
             usage={data.cost ?? null}
             calls={data.calls ?? null}
             creditRates={data.creditRates ?? null}
-            currency={activeLocale === 'zh' ? 'cny' : 'usd'}
-          />
-          {/* 每个平台一张卡：单位不同，因此绝不合成一个总额。 */}
-          <StatsPlatforms
-            rows={platformSpendsOf(data.cost ?? null, data.calls ?? null, book, null, data.creditRates ?? null)}
-            currency={activeLocale === 'zh' ? 'cny' : 'usd'}
-            balances={platformBalanceTexts(platformSpendsOf(data.cost ?? null, data.calls ?? null, book, null, data.creditRates ?? null), balance, credits, activeLocale === 'zh' ? 'cny' : 'usd')}
+            currency={displayCurrency}
           />
           <StatsTiming timing={data.timing ?? null} spans={data.spans} />
         </div>
+
+        {/* 平台卡**单独成行**：头部那三张卡各有 `min-width: min(360px, 100%)`，
+            再往里塞就会把每张压成一条竖排窄柱。这里也不与它们共享列宽——
+            平台数量本来就随使用情况变化，行数因此自行决定。 */}
+        {platformRows.length > 0
+          ? (
+            <div className="lc-cols lc-platform-row">
+              <StatsPlatforms
+                rows={platformRows}
+                currency={displayCurrency}
+                balances={platformBalanceTexts(platformRows, balance, credits, displayCurrency)}
+              />
+            </div>
+          )
+          : null}
 
         <div className="lc-cols lc-cols-main">
           <div className="lc-col flex-1 min-w-[min(360px,100%)]">{compositionCard}{trendCard}</div>

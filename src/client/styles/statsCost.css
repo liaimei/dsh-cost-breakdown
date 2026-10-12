@@ -58,3 +58,13 @@
   font-size: calc(var(--dsh-content-font-size-secondary, 13px) - 1px);
   color: var(--dsw-alias-label-tertiary);
 }
+
+/* 平台卡所在的那一行：卡片按内容宽度排布、可换行，**不参与**头部三张卡的列宽分配。
+   平台数量随使用情况变化（可能 1 张，也可能 4 张），因此让弹性行自己决定每行放几张；
+   每张卡保有一个下限宽度，避免被压成竖排窄柱。 */
+.lc-platform-row { align-items: stretch; }
+.lc-platform-row > .lc-pf-card {
+  flex: 0 1 auto;
+  min-width: min(180px, 100%);
+  max-width: min(280px, 100%);
+}

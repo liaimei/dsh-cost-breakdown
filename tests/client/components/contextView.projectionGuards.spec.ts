@@ -1,6 +1,8 @@
 import { act, createElement as h } from 'react'
 import assert from 'node:assert/strict'
 import { describe, test, vi } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { DICT_EN } from '../../../src/client/i18n'
 import { TestClientCtx } from '../helpers/harness'
 import { click, mount, query, queryAll, text, until } from '../helpers/kit'
@@ -157,5 +159,21 @@ describe('ContextView — baseline gate', () => {
     assert.equal(m.container.querySelector('.lc-modal-backdrop'), null)
     assert.ok(text(m.container).includes(DICT_EN['overview.title']))
     await m.unmount()
+  })
+})
+
+describe('the platform cards get their own row', () => {
+  test('they are not squeezed into the fixed three-column header row', async () => {
+    // The regression: platform cards were added as a fourth (and fifth, sixth...) item in
+    // the header row, whose three cards each carry `min-width: min(360px, 100%)`. The
+    // extras were crushed into a vertical sliver of a column.
+    const css = readFileSync(join(process.cwd(), 'src/client/styles/statsCost.css'), 'utf8')
+    assert.match(css, /\.lc-platform-row/, 'the row has its own class')
+    // And it must give each card a floor, or a narrow container still flattens them.
+    assert.match(css, /\.lc-platform-row > \.lc-pf-card\s*\{[^}]*min-width:/, 'with a minimum card width')
+    const src = readFileSync(join(process.cwd(), 'src/client/components/contextView.tsx'), 'utf8')
+    const header = src.slice(src.indexOf('lc-cols lc-head'), src.indexOf('lc-platform-row'))
+    assert.doesNotMatch(header, /<StatsPlatforms/, 'not a member of the header row')
+    assert.match(src, /lc-cols lc-platform-row/, 'it lives in a row of its own')
   })
 })
