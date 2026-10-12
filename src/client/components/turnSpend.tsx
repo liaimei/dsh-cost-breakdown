@@ -13,11 +13,12 @@ import { type ReactElement } from 'react'
 import { Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { ConversationNodeLike, SessionStandardProps } from '../services'
 import { conversationNodesOf } from '../services'
-import type { ContextTimeline, RequestRecord, TurnCostEntry } from '../../shared/types'
+import type { ContextTimeline, TurnCostEntry } from '../../shared/types'
 import { useModelPrices } from '../modelPrices'
 import { toCurrency, type CostCurrency } from '../cost'
 import { fmt } from '../format'
-import type { TurnSpend } from '../turnSpend'
+import type { ThirdPartyRates } from '../../shared/thirdPartyRates'
+import type { CreditRates, TurnSpend } from '../turnSpend'
 import { turnSpendOf } from '../turnSpend'
 import type { ViewKit } from '../viewkit'
 
@@ -26,29 +27,28 @@ export interface TurnSpendProps extends SessionStandardProps {
   messageId?: unknown
 }
 
-/** 按 messageId 找那条回复的 seq；节点属于不可信输入，逐个隔离。 */
-function seqOfMessageId(nodes: readonly ConversationNodeLike[] | undefined, messageId: string): number | null {
+/** 按 messageId 找出那条回复所属的 turn。
+ *
+ *  turn 号**直接来自聊天节点**（`node.location.turn.turn`，官方 AssistantNodeView
+ *  用的就是它），而不是从请求记录里按 seq 反推：`requests` 在瘦身 head 上是空的
+ *  （只在 detail 通道里），靠它匹配会永远落空——这正是此前读数不显示的原因。
+ *  节点属于不可信输入，因此逐层自证后再借用。 */
+function turnOfMessageId(nodes: readonly ConversationNodeLike[] | undefined, messageId: string): number | null {
   for (const node of nodes ?? []) {
     try {
       if (node.kind !== 'assistant' || node.messageId !== messageId) continue
-      return typeof node.seq === 'number' && Number.isFinite(node.seq) ? node.seq : null
+      const location = (node as { location?: unknown }).location
+      if (location === null || typeof location !== 'object') return null
+      const loc = location as { kind?: unknown; turn?: unknown }
+      // 只有这两种位置带轮次；其余（如 turn-process）没有可用的 turn。
+      if (loc.kind !== 'turn' && loc.kind !== 'step') return null
+      const turn = loc.turn !== null && typeof loc.turn === 'object'
+        ? (loc.turn as { turn?: unknown }).turn
+        : undefined
+      return typeof turn === 'number' && Number.isFinite(turn) ? turn : null
     } catch { continue }
   }
   return null
-}
-
-/** 回复的 seq → 本轮 turn：取 seq 不超过它的最后一条请求。
- *  一个 turn 里可能有多个 step，取最后一条即落在本轮内。 */
-function turnOfSeq(requests: readonly RequestRecord[], seq: number): number | null {
-  let best: number | null = null
-  let bestSeq = Number.NEGATIVE_INFINITY
-  for (const req of requests) {
-    if (typeof req.turn !== 'number' || !Number.isFinite(req.turn)) continue
-    if (req.seq > seq || req.seq <= bestSeq) continue
-    bestSeq = req.seq
-    best = req.turn
-  }
-  return best
 }
 
 /** 积分按平台习惯去尾零：小于 1 保留三位，否则两位。 */
@@ -63,10 +63,16 @@ function tipOf(spend: TurnSpend, t: ViewKit['t']): string {
   return spend.unit === 'credits' ? t('turnSpend.creditsTip') : t('turnSpend.moneyTip')
 }
 
-/** 绑定 `kit` 与「当前显示货币」的读取器，返回这个每轮读数。 */
+/** 绑定 `kit` 与「当前显示货币」的读取器，返回这个每轮读数。
+ *
+ *  `rates` 与 `credits` 由注册处传入（见 client/index.ts）：前者是用户声明的每百万
+ *  token 费率，后者是按次积分费率。它们必须是**运行时可变的读取器**而不是值——
+ *  设置在会话中途可改，传值会把第一帧的快照永久冻住。 */
 export function makeTurnSpend(
   kit: ViewKit,
   currency: () => CostCurrency,
+  rates: () => ThirdPartyRates | null,
+  credits: () => CreditRates | null,
 ): (props: TurnSpendProps) => ReactElement | null {
   const { t } = kit
   return function TurnSpendView(props: TurnSpendProps): ReactElement | null {
@@ -77,12 +83,10 @@ export function makeTurnSpend(
       : null
     const messageId = props.messageId
     if (typeof messageId !== 'string' || messageId === '') return null
-    const seq = seqOfMessageId(conversationNodesOf(props), messageId)
-    if (seq === null) return null
-    const turn = turnOfSeq(timeline?.requests ?? [], seq)
+    const turn = turnOfMessageId(conversationNodesOf(props), messageId)
     if (turn === null) return null
     const entry: TurnCostEntry | undefined = timeline?.turnCost?.[String(turn)]
-    const spend = turnSpendOf(entry, book, null, null)
+    const spend = turnSpendOf(entry, book, rates(), credits())
     if (spend === null) return null
     const text = spend.unit === 'credits'
       ? t('turnSpend.credits', { n: fmtCredits(spend.value) })
