@@ -36,18 +36,29 @@ describe('creditAmountOf — reading the platform\u2019s own wording', () => {
 })
 
 describe('creditRatesFromCatalog — the untrusted platform file', () => {
-  test('reads the newest account entry and keys both workbuddy routes', () => {
+  test('reads the newest account entry, for the route the catalog belongs to', () => {
     const rates = creditRatesFromCatalog(catalog({
       old: entry([{ id: 'glm-5.3', billing: { credits: 'x9.99 credits' } }], 1),
       fresh: entry([
         { id: 'glm-5.3', billing: { credits: 'x0.79 credits' } },
         { id: 'deepseek-v4.1-flash', billing: { credits: 'x0.11 credits' } },
       ], 2),
-    }))
+    }), 'workbuddy')
     // The newer fetch wins: an older account's prices may already be stale.
     assert.equal(rates?.workbuddy['glm-5.3'], 0.79)
-    assert.equal(rates?.['workbuddy-ai']['glm-5.3'], 0.79, 'both live route keys resolve')
     assert.equal(rates?.workbuddy['deepseek-v4.1-flash'], 0.11)
+    // Only the route this catalog belongs to: the two editions keep separate
+    // models, accounts and credits, so one must never price the other.
+    assert.equal(Object.keys(rates ?? {}).length, 1)
+  })
+
+  test('the international catalog is read under its own route', () => {
+    // `.workbuddy-ai-catalog.json` describes the international edition; its
+    // multipliers must land on `workbuddy-ai`, not on the CN route.
+    const rates = creditRatesFromCatalog(
+      catalog({ a: entry([{ id: 'glm-5.3', billing: { credits: 'x0.79' } }]) }), 'workbuddy-ai')
+    assert.equal(rates?.['workbuddy-ai']['glm-5.3'], 0.79)
+    assert.equal(rates?.workbuddy, undefined)
   })
 
   test('keeps a genuinely free model at zero rather than dropping it', () => {

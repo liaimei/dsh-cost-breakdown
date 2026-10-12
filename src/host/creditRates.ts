@@ -22,11 +22,15 @@ export type CreditRateTable = Record<string, Record<string, number>>
 /** 该 reader 接受的目录格式版本；其他版本整体丢弃。 */
 const CATALOG_FORMAT_VERSION = 1
 
-/** workbuddy 目录在 Harness home 下的文件名（与它自己的读取器一致）。 */
-const WORKBUDDY_CATALOG_FILENAME = '.workbuddy-catalog.json'
-
-/** workbuddy 的两条 DSH 路由键（实测账本里就是这两个）。 */
-const WORKBUDDY_PROVIDERS = ['workbuddy', 'workbuddy-ai'] as const
+/**
+ * 两套目录，一条路由键对一条——国内版与国际版的模型、账号、积分互不混用
+ * （workbuddy 自己的文档就是这么说的），所以各自只认自己的那份目录：
+ * 国际版的模型倍率不该被套到国内版的路由上，反之亦然。
+ */
+const CATALOGS: readonly { file: string; provider: string }[] = [
+  { file: '.workbuddy-catalog.json', provider: 'workbuddy' },
+  { file: '.workbuddy-ai-catalog.json', provider: 'workbuddy-ai' },
+]
 
 /** 缓存时长：目录按需刷新，每帧读盘没有意义。 */
 const CACHE_MS = 30_000
@@ -37,8 +41,9 @@ export function dshHome(): string {
   return env !== undefined && env !== '' ? env : join(homedir(), '.dsh')
 }
 
-/** 从一份已解析的目录载荷里提取费率；结构和字段逐层自证，不合规即整体放弃。 */
-export function creditRatesFromCatalog(value: unknown): CreditRateTable | null {
+/** 从一份已解析的目录载荷里提取费率；结构和字段逐层自证，不合规即整体放弃。
+ *  `provider` 是这份目录对应的 DSH 路由键（见 {@link CATALOGS}）。 */
+export function creditRatesFromCatalog(value: unknown, provider = 'workbuddy'): CreditRateTable | null {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return null
   const root = value as { version?: unknown; entries?: unknown }
   // 版本不认识就整体丢弃：宁可没有读数，也不按猜测的结构读出一张错表。
@@ -56,8 +61,7 @@ export function creditRatesFromCatalog(value: unknown): CreditRateTable | null {
   }
   if (best === null) return null
 
-  const out: CreditRateTable = {}
-  for (const provider of WORKBUDDY_PROVIDERS) out[provider] = {}
+  const models: Record<string, number> = {}
   for (const raw of best.models as unknown[]) {
     if (raw === null || typeof raw !== 'object') continue
     const model = raw as { id?: unknown; billing?: unknown }
@@ -67,21 +71,26 @@ export function creditRatesFromCatalog(value: unknown): CreditRateTable | null {
     const amount = creditAmountOf((billing as { credits?: unknown }).credits)
     // 解析不出来就跳过这一条：它的费率未知，界面应当对它退回金额路径或什么都不显示。
     if (amount === null) continue
-    for (const provider of WORKBUDDY_PROVIDERS) out[provider][model.id.toLowerCase()] = amount
+    models[model.id.toLowerCase()] = amount
   }
-  return Object.values(out).some(models => Object.keys(models).length > 0) ? out : null
+  return Object.keys(models).length > 0 ? { [provider]: models } : null
 }
 
 let cached: { at: number; value: CreditRateTable | null } | null = null
 
-/** 读并缓存平台的积分费率；任何失败（文件缺失、JSON 损坏、结构变了）都返回 null。 */
+/** 读并缓存平台的积分费率；任何失败（文件缺失、JSON 损坏、结构变了）都返回 null。
+ *  两套目录各读各的：只装了国际版时只有 `workbuddy-ai` 有费率，反之亦然。 */
 export function platformCreditRates(now = Date.now()): CreditRateTable | null {
   if (cached !== null && now - cached.at < CACHE_MS) return cached.value
-  let value: CreditRateTable | null = null
-  try {
-    const text = readFileSync(join(dshHome(), WORKBUDDY_CATALOG_FILENAME), 'utf8')
-    value = creditRatesFromCatalog(JSON.parse(text) as unknown)
-  } catch { /* 文件缺失或不可读：没有费率，界面自会退回金额路径 */ }
+  const out: CreditRateTable = {}
+  for (const { file, provider } of CATALOGS) {
+    try {
+      const text = readFileSync(join(dshHome(), file), 'utf8')
+      const one = creditRatesFromCatalog(JSON.parse(text) as unknown, provider)
+      if (one !== null) out[provider] = one[provider]
+    } catch { /* 该版本未安装或文件不可读：这一条路由没有费率 */ }
+  }
+  const value = Object.keys(out).length > 0 ? out : null
   cached = { at: now, value }
   return value
 }
