@@ -55,3 +55,30 @@ describe('billedTotalsOf — the overview platform rows honour credits', () => {
     assert.equal(by['deepseek-account'], 'money')
   })
 })
+
+describe('kpisOf — the headline cost counts only what is priced in currency', () => {
+  test('a credits-only scope reports no estimated cost at all', () => {
+    // The screenshot's headline read ¥59.50 while every platform in scope was a credit
+    // platform: the total was pricing workbuddy at official CNY rates.
+    const k = kpisOf([creditRow()], 1, null, 'cny')
+    assert.equal(k.cost, null, 'no yuan figure can be derived from credits')
+    assert.equal(k.costSessions, 0, 'and no session counts as priced in currency')
+  })
+
+  test('a mixed scope totals only the currency platform', () => {
+    const mixed = rowOf({
+      familyCost: {
+        workbuddy: { 'deepseek-v4.1-flash': { peak: { uncached: 10 * M, cacheRead: 0, cacheWrite: 0, output: 0 } } },
+        'deepseek-account': { 'deepseek-v4-flash': { off: { uncached: 10 * M, cacheRead: 0, cacheWrite: 0, output: 0 } } },
+      },
+      familyCalls: {},
+      timeline: { creditRates: { workbuddy: { 'deepseek-v4.1-flash': 0.11 } }, requests: [], counts: { turns: 1 } } as unknown as ContextTimeline,
+    })
+    const k = kpisOf([mixed], 1, null, 'cny')
+    const credits = kpisOf([creditRow()], 1, null, 'cny')
+    // The mixed total must not equal the credit platform priced as money: it should be
+    // the currency platform alone.
+    assert.ok(k.cost !== null, 'the currency platform is priced')
+    assert.ok(credits.cost === null, 'while credits alone are not')
+  })
+})

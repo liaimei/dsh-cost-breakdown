@@ -13,7 +13,7 @@ import { workspaceTitleOf } from '@deepseek-ai/dsh-util-workspace-path'
 import { dayKeyOf, endOfDayKey, startOfDayKey } from '../shared/days'
 import { billedParts } from './categories'
 import { cacheHitPercent } from './format'
-import { estimateSessionCost, estimateSessionCostByPeriod, mergeCostUsage } from './cost'
+import { estimateSessionCost, estimateSessionCostByPeriod, mergeCostUsage, moneyOnlyUsage } from './cost'
 import { mergeCallCounts, mergePlatformSpends, platformSpendsOf, type PlatformSpend } from './platformSpend'
 import type { CostCurrency, ModelBook } from './cost'
 import { agentRowOf } from './agentTree'
@@ -714,7 +714,7 @@ export function kpisOf(
   let usageSessions = 0
   for (const row of rows) {
     // 每条子行只统计自己那个数字覆盖的 session：有用量但无价目册费率的 session 仍会计入缓存命中率。
-    if (estimateSessionCost(row.familyCost, book, currency) !== null) costSessions++
+    if (estimateSessionCost(moneyOnlyUsage(row.familyCost, credits), book, currency) !== null) costSessions++
     if (usageTotalsOf(row.familyCost) !== null) usageSessions++
     turns += turnsOf(row.timeline)
     const timing = row.timeline?.timing
@@ -728,7 +728,9 @@ export function kpisOf(
     listed,
     tokens: totals?.total ?? 0,
     turns,
-    cost: estimateSessionCost(usage, book, currency),
+    // 顶部「费用」只合计**按人民币可计价**的部分：积分平台的用量不能换成人民币，
+    // 否则 workbuddy 这种平台会以官方费率混进这个总数（截图里 ¥59.50 就是这么来的）。
+    cost: estimateSessionCost(moneyOnlyUsage(usage, credits), book, currency),
     costSessions,
     cacheHit: totals === null ? null : cacheHitPercent(totals.cacheRead, totals.input + totals.cacheRead + totals.cacheWrite),
     usageSessions,
