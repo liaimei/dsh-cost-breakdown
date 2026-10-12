@@ -997,3 +997,50 @@ describe('ComposerDock — the status bar wears the statistics icon, and degrade
     } finally { await m.unmount(); vi.useRealTimers() }
   })
 })
+
+describe('ComposerDock — yields to the official panel on the same row', () => {
+  const bj = (y: number, mo: number, d: number, h: number, mi = 0): number => Date.UTC(y, mo - 1, d, h - 8, mi)
+
+  function overlay(): HTMLElement {
+    const el = document.createElement('div')
+    el.setAttribute('role', 'dialog')
+    el.style.zIndex = '1100'
+    el.getBoundingClientRect = () => ({ width: 264, height: 320, top: 0, left: 0, right: 264, bottom: 320, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect
+    document.body.appendChild(el)
+    return el
+  }
+
+  test('the card closes when the official panel appears beside it', async () => {
+    // Both open at z-index 1100, so whichever mounts last covers the other. Rather than
+    // out-stacking the official UI, the plugin steps aside while it is open.
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(bj(2026, 10, 12, 10)))
+    const D = Dock(new TestClientCtx({ locale: 'zh' }), kitZh)
+    const m = await mount(h(D, { sessionId: 's1', ...seatOf(timelineWith(DEEPSEEK_PEAK)) }))
+    try {
+      await flush()
+      await click(query(m.container, '.lc-dock'))
+      assert.ok(query(m.container, '.lc-dock-card') !== null, 'the card is open')
+      // The official panel mounts (it is portaled to body).
+      await act(async () => { overlay() })
+      await flush()
+      assert.equal(m.container.querySelector('.lc-dock-card'), null, 'and it steps aside')
+    } finally {
+      document.body.querySelectorAll('[role="dialog"]').forEach(el => { el.remove() })
+      await m.unmount(); vi.useRealTimers()
+    }
+  })
+
+  test('the card still opens when nothing official is up', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(bj(2026, 10, 12, 10)))
+    const D = Dock(new TestClientCtx({ locale: 'zh' }), kitZh)
+    const m = await mount(h(D, { sessionId: 's1', ...seatOf(timelineWith(DEEPSEEK_PEAK)) }))
+    try {
+      await flush()
+      await click(query(m.container, '.lc-dock'))
+      await flush()
+      assert.ok(query(m.container, '.lc-dock-card') !== null, 'opens normally')
+    } finally { await m.unmount(); vi.useRealTimers() }
+  })
+})

@@ -22,6 +22,7 @@ import type { ViewKit } from '../viewkit'
 import { allDayOffReason, OFFICIAL_MODELS, peakWindowsText } from '../../shared/officialRates'
 import { BALANCE_POLL_MS } from '../constants'
 import { DOCK_CARD_MIN_HEIGHT, placeDockCard } from '../dockPlacement'
+import { officialOverlayOpen } from '../officialOverlays'
 import { isDeepSeekProvider } from '../../shared/providers'
 import type { PlatformBalance, PlatformBalanceEntry } from '../../shared/types'
 import { fmtCredits } from '../turnSpend'
@@ -255,6 +256,22 @@ export function makeComposerDock(
       observer.observe(card)
       return () => { observer.disconnect() }
     }, [open, place])
+
+    // 官方同行浮层出现时让位：两者都在 `z-index: 1100`，同层时后挂载的赢，
+    // 而插件不该把层级抬到官方之上。所以官方开着的时候，我们把卡片收起来。
+    // 用 MutationObserver 盯着 body 的子节点变化——官方那个浮层是 portal 到 body 的，
+    // 挂载/卸载都表现为一次子树变化。
+    useEffect(() => {
+      if (!open) return
+      if (typeof MutationObserver === 'undefined') return
+      const sync = (): void => {
+        if (officialOverlayOpen()) setOpen(false)
+      }
+      sync()
+      const observer = new MutationObserver(sync)
+      observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class', 'hidden'] })
+      return () => { observer.disconnect() }
+    }, [open])
 
     // 在外部按下或 Escape 时关闭。
     useEffect(() => {
