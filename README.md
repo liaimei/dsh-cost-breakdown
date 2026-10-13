@@ -47,11 +47,13 @@
 ### ② 输入框下方的常驻读数（`src/client/components/composerDock.tsx`）
 
 上游没有这个入口。收起时只占一行：**本会话费用 · 余额 · 当前峰/谷**；
-尺寸与配色**逐项对齐官方同排组件**（`ContextMeter.module.css` 的 `.trigger` 与
-`StatsPills.module.css` 的 `.pill`，它们就长在这一行两边）：同一个 13px 字号、同一个 20px
-行高、同一个 `padding: 1px 8px`，盒子因此同为 22px 高；基色同为 `label-tertiary`、
+尺寸与配色**逐项对齐官方同排读数胶囊**（`StatsPills.module.css` 的 `.pill`，也就是
+旁边那个「48.6M tok · 缓存命中 97%」）：同一个 12px 字号
+（`calc(var(--dsh-content-font-size-secondary, 13px) - 1px)`）、同一个 20px
+行高、同一个 `padding: 1px 8px`，盒子因此同为 22px 高；圆角同为整胶囊
+（`999px` + `corner-shape: round`），图标同样钉在 14×14；基色同为 `label-tertiary`、
 悬浮同为 `label-secondary`、分隔符用官方的 `separator-primary`，且都不加粗。
-并排看不会一高一矮，也不会像外来控件。**只有峰/谷保留语义红绿**——那是这一行唯一要传达的信息。
+并排看不会一高一矮、一圆一方，也不会像外来控件。**只有峰/谷保留语义红绿**——那是这一行唯一要传达的信息。
 峰谷本身是**实时算出来的**，不是写死的标签：徽标后面跟着**距离下一次翻转的倒计时**，
 每秒走一格（`usePricingPeriod` 的一秒节拍，时段没变的帧不重渲染）；悬停与展开卡里还写全
 **峰时是哪几段**（`09:00–12:00、14:00–18:00`，由 `PEAK_WINDOWS` 派生，改表即改文案）。

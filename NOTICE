@@ -30,9 +30,12 @@ Changes made in this fork, as required by section 4(b) of the Apache License:
     src/client/dockReading.ts, src/client/styles/composerDock.css): absent
     upstream. `client/index.ts` registers it on `conversation.composer.dock`, and
     `client/i18n.ts` gains its dictionary keys. The collapsed trigger copies the box
-    metrics and palette of the official neighbours (ContextMeter's `.trigger`,
-    StatsPills' `.pill`): 13px size, 20px line box, `padding: 1px 8px`,
-    `label-tertiary` rest, `label-secondary` hover and the official
+    metrics and palette of the official readout pill on the same row (StatsPills'
+    `.pill` — the "48.6M tok · 缓存命中 97%" one; NOT ContextMeter's `.trigger`,
+    which is a different kind of control and genuinely differs): the 12px pill size
+    `calc(var(--dsh-content-font-size-secondary, 13px) - 1px)`, the 20px line box,
+    `padding: 1px 8px`, the 999px full capsule with `corner-shape: round`, the 14×14
+    frozen glyph, `label-tertiary` rest, `label-secondary` hover and the official
     `separator-primary` separators, none bolded — only peak/off-peak keeps its
     semantic red/green. The period is computed live from the official table rather
     than hardcoded: the trigger carries a per-second countdown to the next flip, and

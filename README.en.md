@@ -53,13 +53,16 @@ prices from the **official CNY list instead**:
 ### ② The persistent readout under the composer (`src/client/components/composerDock.tsx`)
 
 Upstream has no such surface. Collapsed it is one line: **this session's cost ·
-balance · current peak/off-peak**. Its box and palette match the official neighbours
-(`ContextMeter.module.css`'s `.trigger` and `StatsPills.module.css`'s `.pill`, which sit
-either side of it) item by item: the same 13px size, the same 20px line box and the same
-`padding: 1px 8px`, so both stand 22px tall; the same `label-tertiary` rest colour, the
-same `label-secondary` hover, and the official `separator-primary` for the separators,
-none of them bolded. So it neither stands at a different height nor reads as a foreign
-control. Only peak/off-peak keeps its semantic red/green — that is the one thing this
+balance · current peak/off-peak**. Its box and palette match the official readout pill
+on the same row (`StatsPills.module.css`'s `.pill` — the "48.6M tok · 缓存命中 97%"
+one) item by item: the same 12px size
+(`calc(var(--dsh-content-font-size-secondary, 13px) - 1px)`), the same 20px line box,
+the same `padding: 1px 8px`, so both stand 22px tall; the same full-capsule radius
+(`999px` with `corner-shape: round`) and the same 14×14 frozen glyph; the same
+`label-tertiary` rest colour, the same `label-secondary` hover, and the official
+`separator-primary` for the separators, none of them bolded. So it neither stands at a
+different height or shape nor reads as a foreign control. Only peak/off-peak keeps its
+semantic red/green — that is the one thing this
 line exists to say. The period itself is **computed live**, never a hardcoded label: the
 badge carries a **countdown to the next flip**, ticking once a second (the one-second
 cadence in `usePricingPeriod`, which skips re-rendering frames where the period did not

@@ -25,16 +25,21 @@ body[data-ds-dark-theme] .lc-dock-card {
 
 /* 触发器做成无边框按钮，读起来像环境文本而非控件；`white-space: nowrap` 让费用、余额、
    时段在窄窄的输入区行内保持同一行。
-   尺寸**逐项对齐官方 ContextMeter**（`ui-conversation/.../ContextMeter.module.css`
-   的 `.trigger`）——它就长在这条状态栏的右边，两者高度必须一致，否则并排看会一高一矮：
-   同一个 `--dsh-content-font-size-secondary`（13px）、同一个 20px 行高、
-   同一个 `padding: 1px 8px`，因此盒子高度同为 22px；圆角也用官方的 `--dsw-radius-sm`。
-   悬浮底色同样取官方的 `--dsw-alias-interactive-bg-hover`。 */
+   尺寸与形状**逐项对齐官方读数胶囊**（`ui-chat/.../StatsPills.module.css` 的
+   `.pill` / `.root`），而不是同一行右边那个 ContextMeter 的 `.trigger`：
+   插件这一行和官方读数胶囊是同一类东西——图标 + 读数 + `·` 分隔的多个值——而
+   `.trigger` 是「环 + 百分比」那种独立控件。官方这两个组件本就不一样：`.pill`
+   是 12px 的整胶囊（`999px` + `corner-shape: round`），`.trigger` 是 13px、8px 圆角。
+   照抄后者会让插件与紧邻的官方读数胶囊并排时**字号大一档、形状方一档**。
+   两者共有的部分照旧一致：同一个 20px 行高、同一个 `padding: 1px 8px`，
+   因此盒子高度同为 22px；悬浮底色同为 `--dsw-alias-interactive-bg-hover`。 */
 .lc-dock {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   flex: none;
+  box-sizing: border-box;
+  max-width: 100%;
   border: 0;
   background: transparent;
   /* 配色逐项对齐官方同排组件（`StatsPills.module.css` 的 `.pill` 与
@@ -43,20 +48,31 @@ body[data-ds-dark-theme] .lc-dock-card {
      只有峰/谷保留语义红绿——那是这一行唯一要传达的信息。 */
   color: var(--dsw-alias-label-tertiary);
   font-family: inherit;
-  font-size: var(--dsh-content-font-size-secondary, 13px);
+  /* 官方读数胶囊的字号：`calc(var(--dsh-content-font-size-secondary, 13px) - 1px)`
+     ——在默认的 13px 下即 12px，比旁边 ContextMeter 的 13px 小一档。 */
+  font-size: calc(var(--dsh-content-font-size-secondary, 13px) - 1px);
   line-height: calc(20px + var(--dsh-content-font-delta-secondary, 0px));
   font-variant-numeric: tabular-nums;
   padding: 1px 8px;
-  border-radius: var(--dsw-radius-sm, 8px);
+  /* 官方胶囊的圆角：整圆 + 现代 `corner-shape: round`（与 `.pill` 同写法）。
+     旁边 ContextMeter 的 8px 小圆角会把它画成一个圆角矩形，在 22px 的高上明显是方的。 */
+  corner-shape: round;
+  border-radius: 999px;
   cursor: pointer;
   white-space: nowrap;
   transition: color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out), background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out);
 }
 .lc-dock:hover { color: var(--dsw-alias-label-secondary); background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); }
+/* 官方 `.pill` 把图标钉死在 14×14（`.pill svg{flex:none;width:14px;height:14px}`），
+   不让 flex 把它压扁：本行在窄处会先切读数、后切图标，图标尺寸必须与官方一致。 */
+.lc-dock > svg { flex: none; width: 14px; height: 14px; }
 /* 数字用 `tabular-nums`，一轮对话流式输出时读数不会抖动。
    费用与余额都继承官方的 tertiary——官方 pill 里的读数同样不加粗、不提亮。 */
 .lc-dock-cost { color: inherit; font-weight: inherit; font-variant-numeric: tabular-nums; }
 .lc-dock-balance { color: inherit; font-variant-numeric: tabular-nums; }
+/* 分隔符：官方把它写成 `.sep{margin:0 6px}`，与官方渲染量到的两侧各约 6px 吻合。
+   这里 `·` 的间距由两处 6px 的 flex 间距给出——外侧 `.lc-dock{gap:6px}` 管它的左边，
+   平台段内 `.lc-dock-platform{gap:6px}` 管它的右边——因此两边同样对称，不再另加外边距。 */
 .lc-dock-sep { color: var(--dsw-alias-separator-primary, var(--dsw-alias-label-tertiary)); }
 /* 绿色表示谷时（此刻更便宜）；`data-peak` 属性无需换类即可把它翻成红色。
    峰/谷是这一行唯一保留语义色的地方，其余一律走官方灰阶。 */
@@ -161,8 +177,10 @@ body[data-ds-dark-theme] .lc-dock-card {
 .lc-dock-note { color: var(--dsw-alias-label-tertiary); font-size: 11px; line-height: 1.5; }
 
 /* 状态栏里的每个平台一小段：平台名 + 本次消耗 + 剩余额度。
-   积分与金额用同一档灰——两者都是读数，没有一个更该抢眼。 */
-.lc-dock-platform { display: inline-flex; align-items: center; gap: 4px; }
+   积分与金额用同一档灰——两者都是读数，没有一个更该抢眼。
+   `gap: 6px` 与官方 `.pill{gap:6px}` 一致；官方把 `·` 的间距写成 `.sep{margin:0 6px}`，
+   这里换用同一个 6px 的 flex 间距，读到的节奏完全相同。 */
+.lc-dock-platform { display: inline-flex; align-items: center; gap: 6px; }
 .lc-dock-platform-name { color: var(--dsw-alias-label-tertiary); }
 .lc-dock-spend { color: inherit; font-variant-numeric: tabular-nums; }
 .lc-dock-left { color: var(--dsw-alias-label-tertiary); font-variant-numeric: tabular-nums; }

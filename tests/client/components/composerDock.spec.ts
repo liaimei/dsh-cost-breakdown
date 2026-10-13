@@ -755,20 +755,43 @@ describe('ComposerDock — the collapsed readout matches the official status bar
   const css = readFileSync(join(process.cwd(), 'src/client/styles/composerDock.css'), 'utf8')
   const trigger = /^\.lc-dock\s*\{([^}]*)\}/m.exec(css)
 
-  test('the trigger is boxed exactly like the official ContextMeter beside it', () => {
-    // The readout sits on the composer status bar, immediately left of the official
-    // context meter (`ui-conversation/.../ContextMeter.module.css`). That component's
-    // `.trigger` pins `font-size: var(--dsh-content-font-size-secondary, 13px)`,
-    // `line-height: calc(20px + var(--dsh-content-font-delta-secondary, 0px))` and
-    // `padding: 1px 8px`, giving a 22px box. Anything else makes the two neighbours
-    // stand at different heights.
+  test('the trigger is boxed exactly like the official readout pill beside it', () => {
+    // The readout sits on the composer status bar in the same slot as the official
+    // stats pills (`ui-chat/.../StatsPills.module.css`: the TimePill and the UsagePill
+    // that render "48.6M tok · 缓存命中 97%"), so that is the recipe to copy.
+    //
+    // NOT `ContextMeter.module.css`'s `.trigger`: that one is a different kind of
+    // control (a ring plus one percentage) and the two official components genuinely
+    // differ — `.pill` is a 12px full capsule, `.trigger` is 13px with an 8px radius.
+    // Copying `.trigger` left this readout one size larger and visibly squarer than
+    // the official pill directly to its left.
     assert.ok(trigger !== null, 'the trigger rule exists')
     const body = trigger[1]
-    assert.match(body, /font-size:\s*var\(--dsh-content-font-size-secondary,\s*13px\)/, 'the official secondary font size')
+    // `.root` sets the pill's size: `calc(var(--dsh-content-font-size-secondary, 13px) - 1px)`.
+    assert.match(
+      body,
+      /font-size:\s*calc\(var\(--dsh-content-font-size-secondary,\s*13px\)\s*-\s*1px\)/,
+      'the official pill font size, one step under the secondary size',
+    )
+    // Shared with `.trigger`: the same 20px line box and the same padding, which is
+    // what keeps both neighbours standing at the same 22px height.
     assert.match(body, /line-height:\s*calc\(20px \+ var\(--dsh-content-font-delta-secondary,\s*0px\)\)/, 'the official 20px line box')
-    assert.match(body, /padding:\s*1px 8px/, 'the official trigger padding')
-    assert.match(body, /border-radius:\s*var\(--dsw-radius-sm/, 'the official small radius')
+    assert.match(body, /padding:\s*1px 8px/, 'the official pill padding')
+    // `.pill` is a full capsule, with the modern corner-shape declaration alongside it.
+    assert.match(body, /border-radius:\s*999px/, 'the official capsule radius')
+    assert.match(body, /corner-shape:\s*round/, 'and the official corner shape')
+    assert.doesNotMatch(body, /--dsw-radius-sm/, 'not the squarer `.trigger` radius')
     assert.match(body, /display:\s*inline-flex/, 'inline-flex keeps it on the status bar line')
+  })
+
+  test('the icon is pinned to the official 14px pill glyph', () => {
+    // `.pill svg{flex:none;width:14px;height:14px}`: the official pill never lets the
+    // row squeeze its glyph, because the row gives up readings before it gives up the icon.
+    const svg = /^\.lc-dock > svg\s*\{([^}]*)\}/m.exec(css)
+    assert.ok(svg !== null, 'the icon rule exists')
+    assert.match(svg[1], /flex:\s*none/, 'the glyph never shrinks')
+    assert.match(svg[1], /width:\s*14px/, 'the official pill glyph width')
+    assert.match(svg[1], /height:\s*14px/, 'the official pill glyph height')
   })
 
   test('the trigger keeps the official hover surface', () => {
