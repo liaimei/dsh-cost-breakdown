@@ -66,10 +66,14 @@ Changes made in this fork, as required by section 4(b) of the Apache License:
     card is `createPortal`ed to `document.body` for the same reason the official
     panels are: the composer sits in `ConversationRoot`'s `.composerSeat`
     (`position: sticky` with `z-index: 7`), a stacking context in which a
-    z-index-1100 card is only ordered locally. Its WIDTH is deliberately not the
-    official panel's: that one lists five token rows, this one carries two cards and
-    a rate table, so it keeps content-driven sizing with its own 264px floor and
-    560px ceiling, clamped to the viewport, so a short trigger cannot clip the
+    z-index-1100 card is only ordered locally. Its width is NOT content-driven:
+    nearly every block inside is percentage-sized (`.lc-dock-cards > .lc-card
+    { width: 100% }`, the tables, the `.lc-sl` auto-fill grid), and percentage
+    children contribute no intrinsic width, so a `max-content` card collapses to its
+    264px floor and crushes the contents. It uses `min(440px, 100vw - 24px)` — the
+    official panel's own cap, and the measured width at which a 7-row legend and the
+    4-column rate table both stop wrapping — with a 264px floor and a 560px ceiling,
+    clamped to the viewport, so a short trigger cannot clip the
     right-hand figures of those wider cards, and
     no horizontal scrollbar can appear (`overflow-x: hidden` beside `overflow-y: auto`).
   * A cost card is added to the session view (src/client/components/statsCost.tsx,

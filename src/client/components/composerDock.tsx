@@ -48,9 +48,9 @@ interface Anchor { left: number; top: number; width: number; maxHeight: number }
 /** 卡片宽度的**下限**（px）：与同一行那个官方浮层并排时不至于显得局促
  *  （`ContextMeter.module.css` 的 `width: min(264px, 100vw - 24px)`）。
  *
- *  上限与「随内容变宽」交给样式表（`width: max-content` + `max-width: min(560px, 100vw - 24px)`）：
- *  固定 264px 时，环图占掉 96px 后图例只剩约 132px，而图例网格的最小列宽是 150px，
- *  于是每一项都折成两行。JS 只量出实际宽度用于水平夹取。 */
+ *  实际宽度由样式表给出（`width: min(440px, 100vw - 24px)`，见 composerDock.css 的说明：
+ *  卡内的百分比子项不贡献内在宽度，`max-content` 会塌到这个下限）。JS 只把量到的
+ *  实际宽度用于水平夹取，量不到时（首帧样式未生效）才退回这里。 */
 const CARD_MIN_WIDTH = 264
 
 /** 视口两侧各留的边距（px）：卡片是 `position: fixed`，留出它才不会贴边。

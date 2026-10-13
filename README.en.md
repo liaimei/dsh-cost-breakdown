@@ -100,8 +100,15 @@ surface, the same `--dsw-radius-lg` radius, the same hairline stroke plus
 12px/18px text; the head copies the official `.title` + `.titleRule` pair — `label-primary`
 at weight 500, ends pinned apart, 8px below, then a 0.5px hairline with 10px under it.
 **Width and height are deliberately different**: the official panel lists five token rows,
-while this card carries two summary cards and a rate table, so it keeps content-driven sizing
-with its own 264px floor and 560px ceiling, clamped to the viewport — so it neither clips the
+while this card carries two summary cards and a rate table. The width is
+`min(440px, 100vw - 24px)` — 440px being the official panel's own cap. It must NOT be
+content-driven: nearly every block inside is sized in percentages
+(`.lc-dock-cards > .lc-card { width: 100% }`, the tables, the `.lc-sl` auto-fill grid), and
+percentage children contribute no intrinsic width, so a `max-content` card collapses straight
+to its 264px floor and crushes everything (the legend folds to two lines, the rate table
+truncates the model names). 440px is also the measured width at which a 7-row legend and the
+4-column rate table both stop wrapping. Narrow viewports clamp to `100vw - 24px`, the ceiling
+stays 560px — so it neither clips the
 right-hand figures nor grows a horizontal scrollbar; all three blocks inside declare
 `box-sizing: border-box` themselves, because the base `.lc-card` rule only sets it under
 `.lc-root`, which the floating card has no ancestor of. It flips

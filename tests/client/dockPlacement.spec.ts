@@ -65,14 +65,14 @@ describe('placeDockCard — the geometry that decides whether the card is visibl
   })
 
   test('width follows the measured content and stays inside the viewport', () => {
-    // The stylesheet sizes the card (`width: max-content`); the geometry only clamps.
+    // The stylesheet gives the card its width; the geometry only clamps what was measured.
     const wide = placeDockCard(input({ cardWidth: 2000 }))
     assert.ok(wide.left >= 12 && wide.left + wide.width <= 1440 - 12, 'clamped on both sides')
     // A narrow reading never squeezes the card below its floor — the trigger width no
     // longer sets it, or a 120px trigger would crush the ring and legend.
     const narrow = placeDockCard(input({ cardWidth: 100 }))
     assert.equal(narrow.width, 264, 'never narrower than the floor')
-    // A normal measurement is taken as-is: content decides, not a hardcoded 264.
+    // A normal measurement is taken as-is: the stylesheet decides, not a hardcoded 264.
     const content = placeDockCard(input({ cardWidth: 420 }))
     assert.equal(content.width, 420, 'the measured content width is kept')
   })

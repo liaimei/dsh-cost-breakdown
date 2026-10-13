@@ -101,11 +101,14 @@ body[data-ds-dark-theme] .lc-dock-card {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  /* 宽度由**内容**决定：固定 264px 时，环图占掉 96px 后图例只剩约 132px，
-     而图例网格的最小列宽是 150px——于是每一项都退化成「主行 + 次行折行」。
-     下限保住与官方同行浮层并排时的观感，上限夹进视口，中间交给内容。
-     横向位置仍由 JS 量出实际宽度后再夹取（见 dockPlacement.ts）。 */
-  width: max-content;
+  /* 宽度**必须定宽**：卡内几乎每个块都是百分比宽度（`.lc-dock-cards > .lc-card`
+     的 `width:100%`、`width:100%` 的表格、`.lc-sl` 的 auto-fill 网格），而百分比子项
+     不贡献内在宽度——按内容定宽在这里不会撑开，只会一路塌到 `min-width` 那个下限
+     （实测约 250px），整张卡被压扁：图例折成两行、价目表的模型名被截断。
+     440px 与官方 stat-dialog 的 `max-width: min(440px, …)` 同值，也是实测「7 行图例
+     与 4 列价目表都不折行、模型名不截断」的最小宽度（再窄到 420px 就开始截断）。
+     窄视口仍夹进 `100vw - 24px`；横向位置由 JS 量出实际宽度后再夹取（见 dockPlacement.ts）。 */
+  width: min(440px, calc(100vw - 24px));
   min-width: 264px;
   max-width: min(560px, calc(100vw - 24px));
   /* 内边距逐字对齐官方 stat-dialog 的 `.panel`：16px。 */

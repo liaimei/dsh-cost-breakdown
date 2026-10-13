@@ -416,11 +416,17 @@ describe('ComposerDock — the expanded card', () => {
     await m.unmount()
   })
 
-  test('the card takes its width from the content, not from the trigger', async () => {
-    // The composer line can be short while the card's content is not. A fixed 264px card
-    // left the legend ~132px after the 96px ring, under its own 150px minimum column —
-    // so every legend row folded onto two lines. The stylesheet therefore sizes the card
-    // (`width: max-content`) and the geometry only clamps it.
+  test('the stylesheet gives the card a real width instead of collapsing to the floor', async () => {
+    // The card must NOT rely on `width: max-content`: almost every block inside it is
+    // sized in percentages (`.lc-dock-cards > .lc-card { width: 100% }`, the 100%-wide
+    // tables, the `.lc-sl` auto-fill grid), and percentage children contribute no
+    // intrinsic width. `max-content` therefore never grows to fit the content — it
+    // collapsed straight to the 264px floor, crushing the card to ~250px: every legend
+    // row folded onto two lines and the rate table truncated the model names.
+    //
+    // 440px is the official stat dialog's own `max-width: min(440px, …)`, and it is also
+    // the measured width at which a 7-row legend and the 4-column rate table both stop
+    // wrapping and the model names stop truncating (420px already truncates).
     const D = Dock()
     const m = await mount(h(D, { sessionId: 's1', ...seatOf(timelineWith(DEEPSEEK_PEAK)) }))
     await flush()
@@ -429,13 +435,14 @@ describe('ComposerDock — the expanded card', () => {
     await click(trigger)
     const style = query(document.body, '.lc-dock-card').getAttribute('style') ?? ''
     // The inline width is gone: pinning it would freeze the card at whatever was measured
-    // on the first frame and defeat `width: max-content`.
+    // on the first frame and defeat the stylesheet's own width.
     assert.equal(/min-width:/.test(style), false, 'no inline width pin')
     // Anchor at the line start: the `.lc-dock, .lc-dock-card` variables rule also matches.
     const css = readFileSync(join(process.cwd(), 'src/client/styles/composerDock.css'), 'utf8')
     const body = /^\.lc-dock-card\s*\{([^}]*)\}/m.exec(css)?.[1] ?? ''
-    assert.match(body, /width:\s*max-content/, 'the stylesheet sizes the card from its content')
-    assert.match(body, /min-width:\s*264px/, 'with the official neighbour\'s width as the floor')
+    assert.doesNotMatch(body, /width:\s*max-content/, 'never `max-content`: it collapses against percentage children')
+    assert.match(body, /width:\s*min\(440px,\s*calc\(100vw - 24px\)\)/, 'the content-fitting width, clamped to the viewport')
+    assert.match(body, /min-width:\s*264px/, 'keeping the official neighbour\'s width as the floor')
     assert.match(body, /max-width:\s*min\(560px,\s*calc\(100vw - 24px\)\)/, 'and a viewport-aware ceiling')
     await m.unmount()
   })
@@ -723,18 +730,16 @@ describe('ComposerDock — the expanded card matches the official popup layer', 
     // ("Token 用量", from the stats pill) — `stat-dialog.module.css`'s `.panel`:
     // `padding: 16px`, `font-size: 12px`, `line-height: 18px`.
     //
-    // The WIDTH is deliberately different. The official panel only lists five token
-    // rows; this card carries two summary cards plus a rate table, so it keeps
-    // content-driven sizing. The official panel's `min(440px, 100vw - 24px)` ceiling
-    // was copied straight over at first and was wrong here: as a FLOOR of 264px it left
-    // the legend ~132px once the 96px ring took its share, under the legend's own 150px
-    // minimum column, so every row folded onto two lines.
+    // The HEIGHT is deliberately different: the official panel only lists five token
+    // rows, while this card carries two summary cards plus a rate table, so it scrolls
+    // in its own bounds. The width is the same 440px the official panel caps at — see
+    // the width test above for why a `max-content` width cannot work here.
     const body = ruleOf('.lc-dock-card')
     assert.match(body, /padding:\s*16px/, 'the official stat-dialog padding')
     assert.match(body, /font-size:\s*12px/, 'the official panel text size')
     assert.match(body, /line-height:\s*18px/, 'the official panel line box')
     assert.match(src, /const CARD_MIN_WIDTH = 264/, 'the width floor is the plugin\u2019s own')
-    assert.match(body, /width:\s*max-content/, 'while the content decides the actual width')
+    assert.match(body, /width:\s*min\(440px,\s*calc\(100vw - 24px\)\)/, 'at the official panel\u2019s 440px, clamped')
   })
 
   test('the card is portaled to the body, like the official panels', () => {
