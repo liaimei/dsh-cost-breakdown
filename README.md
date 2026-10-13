@@ -72,12 +72,19 @@
 **Token 统计**与**费用统计**——外加当前时段的官方价目表：同一份数据、同一种排版，
 输入框下方与统计页读到的因此永远是同一回事（余额由费用卡自己那一行承担，不再重复一处）。
 卡片用 `position: fixed` 并实测触发按钮位置，避开输入框自身的
-`overflow` 裁剪。外观**对齐 harness 官方面板**（`stat-dialog.module.css`）：同一层
+`overflow` 裁剪，同时 **portal 到 `document.body`**：官方的两个浮层（`ContextMeter` 的
+`.panel`、stat-dialog）都是 `createPortal` 到 body 的，而输入区所在的 `.composerSeat`
+是 `position: sticky` 且带 `z-index: 7`——留在里面的话，`z-index: 1100` 只在那个层叠
+上下文内排序，仍可能被根级元素压住。外观**对齐官方 stat-dialog**（`stat-dialog.module.css`
+的 `.panel`，即点状态栏那枚读数胶囊浮出来的「Token 用量」面板）：同一层
 `--dsw-specific-menu`、同一个 `--dsw-radius-lg` 圆角、同一道发丝描边 + `--dsw-elevation-prominent`
-阴影、同一个 `z-index: 1100`，因此它与会话底部那个官方弹窗读作同一层。
-宽度对齐官方面板的上限（440px，窄触发条也照此）并夹进视口，所以既不会裁掉右列数值，
-也不会出现左右滚动条；卡内三块都显式声明 `box-sizing: border-box`，宽度因此逐块对齐
-（基础 `.lc-card` 的 `border-box` 只声明在 `.lc-root` 之下，浮层里没有那个祖先）。
+阴影、同一个 `z-index: 1100`、同一个 `padding: 16px` 与 12px/18px 正文；标题行也照官方
+`.title` + `.titleRule` 那套——标题 `label-primary`/500 字重、两端对齐、下方 8px 留白，
+再压一道 0.5px 发丝线、线后 10px。
+**宽度与高度有意不同**：官方那块只列 5 行 token 明细，本卡要装两张统计卡加一张价目表，
+因此沿用内容定宽（`max-content`）与插件自己的 264px 下限、560px 上限，并夹进视口——
+既不会裁掉右列数值，也不会出现左右滚动条；卡内三块都显式声明 `box-sizing: border-box`，
+宽度因此逐块对齐（基础 `.lc-card` 的 `border-box` 只声明在 `.lc-root` 之下，浮层里没有那个祖先）。
 上方空间不足时自动翻到下方。峰谷徽标随本机时钟自动翻转。
 
 余额由**两个来源**提供，按顺序尝试：① DSH 自身的账号登录（`deepseekAccount` 服务，**不需要 API key**

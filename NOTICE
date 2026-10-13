@@ -58,10 +58,19 @@ Changes made in this fork, as required by section 4(b) of the Apache License:
     Summary Statistics cards (`statsTokens`/`statsCost`) rather than drawing its own
     token and period blocks, so the readout and the page share one dataset and one
     layout; its own bars, tints and balance row were removed with them. The card's
-    look mirrors the official harness panel (`--dsw-specific-menu` surface,
-    `--dsw-radius-lg`, `--dsw-elevation-prominent`, z-index 1100) and its width
-    mirrors that panel's 440px cap, clamped to the viewport, so a short trigger
-    cannot clip the right-hand figures of those wider cards, and
+    look mirrors the official stat dialog (`stat-dialog.module.css`'s `.panel`, the
+    "Token usage" panel the readout pill opens): the `--dsw-specific-menu` surface,
+    `--dsw-radius-lg`, `--dsw-elevation-prominent`, z-index 1100, `padding: 16px`
+    and 12px/18px text, plus the official `.title`/`.titleRule` head (label-primary
+    at 500, ends pinned apart, 8px below, a 0.5px hairline with 10px under it). The
+    card is `createPortal`ed to `document.body` for the same reason the official
+    panels are: the composer sits in `ConversationRoot`'s `.composerSeat`
+    (`position: sticky` with `z-index: 7`), a stacking context in which a
+    z-index-1100 card is only ordered locally. Its WIDTH is deliberately not the
+    official panel's: that one lists five token rows, this one carries two cards and
+    a rate table, so it keeps content-driven sizing with its own 264px floor and
+    560px ceiling, clamped to the viewport, so a short trigger cannot clip the
+    right-hand figures of those wider cards, and
     no horizontal scrollbar can appear (`overflow-x: hidden` beside `overflow-y: auto`).
   * A cost card is added to the session view (src/client/components/statsCost.tsx,
     src/client/styles/statsCost.css): absent upstream. It sits between the Token

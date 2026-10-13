@@ -80,12 +80,15 @@ body[data-ds-dark-theme] .lc-dock-card {
 .lc-dock[data-peak='1'] .lc-dock-period { color: var(--lc-dock-peak); }
 
 /* 展开卡对齐 harness **官方弹出面板**的规格（源码
-   `packages/client/ui-chat/src/client/chat/stat-dialog.module.css`）：同一层
-   `--dsw-specific-menu`（darwin 暗色下 #303136f0，比 layer-2 亮一档）、同一个
-   16px 圆角、同一道 0.5px 发丝描边 + prominent 阴影、同一个 z-index 1100。
+   `packages/client/ui-chat/src/client/chat/stat-dialog.module.css` 的 `.panel`，
+   也就是点状态栏那枚「48.6M tok · 缓存命中 97%」浮出来的「Token 用量」面板）：
+   同一层 `--dsw-specific-menu`、同一个 16px 圆角、同一道 0.5px 发丝描边 + prominent 阴影、
+   同一个 z-index 1100，内边距 16px、正文 12px/18px。
    这样它与会话底部那个官方弹窗读作同一层，而不是「插件自己的小面板」。
    `overflow-x: hidden` 必须显式写出：只给 `overflow-y: auto` 时，按 CSS 规范
-   另一轴的 `visible` 会计算成 `auto`，于是一旦有横向溢出就冒出左右滚动条。 */
+   另一轴的 `visible` 会计算成 `auto`，于是一旦有横向溢出就冒出左右滚动条。
+   宽度与高度**有意不同**：官方那块只列 5 行 token 明细，本卡要装两张统计卡
+   加一张价目表，沿用内容定宽（`max-content`）与自己的上下限。 */
 .lc-dock-card {
   position: fixed;
   z-index: 1100;
@@ -105,8 +108,8 @@ body[data-ds-dark-theme] .lc-dock-card {
   width: max-content;
   min-width: 264px;
   max-width: min(560px, calc(100vw - 24px));
-  /* 内边距逐字对齐官方的同行浮层（`ContextMeter.module.css` 的 `.panel`：12px）。 */
-  padding: 12px;
+  /* 内边距逐字对齐官方 stat-dialog 的 `.panel`：16px。 */
+  padding: 16px;
   background: var(--dsw-specific-menu, var(--dsw-alias-bg-layer-2));
   backdrop-filter: var(--dsw-menu-backdrop-filter, none);
   border-radius: var(--dsw-radius-lg, 16px);
@@ -116,14 +119,19 @@ body[data-ds-dark-theme] .lc-dock-card {
   font-size: 12px;
   line-height: 18px;
 }
-.lc-dock-head { display: flex; align-items: baseline; gap: 8px; }
+/* 标题行对齐官方 `.title`：`label-primary`、两端对齐、`gap: 16px`、
+   标题下方 8px 留白、字重 500，字号继承面板的 12px（官方 `.title` 不另设字号）。 */
+.lc-dock-head { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; margin-bottom: 8px; }
+/* 官方面板的标题是 label-primary、正文是 label-secondary，所以标题要显式提亮。 */
+.lc-dock-head-title { font-weight: 500; color: var(--dsw-alias-label-primary); }
+/* 标题下的发丝分割线，对齐官方 `.titleRule`：0.5px、`border-l2`，线后 10px 留白。
+   它把标题与明细分开，正是官方那块面板的读法。 */
+.lc-dock-head-rule { flex: none; border-top: 0.5px solid var(--dsw-alias-border-l2); margin: 0 0 10px; }
 /* 峰谷窗口 + 倒计时这一行：左边是「峰时是哪几段」，右边是「还有多久翻转」。
    右侧用 tertiary，因为它是说明而非读数。 */
 .lc-dock-period-row { display: flex; align-items: baseline; gap: 8px; font-size: 11px; color: var(--dsw-alias-label-tertiary); }
 .lc-dock-period-windows { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lc-dock-period-eta { margin-left: auto; flex: none; font-variant-numeric: tabular-nums; }
-/* 官方面板的标题是 label-primary、正文是 label-secondary，所以标题要显式提亮。 */
-.lc-dock-head-title { font-weight: 500; font-size: 13px; color: var(--dsw-alias-label-primary); }
 .lc-dock-badge { margin-left: auto; font-size: 11px; padding: 1px 8px; border-radius: 999px; color: var(--lc-dock-off); background: color-mix(in srgb, var(--lc-dock-off) 14%, transparent); }
 .lc-dock-badge-peak { color: var(--lc-dock-peak); background: color-mix(in srgb, var(--lc-dock-peak) 14%, transparent); }
 

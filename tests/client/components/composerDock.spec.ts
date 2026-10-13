@@ -77,6 +77,9 @@ afterEach(() => {
   resetPlatformBalance()
   globalThis.localStorage.clear()
   vi.unstubAllGlobals()
+  // The expanded card is portaled to `document.body` (the official panels are too), so it
+  // outlives the mount container: clear the body or the next test finds a stale card.
+  document.body.innerHTML = ''
 })
 
 describe('ComposerDock — the collapsed readout', () => {
@@ -110,7 +113,7 @@ describe('ComposerDock — the collapsed readout', () => {
     await flush()
     assert.ok(query(m.container, '.lc-dock') !== null, 'the line appears once the value lands')
     await click(query(m.container, '.lc-dock'))
-    assert.equal(queryAll(m.container, '.lc-dock-card .lc-card').length >= 2, true, 'the reused cards mount')
+    assert.equal(queryAll(document.body, '.lc-dock-card .lc-card').length >= 2, true, 'the reused cards mount')
     await m.unmount()
   })
 
@@ -239,12 +242,12 @@ describe('ComposerDock — the expanded card', () => {
     const D = Dock()
     const m = await mount(h(D, { sessionId: 's1', ...seatOf(timelineWith(DEEPSEEK_PEAK)) }))
     await flush()
-    assert.equal(maybe(m.container, '.lc-dock-card'), null, 'collapsed by default')
+    assert.equal(maybe(document.body, '.lc-dock-card'), null, 'collapsed by default')
     await click(query(m.container, '.lc-dock'))
     assert.equal(query(m.container, '.lc-dock').getAttribute('aria-expanded'), 'true')
-    assert.ok(maybe(m.container, '.lc-dock-card') !== null)
+    assert.ok(maybe(document.body, '.lc-dock-card') !== null)
     await click(query(m.container, '.lc-dock'))
-    assert.equal(maybe(m.container, '.lc-dock-card'), null)
+    assert.equal(maybe(document.body, '.lc-dock-card'), null)
     await m.unmount()
   })
 
@@ -256,7 +259,7 @@ describe('ComposerDock — the expanded card', () => {
     const m = await mount(h(D, { sessionId: 's1', ...seatOf(timelineWith(MIXED, { provider: 'deepseek-official', model: 'deepseek-v4-flash' })) }))
     await flush()
     await click(query(m.container, '.lc-dock'))
-    const card = query(m.container, '.lc-dock-card')
+    const card = query(document.body, '.lc-dock-card')
     const body = text(card)
     // The expanded card reuses the Summary Statistics cards verbatim.
     assert.ok(body.includes('Token Stats'))
@@ -289,7 +292,7 @@ describe('ComposerDock — the expanded card', () => {
     const m = await mount(h(D, { sessionId: 's1', ...seatOf(timelineWith(DEEPSEEK_PEAK)) }))
     await flush()
     await click(query(m.container, '.lc-dock'))
-    const card = query(m.container, '.lc-dock-card')
+    const card = query(document.body, '.lc-dock-card')
 
     const rows = queryAll(card, '.lc-dock-table tbody tr')
     assert.ok(rows.length >= 1, 'the rate table lists the official rows')
@@ -316,7 +319,7 @@ describe('ComposerDock — the expanded card', () => {
     const m = await mount(h(D, { sessionId: 's1', ...seatOf(timelineWith(DEEPSEEK_PEAK)) }))
     await flush()
     await click(query(m.container, '.lc-dock'))
-    const card = query(m.container, '.lc-dock-card')
+    const card = query(document.body, '.lc-dock-card')
 
     // The token card's legend lists the billed buckets; the cost card adds its own.
     const tokenRows = queryAll(card, '.lc-dock-cards > .lc-card')[0].querySelectorAll('.lc-sl-row')
@@ -338,7 +341,7 @@ describe('ComposerDock — the expanded card', () => {
       const m = await mount(h(D, { sessionId: 's1', ...seatOf(timelineWith(DEEPSEEK_PEAK)) }))
       await flush()
       await click(query(m.container, '.lc-dock'))
-      const card = query(m.container, '.lc-dock-card')
+      const card = query(document.body, '.lc-dock-card')
       assert.ok(query(card, '.lc-dock-badge-peak') !== null, 'the peak badge carries its own class')
       const cells = queryAll(card, '.lc-dock-table tbody tr:first-child td').map(el => el.textContent)
       // Flash peak: ¥0.04 cache hit, ¥2 uncached, ¥8 output.
@@ -355,7 +358,7 @@ describe('ComposerDock — the expanded card', () => {
     const m = await mount(h(D, { sessionId: 's1', ...seatOf(timelineWith(DEEPSEEK_PEAK)) }))
     await flush()
     await click(query(m.container, '.lc-dock'))
-    const card = query(m.container, '.lc-dock-card')
+    const card = query(document.body, '.lc-dock-card')
     assert.equal(maybe(card, '.lc-dock-balance-row'), null, 'no balance row without a figure')
     assert.equal(queryAll(card, '.lc-dock-badge').length, 1, 'the period badge still rides the head')
     assert.ok(text(card).includes('Rate card'))
@@ -369,7 +372,7 @@ describe('ComposerDock — the expanded card', () => {
     const m = await mount(h(D, { sessionId: 's1', ...seatOf(timelineWith(zeros)) }))
     await flush()
     await click(query(m.container, '.lc-dock'))
-    const card = query(m.container, '.lc-dock-card')
+    const card = query(document.body, '.lc-dock-card')
     assert.equal(text(card).includes('Token usage'), false, 'a zero-token ledger has no token block')
     assert.equal(text(card).includes('Cost breakdown'), false, 'the period split sums to zero too')
     await m.unmount()
@@ -381,7 +384,7 @@ describe('ComposerDock — the expanded card', () => {
     const m = await mount(h(D, { sessionId: 's1', ...seatOf(timelineWith(offOnly)) }))
     await flush()
     await click(query(m.container, '.lc-dock'))
-    const card = query(m.container, '.lc-dock-card')
+    const card = query(document.body, '.lc-dock-card')
     // The cost card always lists both bands; the empty one still reports its zero.
     // Scoped to that card: the per-platform cards reuse the same row class for their
     // call and balance details.
@@ -403,12 +406,12 @@ describe('ComposerDock — the expanded card', () => {
     // jsdom reports a zero rect; give the trigger a real one so the placement is meaningful.
     trigger.getBoundingClientRect = () => ({ left: 40, top: 300, bottom: 320, width: 120, height: 20 }) as DOMRect
     await click(trigger)
-    const before = query(m.container, '.lc-dock-card').getAttribute('style')
+    const before = query(document.body, '.lc-dock-card').getAttribute('style')
     trigger.getBoundingClientRect = () => ({ left: 200, top: 120, bottom: 140, width: 120, height: 20 }) as DOMRect
     await act(async () => {
       window.dispatchEvent(new Event('resize'))
     })
-    const after = query(m.container, '.lc-dock-card').getAttribute('style')
+    const after = query(document.body, '.lc-dock-card').getAttribute('style')
     assert.ok(after !== null && after !== before, 'the card re-measured against the new trigger rect')
     await m.unmount()
   })
@@ -424,7 +427,7 @@ describe('ComposerDock — the expanded card', () => {
     const trigger = query(m.container, '.lc-dock')
     trigger.getBoundingClientRect = () => ({ left: 40, top: 300, bottom: 320, width: 120, height: 20 }) as DOMRect
     await click(trigger)
-    const style = query(m.container, '.lc-dock-card').getAttribute('style') ?? ''
+    const style = query(document.body, '.lc-dock-card').getAttribute('style') ?? ''
     // The inline width is gone: pinning it would freeze the card at whatever was measured
     // on the first frame and defeat `width: max-content`.
     assert.equal(/min-width:/.test(style), false, 'no inline width pin')
@@ -449,7 +452,7 @@ describe('ComposerDock — the expanded card', () => {
     try {
       trigger.getBoundingClientRect = () => ({ left: 10, top: 300, bottom: 320, width: 100, height: 20 }) as DOMRect
       await click(trigger)
-      const style = query(m.container, '.lc-dock-card').getAttribute('style') ?? ''
+      const style = query(document.body, '.lc-dock-card').getAttribute('style') ?? ''
       // jsdom reports a 0-width card, so the clamped anchor falls back to the 264px floor;
       // what matters is that the anchor is viewport-aware and the left edge stays inside.
       const left = Number(/left:\s*(\d+)px/.exec(style)?.[1] ?? '0')
@@ -472,7 +475,7 @@ describe('ComposerDock — the expanded card', () => {
     // A trigger at the very top: `above` is negative, so the card flips below it.
     trigger.getBoundingClientRect = () => ({ left: 10, top: 2, bottom: 22, width: 100, height: 20 }) as DOMRect
     await click(trigger)
-    const style = query(m.container, '.lc-dock-card').getAttribute('style') ?? ''
+    const style = query(document.body, '.lc-dock-card').getAttribute('style') ?? ''
     assert.ok(style.includes('top: 30px'), `flipped below the trigger (got ${style})`)
     await m.unmount()
   })
@@ -484,7 +487,7 @@ describe('ComposerDock — the expanded card', () => {
     await act(async () => {
       window.dispatchEvent(new Event('resize'))
     })
-    assert.equal(maybe(m.container, '.lc-dock-card'), null, 'nothing to reposition while collapsed')
+    assert.equal(maybe(document.body, '.lc-dock-card'), null, 'nothing to reposition while collapsed')
     await m.unmount()
   })
 
@@ -510,7 +513,7 @@ describe('ComposerDock — the expanded card', () => {
       trigger.getBoundingClientRect = () => ({ left: 885, top: 646, bottom: 674, width: 815, height: 28 }) as DOMRect
 
       await click(trigger)
-      const card = query(m.container, '.lc-dock-card')
+      const card = query(document.body, '.lc-dock-card')
       assert.ok(card !== null, 'the panel exists from the first open render, not only after an anchor lands')
 
       // Give the panel its on-screen height, then let the observer re-place it.
@@ -542,13 +545,13 @@ describe('ComposerDock — the expanded card', () => {
     await flush()
     const trigger = query(m.container, '.lc-dock')
     await click(trigger)
-    assert.ok(maybe(m.container, '.lc-dock-card') !== null)
+    assert.ok(maybe(document.body, '.lc-dock-card') !== null)
     // A mousedown on the trigger itself must not be treated as an outside press
     // (the click's own toggle owns that path).
     await pressOutside(trigger)
-    assert.ok(maybe(m.container, '.lc-dock-card') !== null, 'a press on the trigger keeps it open')
+    assert.ok(maybe(document.body, '.lc-dock-card') !== null, 'a press on the trigger keeps it open')
     await keydown('a', document as unknown as Window)
-    assert.ok(maybe(m.container, '.lc-dock-card') !== null, 'only Escape dismisses')
+    assert.ok(maybe(document.body, '.lc-dock-card') !== null, 'only Escape dismisses')
     await m.unmount()
   })
 
@@ -557,7 +560,7 @@ describe('ComposerDock — the expanded card', () => {
     const m = await mount(h(D, { sessionId: 's1', ...seatOf(timelineWith(DEEPSEEK_PEAK)) }))
     await flush()
     await click(query(m.container, '.lc-dock'))
-    const card = query(m.container, '.lc-dock-card')
+    const card = query(document.body, '.lc-dock-card')
     const body = text(card)
     assert.ok(body.includes('Token 统计'))
     assert.ok(body.includes('价目表'))
@@ -572,7 +575,7 @@ describe('ComposerDock — the expanded card', () => {
     const m = await mount(h(D, { sessionId: 's1', ...seatOf(timelineWith(undefined)) }))
     await flush()
     await click(query(m.container, '.lc-dock'))
-    const card = query(m.container, '.lc-dock-card')
+    const card = query(document.body, '.lc-dock-card')
     assert.equal(text(card).includes('Token usage'), false)
     assert.equal(text(card).includes('Cost breakdown'), false)
     assert.ok(text(card).includes('Rate card'), 'the rate card needs no usage')
@@ -584,13 +587,13 @@ describe('ComposerDock — the expanded card', () => {
     const m = await mount(h(D, { sessionId: 's1', ...seatOf(timelineWith(DEEPSEEK_PEAK)) }))
     await flush()
     await click(query(m.container, '.lc-dock'))
-    assert.ok(maybe(m.container, '.lc-dock-card') !== null)
+    assert.ok(maybe(document.body, '.lc-dock-card') !== null)
     await keydown('Escape', document as unknown as Window)
 
-    assert.equal(maybe(m.container, '.lc-dock-card'), null, 'Escape closes it')
+    assert.equal(maybe(document.body, '.lc-dock-card'), null, 'Escape closes it')
     await click(query(m.container, '.lc-dock'))
     await pressOutside(document.body)
-    assert.equal(maybe(m.container, '.lc-dock-card'), null, 'an outside press closes it')
+    assert.equal(maybe(document.body, '.lc-dock-card'), null, 'an outside press closes it')
     await m.unmount()
   })
 
@@ -603,9 +606,9 @@ describe('ComposerDock — the expanded card', () => {
     const m = await mount(h(D, { sessionId: 's1', ...seatOf(timelineWith(DEEPSEEK_PEAK)) }))
     await flush()
     await click(query(m.container, '.lc-dock'))
-    const card = query(m.container, '.lc-dock-card')
+    const card = query(document.body, '.lc-dock-card')
     await pressOutside(card)
-    assert.ok(maybe(m.container, '.lc-dock-card') !== null, 'an inside press leaves it open')
+    assert.ok(maybe(document.body, '.lc-dock-card') !== null, 'an inside press leaves it open')
     // The balance row is the reused cost card's own, so the dock no longer draws a second one.
     assert.equal(queryAll(card, '.lc-sc-balance').length, 1, 'exactly one balance row')
     const link = query(card, '.lc-sc-balance')
@@ -715,19 +718,52 @@ describe('ComposerDock — the expanded card matches the official popup layer', 
     assert.doesNotMatch(body, /border:\s*1px/, 'the official surface carries its hairline in the elevation, not a 1px border')
   })
 
-  test('the card is sized and padded like the official popover beside it', () => {
-    // This card lives on the same row as the official context meter, and both open at
-    // z-index 1100 — so when both are up, the wider one simply covers the other. The
-    // naive reference was `stat-dialog` (440px), a centred dialog, which made this card
-    // overhang the sidebar. The right reference is the neighbour actually on this row:
-    // `ContextMeter.module.css` — `width: min(264px, 100vw - 24px)`, `padding: 12px`.
+  test('the card is sized and padded like the official stat dialog', () => {
+    // The card reads as the same layer as the official stat dialog the status bar opens
+    // ("Token 用量", from the stats pill) — `stat-dialog.module.css`'s `.panel`:
+    // `padding: 16px`, `font-size: 12px`, `line-height: 18px`.
+    //
+    // The WIDTH is deliberately different. The official panel only lists five token
+    // rows; this card carries two summary cards plus a rate table, so it keeps
+    // content-driven sizing. The official panel's `min(440px, 100vw - 24px)` ceiling
+    // was copied straight over at first and was wrong here: as a FLOOR of 264px it left
+    // the legend ~132px once the 96px ring took its share, under the legend's own 150px
+    // minimum column, so every row folded onto two lines.
     const body = ruleOf('.lc-dock-card')
-    assert.match(body, /padding:\s*12px/, 'the neighbour\u2019s padding')
-    // The neighbour\'s 264px is now the card\'s FLOOR rather than its fixed width: a fixed
-    // 264px left the legend ~132px once the 96px ring took its share, under the legend\'s
-    // own 150px minimum column, so every row folded onto two lines.
-    assert.match(src, /const CARD_MIN_WIDTH = 264/, 'the neighbour\'s width, as the floor')
+    assert.match(body, /padding:\s*16px/, 'the official stat-dialog padding')
+    assert.match(body, /font-size:\s*12px/, 'the official panel text size')
+    assert.match(body, /line-height:\s*18px/, 'the official panel line box')
+    assert.match(src, /const CARD_MIN_WIDTH = 264/, 'the width floor is the plugin\u2019s own')
     assert.match(body, /width:\s*max-content/, 'while the content decides the actual width')
+  })
+
+  test('the card is portaled to the body, like the official panels', () => {
+    // Every official panel on this row (ContextMeter's `.panel`, the stat dialog) is
+    // `createPortal`ed to `document.body` at z-index 1100. The composer column, by
+    // contrast, is a `position: sticky` seat and `ConversationRoot.module.css`'s
+    // `.composerSeat` gives it `z-index: 7` — a stacking context. A `z-index: 1100`
+    // card rendered INSIDE that seat is only ordered within it, so a root-level
+    // element can still cover it; the shared 1100 only means "same layer" once the
+    // card is a body-level sibling too. Rendering through a portal is what makes the
+    // official panels and this card actually comparable.
+    assert.match(src, /createPortal/, 'the card renders through a portal')
+    assert.match(src, /document\.body/, 'and targets the body, where the official panels live')
+  })
+
+  test('the head carries the official title rule', () => {
+    // Official `.title`: `label-primary`, `font-weight: 500`, `justify-content:
+    // space-between`, `gap: 16px`, `margin-bottom: 8px`; then `.titleRule`, a 0.5px
+    // `border-l2` hairline with 10px below. Together they are how the official panel
+    // separates its heading from the detail rows.
+    const head = ruleOf('.lc-dock-head')
+    assert.match(head, /justify-content:\s*space-between/, 'title and value at opposite ends')
+    assert.match(head, /gap:\s*16px/, 'the official title gap')
+    assert.match(head, /margin-bottom:\s*8px/, 'the official title-to-rule space')
+    assert.match(ruleOf('.lc-dock-head-title'), /font-weight:\s*500/, 'the official title weight')
+    assert.match(ruleOf('.lc-dock-head-title'), /--dsw-alias-label-primary/, 'the official title colour')
+    const rule = ruleOf('.lc-dock-head-rule')
+    assert.match(rule, /border-top:\s*0\.5px solid var\(--dsw-alias-border-l2\)/, 'the official hairline')
+    assert.match(rule, /margin:\s*0 0 10px/, 'and its 10px below, like the official rule')
   })
 
   test('every block inside the card is border-box, so none of them overflow', () => {
@@ -1065,11 +1101,11 @@ describe('ComposerDock — yields to the official panel on the same row', () => 
     try {
       await flush()
       await click(query(m.container, '.lc-dock'))
-      assert.ok(query(m.container, '.lc-dock-card') !== null, 'the card is open')
+      assert.ok(query(document.body, '.lc-dock-card') !== null, 'the card is open')
       // The official panel mounts (it is portaled to body).
       await act(async () => { overlay() })
       await flush()
-      assert.equal(m.container.querySelector('.lc-dock-card'), null, 'and it steps aside')
+      assert.equal(document.body.querySelector('.lc-dock-card'), null, 'and it steps aside')
     } finally {
       document.body.querySelectorAll('[role="dialog"]').forEach(el => { el.remove() })
       await m.unmount(); vi.useRealTimers()
@@ -1085,7 +1121,7 @@ describe('ComposerDock — yields to the official panel on the same row', () => 
       await flush()
       await click(query(m.container, '.lc-dock'))
       await flush()
-      assert.ok(query(m.container, '.lc-dock-card') !== null, 'opens normally')
+      assert.ok(query(document.body, '.lc-dock-card') !== null, 'opens normally')
     } finally { await m.unmount(); vi.useRealTimers() }
   })
 })
@@ -1114,7 +1150,7 @@ describe('ComposerDock — peak/off and the rate table belong to DeepSeek only',
     const line = text(query(m.container, '.lc-dock'))
     await click(query(m.container, '.lc-dock'))
     await flush()
-    return { m, line, card: query(m.container, '.lc-dock-card') }
+    return { m, line, card: query(document.body, '.lc-dock-card') }
   }
 
   test('a credit platform carries no peak/off badge and no rate table', async () => {
@@ -1167,7 +1203,7 @@ describe('ComposerDock — official billing UI appears only where it applies', (
     await flush()
     await click(query(m.container, '.lc-dock'))
     await flush()
-    return { m, card: query(m.container, '.lc-dock-card') }
+    return { m, card: query(document.body, '.lc-dock-card') }
   }
 
   test('a session that never used an official model shows no cost card at all', async () => {

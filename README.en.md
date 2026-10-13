@@ -88,16 +88,23 @@ actual available width). Click to expand a detail card that
 Summary Statistics cards themselves** — Token Stats and Cost Stats — plus the official
 rate table for the period in force: one dataset, one layout, so the readout and the
 statistics page can never disagree (the balance rides the cost card's own row rather than
-appearing twice). The card is `position: fixed` and measured from the trigger so it
-escapes the composer's own `overflow` clipping. Its look follows the **official harness
-panel** (`stat-dialog.module.css`): the same `--dsw-specific-menu` surface, the same
-`--dsw-radius-lg` radius, the same hairline stroke plus `--dsw-elevation-prominent`
-shadow, and the same `z-index: 1100`, so it reads as one layer with the official popup
-the session footer opens. Its width matches that panel's 440px cap (even for a short
-trigger) and is clamped to the viewport, so it neither clips the right-hand figures nor
-grows a horizontal scrollbar; all three blocks inside declare `box-sizing: border-box`
-themselves, because the base `.lc-card` rule only sets it under `.lc-root`, which the
-floating card has no ancestor of. It flips
+appearing twice). The card is `position: fixed`, measured from the trigger so it escapes the
+composer's own `overflow` clipping, and **portaled to `document.body`**: both official panels
+on this row (`ContextMeter`'s `.panel`, the stat dialog) are `createPortal`ed to the body,
+while the composer sits in `.composerSeat` — `position: sticky` with `z-index: 7`, a stacking
+context in which a `z-index: 1100` card is only ordered locally and can still be covered by a
+root-level element. Its look follows the **official stat dialog** (`stat-dialog.module.css`'s
+`.panel` — the "Token usage" panel the readout pill opens): the same `--dsw-specific-menu`
+surface, the same `--dsw-radius-lg` radius, the same hairline stroke plus
+`--dsw-elevation-prominent` shadow, the same `z-index: 1100`, the same `padding: 16px` and
+12px/18px text; the head copies the official `.title` + `.titleRule` pair — `label-primary`
+at weight 500, ends pinned apart, 8px below, then a 0.5px hairline with 10px under it.
+**Width and height are deliberately different**: the official panel lists five token rows,
+while this card carries two summary cards and a rate table, so it keeps content-driven sizing
+with its own 264px floor and 560px ceiling, clamped to the viewport — so it neither clips the
+right-hand figures nor grows a horizontal scrollbar; all three blocks inside declare
+`box-sizing: border-box` themselves, because the base `.lc-card` rule only sets it under
+`.lc-root`, which the floating card has no ancestor of. It flips
 below the trigger when there is no room above. The period badge flips on the local clock.
 
 The balance comes from **two sources**, tried in order: (1) DSH's own account sign-in (the

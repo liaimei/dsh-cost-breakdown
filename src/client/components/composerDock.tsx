@@ -12,6 +12,7 @@
  */
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactElement } from 'react'
+import { createPortal } from 'react-dom'
 import { formatNativeSpend, formatPriceRate, fromCny, type CostCurrency } from '../cost'
 import { readDock, useDockBook, usePricingPeriod } from '../dockReading'
 import { fmtCountdown } from '../format'
@@ -393,7 +394,7 @@ export function makeComposerDock(
             卡片会停在一个错的 top 上）。`anchor` 未就绪的这一帧先不定位，
             靠 `visibility: hidden` 藏住，避免出现在 0,0 处闪一下。 */}
         {open
-          ? (
+          ? createPortal(
             <div
               ref={cardRef}
               className="lc-dock-card"
@@ -410,6 +411,9 @@ export function makeComposerDock(
                   ? <span className={'lc-dock-badge' + (period.peak ? ' lc-dock-badge-peak' : '')}>{periodLabel}</span>
                   : null}
               </div>
+              {/* 标题下的发丝分割线：官方 stat-dialog 的 `.titleRule` 把标题与明细分开，
+                  插件同步这一笔，两块面板读作同一种排版。 */}
+              <div className="lc-dock-head-rule" aria-hidden="true" />
               {/* 峰谷窗口与倒计时在展开卡里也写全：收起那一行只放得下一个倒计时，
                   而「峰时是哪几段」正是这张卡要回答的问题。
                   整块只对走官方峰谷计价的平台出现——其他平台没有这个概念。 */}
@@ -463,7 +467,8 @@ export function makeComposerDock(
               {usedOfficial
                 ? <div className="lc-dock-note">{t('dock.note')}</div>
                 : null}
-            </div>
+            </div>,
+            document.body,
           )
           : null}
       </>
