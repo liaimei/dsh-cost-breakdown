@@ -1,6 +1,11 @@
 # Bundle patch layer: the row loads the package's main entry as the host half
 # (a plain Cordis plugin); the `dsh.client` declaration makes the web app load
 # its ./client bundle as the browser half.
+#
+# The row id is a short handle, deliberately NOT the package name. Two reasons:
+# the host settings namespace is derived from the row id (dsh-settings uses
+# `ns: entry.options.id`), and the Plugins page prints the row id and the module
+# name on separate lines, so one string used for both prints the same line twice.
 - insert:
-    - id: dsh-cost-breakdown
+    - id: cost-breakdown
       name: dsh-cost-breakdown

@@ -1,6 +1,6 @@
 {
   "meta": {
-    "title": "Usage & Cost (dsh-cost-breakdown)",
-    "description": "Cost and context insight: account-wide token/cost statistics, official CNY peak/off-peak pricing with Chinese public holidays, and a persistent cost readout under the composer, alongside the context dashboard, browser and /context command."
+    "title": "Usage & Cost",
+    "description": "Token usage and cost: each platform is billed in its own unit (CNY / USD / credits), with per-model spend and call counts inside each card. The official CNY table covers peak/off-peak windows and Chinese public holidays; the context dashboard, browser and /context command are kept."
   }
 }

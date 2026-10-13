@@ -54,7 +54,7 @@ describe('PluginInfo', () => {
     assert.equal(query(rows[2], '.lc-pi-label').textContent, 'Plugin Settings')
     assert.equal(query(rows[2], '.lc-pi-value').textContent, 'Open plugin settings')
     const hint = query(m.container, '.lc-pi-hint')
-    assert.ok(text(hint).includes('The best DSH context plugin'))
+    assert.ok(text(hint).includes('Token usage and cost, priced per platform'))
     assert.equal(hint.getAttribute('href'), 'https://github.com/liaimei/dsh-cost-breakdown')
     assert.equal(hint.getAttribute('target'), '_blank')
     assert.equal(hint.getAttribute('rel'), 'noreferrer')

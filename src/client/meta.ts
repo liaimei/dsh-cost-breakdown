@@ -5,7 +5,8 @@ declare const __DSH_CTX_REPO__: string | undefined
 
 /** npm 包名：Plugin-info 更新检查所用的注册表路径。locale 命名空间
  *  （index.ts 里的 `NS`）与侧栏 kind 刻意取同一个字符串，但分开声明，
- *  这样本模块保持为不含任何客户端 import 的叶子节点。 */
+ *  这样本模块保持为不含任何客户端 import 的叶子节点。**不是** Host 设置
+ *  命名空间——那是 loader 行 id（index.ts 的 `SETTINGS_NS`）。 */
 export const PLUGIN_NAME = 'dsh-cost-breakdown'
 
 /** 构建时打戳的版本；没有该宏的构建产物会报告 `0.0.0-dev`，

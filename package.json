@@ -1,7 +1,7 @@
 {
   "name": "dsh-cost-breakdown",
   "version": "0.0.1",
-  "description": "DSH 费用与上下文洞察：整账号 token/费用统计 + 上下文组成，官方人民币峰谷计价（含法定节假日），输入框下方常驻费用读数。",
+  "description": "Token 用量与费用：按平台分别计价，各用自己的账单单位（人民币 / 美元 / 积分），卡内含逐模型消费与调用次数；官方人民币价目表含峰谷与法定节假日。同时保留上下文仪表盘、浏览器与 /context 命令。",
   "icon": "icon.svg",
   "author": "liaimei",
   "repository": {

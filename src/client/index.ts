@@ -45,7 +45,14 @@ import './styles/dateRange.css'
 import './styles/spend.css'
 import './styles/composerDock.css'
 
+/** 包名，也是 locale 命名空间与 `plugins.bundle.config` 座位的键：Plugins 页
+ *  按 **包名** 传 `{ entryKey: pkg.name }`，所以这个座位只能挂包名。 */
 const NS = 'dsh-cost-breakdown'
+
+/** Host 设置命名空间 = **loader 行 id**（`cordis.patch.yml` 的 `id`），不是包名：
+ *  `dsh-settings` 用 `ns: entry.options.id` 描述每个条目。两者今天恰好不同名，
+ *  因此分开声明——行 id 再改也不会静默丢掉已保存的偏好。 */
+const SETTINGS_NS = 'cost-breakdown'
 
 /** bundle 的唯一入口，每个客户端 fiber 执行一次。**硬性** inject 只有 `slots` 与
  *  `locale`；其他服务一律延迟（`ctx.inject`）或在调用点校验，因此被裁剪过的
@@ -161,9 +168,10 @@ function apply(ctx: ClientCtx): void {
     const forms = c.configForms
     // inject 之后再校验一次：服务可能存在但已被裁剪。
     if (forms === undefined || typeof forms.get !== 'function' || typeof forms.whileServed !== 'function') return
-    c.effect(() => settings.attach(forms.get(NS)), 'dsh-cost-breakdown: config forms')
+    c.effect(() => settings.attach(forms.get(SETTINGS_NS)), 'dsh-cost-breakdown: config forms')
     const PluginConfigCard = makePluginConfigCard(kit)
-    c.effect(() => forms.whileServed([NS], () => {
+    // 等待的是 **Host 命名空间**（行 id）；注册的座位键则是**包名**（Plugins 页按包名找座位）。
+    c.effect(() => forms.whileServed([SETTINGS_NS], () => {
       // slots.inject 的清理函数就是该注册的清理函数。
       return c.slots.inject('plugins.bundle.config', () => {
         return c.slots.register(

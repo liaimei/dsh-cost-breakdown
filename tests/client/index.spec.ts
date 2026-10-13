@@ -359,10 +359,10 @@ describe('client entry: configForms inject', () => {
     const scope = makeScope({ status: 'ready', value: { defaultTrendMode: 'delta' }, writable: true })
     const forms = fakeConfigForms(scope)
     ctx.setService('configForms', forms)
-    // The namespace is the entry id.
-    assert.deepEqual(forms.gets, ['dsh-cost-breakdown'])
+    // The namespace is the loader row id (`cordis.patch.yml`'s `id`), not the package name.
+    assert.deepEqual(forms.gets, ['cost-breakdown'])
     assert.equal(scope.subscribes, 1, 'the settings store attached to the form')
-    assert.deepEqual(forms.whileServedCalls, [['dsh-cost-breakdown']])
+    assert.deepEqual(forms.whileServedCalls, [['cost-breakdown']])
     // Nothing registers until the Host serves the namespace.
     assert.equal(ctx.slots.of('plugins.bundle.config').length, 0)
     // The Host serves: the register claims the keyed seat.

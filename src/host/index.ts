@@ -28,7 +28,10 @@ import { createContextTimelineDefinition } from './timeline'
 import { detectHarnessVersion } from './version'
 import { meetsBaseline } from '../shared/version'
 
-/** loader 行 id；Config 命名空间与设置表单的存储键都由它推导。 */
+/** 插件名（与包名一致）：只用于日志与归因自排除。设置命名空间不取它，
+ *  而取 **loader 行 id**（`cordis.patch.yml` 的 `id`，见 `dsh-settings` 的
+ *  `ns: entry.options.id`）；行 id 与包名刻意不同，这样 Plugins 页不会把同一个
+ *  字符串当「行 id」和「模块名」各印一行。 */
 export const name = 'dsh-cost-breakdown'
 
 /** 硬依赖：注册表不存在时 Cordis 会让本插件保持 pending。 */

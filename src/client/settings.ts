@@ -1,5 +1,6 @@
-/** 插件的用户设置绑定（浏览器这一半）：Host 提供的 `dsh-cost-breakdown` 命名空间
- * 承载按用户的展示偏好；该界面缺失或只读时，一律退化为 schema 默认值。 */
+/** 插件的用户设置绑定（浏览器这一半）：Host 提供的 `cost-breakdown` 命名空间
+ * 承载按用户的展示偏好（该名字是 **loader 行 id**，不是包名）；该界面缺失或只读时，
+ * 一律退化为 schema 默认值。 */
 
 import type { DefaultDeltaBase, DefaultFileSort, DefaultGranularity, DefaultDurationCurve, DefaultPlacement, DefaultToolSort, DefaultTrendMode, InsightsEntry, SettingsField } from '../shared/types'
 

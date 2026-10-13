@@ -72,7 +72,14 @@ Changes made in this fork, as required by section 4(b) of the Apache License:
     icon.svg is this fork's own three-segment "usage meter" gauge rather than
     upstream's document-sheet emblem. Upstream's source files are otherwise
     carried over unmodified; the identity strings the runtime depends on (route
-    paths, locale namespace, slot ids, config key) follow the package name.
+    paths, locale namespace, slot ids) follow the package name.
+  * The loader row id in `cordis.patch.yml` is the short handle `cost-breakdown`,
+    deliberately distinct from the package name. The Host settings namespace is
+    derived from that row id (`dsh-settings` describes each entry with
+    `ns: entry.options.id`), so `client/index.ts` declares it separately as
+    `SETTINGS_NS` while the locale namespace and the `plugins.bundle.config` seat
+    keep the package name; the Plugins page prints the row id and the module name
+    on separate lines, so one string for both printed the same line twice.
   * Documentation comments were added across the whole `src/` tree (including the
     CSS sheets): every exported declaration carries a doc block, and non-obvious
     logic carries explanatory inline comments. The comments are written in Chinese.

@@ -1,9 +1,9 @@
 /**
  * dsh-cost-breakdown 条目配置：
- * `dsh-cost-breakdown` loader 行的 `config:` 块，外加以用户为单位的展示偏好。
+ * `cost-breakdown` loader 行的 `config:` 块，外加以用户为单位的展示偏好。
  *
  * schema 用 schemastery，
- * 好让两个消费方都接受：cordis 在 `apply` 之前通过 Standard Schema 接口校验条目配置，harness 的 Config 表单生成也用同一份 schema 推出 Plugins 页的实时表单——命名空间即条目 id，
+ * 好让两个消费方都接受：cordis 在 `apply` 之前通过 Standard Schema 接口校验条目配置，harness 的 Config 表单生成也用同一份 schema 推出 Plugins 页的实时表单——命名空间即条目 id（`cordis.patch.yml` 里那个短 id，不是包名），
  * 只有 `.volatile()` 字段会被提供并允许编辑。
  * 受约束的编辑重挂载条目（fold 在 apply 时读取它们）；
  * 偏好类编辑只提交 volatile 部分，从不重挂载。

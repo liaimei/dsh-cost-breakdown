@@ -1,4 +1,5 @@
-/** dsh-cost-breakdown 的偏好设置卡片，以 Host 提供的 `dsh-cost-breakdown` 命名空间为键：该命名空间
+/** dsh-cost-breakdown 的偏好设置卡片，以 Host 提供的 `cost-breakdown` 命名空间为键
+ * （该名字是 **loader 行 id**，不是包名）：该命名空间
  * 不可用时（没有 Host 那一半的部署，或远程浏览器），这张卡片什么都不渲染。 */
 
 import { useState, type ReactElement } from 'react'
