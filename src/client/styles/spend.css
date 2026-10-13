@@ -1,0 +1,44 @@
+/* 会话内页与左侧统计页的**费用段**：一段标题 + 每个平台一张卡。
+   与上方纯上下文/纯 token 的那些卡片在视觉上分开，读者一眼能看出这是另一种口径。 */
+
+.lc-sect { display: flex; flex-direction: column; gap: 7px; margin-bottom: 7px; }
+.lc-sect-head { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 2px; }
+.lc-sect-title { font-weight: 600; font-size: 13px; color: var(--dsw-alias-label-primary); }
+.lc-sect-sub { font-size: 12px; color: var(--dsw-alias-label-secondary); }
+
+/* 卡内的逐模型明细：模型 / 消费 / 调用次数。
+   它长在平台卡里，与环图的图例同源——另起一张表只会把同一批数字再抄一遍。
+   表格用 auto 布局而**不是** fixed：这张表只有三列、内容很短，auto 让模型名按需取宽，
+   不需要百分比列宽那种对卡片宽度敏感的做法。 */
+.lc-pf-models { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: auto; margin-top: 6px; }
+.lc-pf-models td {
+  padding: 3px 0; border-top: 1px solid var(--dsw-alias-border-l1);
+  color: var(--dsw-alias-label-primary); font-variant-numeric: tabular-nums;
+}
+.lc-pf-model-name {
+  min-width: 0; max-width: 0; width: 100%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--dsw-alias-label-secondary);
+}
+.lc-pf-model-spend { white-space: nowrap; text-align: right; font-weight: 600; padding-left: 10px; }
+.lc-pf-model-calls { white-space: nowrap; text-align: right; color: var(--dsw-alias-label-secondary); padding-left: 10px; }
+/* 定不出价的模型写明「未配置费率」并整行变暗——¥0 会声称这些调用不花钱。 */
+.lc-pf-models tr.lc-pf-model-unpriced .lc-pf-model-name { color: var(--dsw-alias-label-tertiary); }
+.lc-pf-models tr.lc-pf-model-unpriced .lc-pf-model-spend {
+  font-weight: 400; color: var(--dsw-alias-label-tertiary);
+}
+
+/* 左侧统计页的费用段：与上方 token 段之间用一条分隔带划开。 */
+.lc-ov-spend { margin-bottom: 10px; }
+.lc-ov-spend-head {
+  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  margin: 18px 0 10px; padding-top: 14px; border-top: 1px solid var(--dsw-alias-border-l1);
+}
+.lc-ov-spend-title { font-size: 15px; font-weight: 600; }
+.lc-ov-spend-sub { font-size: 12px; color: var(--dsw-alias-label-secondary); }
+/* 平台卡按可用宽度铺开、可换行，不参与上方统计卡的列宽分配。
+   与 `.lc-platform-row` 一样**不设上限**：右侧栏最大化时，上限会把卡片钉在半宽上，
+   右边空出一大片。 */
+.lc-ov-platform-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-start; margin-bottom: 10px; }
+.lc-ov-platform-row > .lc-pf-card { flex: 1 1 auto; min-width: min(240px, 100%); }
+.lc-ov-platform-row > .lc-pf-card { container: lc-card / inline-size; }

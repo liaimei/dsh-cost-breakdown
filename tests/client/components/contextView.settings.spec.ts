@@ -7,16 +7,11 @@ import type { UseChatLike } from '../../../src/client/services'
 import { resetModelPrices, setModelPricesLoader } from '../../../src/client/modelPrices'
 import { DICT_EN } from '../../../src/client/i18n'
 import { TestClientCtx, TestLocale } from '../helpers/harness'
+import { resetRateTables, setRateTables } from '../../../src/client/rateTables'
 import { click, flush, mount, query, queryAll, silenceWindowErrors, text } from '../helpers/kit'
 import { buttonByText, makeView, projectionsFor, richTimeline, T0, timeline } from './contextViewHarness'
 
 describe('ContextView — locale and settings', () => {
-  // A real-shaped models.dev slice: the cost cell prices against the injected
-  // book (1M uncached input at the $0.15 miss rate → $0.15 / ¥1).
-  const costed = timeline({
-    cost: { 'deepseek-official': { 'deepseek-v4-flash': { peak: { uncached: 1000000, output: 500000, cacheRead: 0, cacheWrite: 0 } } } },
-  })
-
   beforeEach(() => {
     resetModelPrices()
     setModelPricesLoader(() => Promise.resolve({
@@ -26,35 +21,78 @@ describe('ContextView — locale and settings', () => {
 
   afterEach(() => {
     resetModelPrices()
+    resetRateTables()
   })
 
-  test('cost prices in USD by default (no locale service), CNY under zh', async () => {
+  test('the spend section bills each platform in its own currency, whatever the locale', async () => {
+    // The conversation tab carries no money at all now; the spend section lives in the
+    // right sidebar column, and renders each platform's OWN billing currency rather
+    // than following the UI locale.
+    const deepseek = timeline({
+      provider: 'deepseek-official',
+      cost: { 'deepseek-official': { 'deepseek-v4-flash': { peak: { uncached: 1000000, output: 0, cacheRead: 0, cacheWrite: 0 } } } },
+      calls: { 'deepseek-official': { 'deepseek-v4-flash': 1 } },
+    })
     const m1 = await mount(h(makeView(new TestClientCtx()), {
       sessionId: 'sv-usd',
-      useProjection: projectionsFor(costed),
+      host: 'sidebar' as const,
+      useProjection: projectionsFor(deepseek),
     }))
     await flush()
-    assert.ok(text(m1.container).includes('$'))
-    assert.ok(!text(m1.container).includes('¥'))
+    // 1M uncached at the doubled peak ($0.30) — CNY is the official platform's own currency.
+    assert.ok(text(m1.container).includes('¥'), 'the official platform is billed in CNY')
     await m1.unmount()
 
+    // A third-party platform bills in USD, and stays in dollars even under the zh locale.
+    // A declared per-1M-token rate is what makes this route priceable at all.
+    setRateTables({ money: { 'zai-coding-cn:glm-5.3-flash': { input: 0.075, output: 0.25, cacheRead: 0.015 } } })
+    const other = timeline({
+      provider: 'zai-coding-cn',
+      cost: { 'zai-coding-cn': { 'glm-5.3-flash': { peak: { uncached: 1000000, output: 0, cacheRead: 0, cacheWrite: 0 } } } },
+      calls: { 'zai-coding-cn': { 'glm-5.3-flash': 1 } },
+    })
     const ctxZh = new TestClientCtx({ services: { locale: new TestLocale('zh') } })
     const m2 = await mount(h(makeView(ctxZh), {
       sessionId: 'sv-cny',
-      useProjection: projectionsFor(costed),
+      host: 'sidebar' as const,
+      useProjection: projectionsFor(other),
     }))
     await flush()
-    assert.ok(text(m2.container).includes('¥'))
+    // The sidebar has two sections now (token, then spend); the money lives in the one
+    // carrying the platform cards.
+    const spend = queryAll(m2.container, '.lc-sect').find(s => s.querySelector('.lc-pf-card') !== null)
+    assert.ok(spend !== undefined, 'the spend section renders')
+    assert.ok(text(spend).includes('$'), 'a USD platform does not become RMB under a zh UI')
+    assert.ok(!text(spend).includes('¥'), 'and it never borrows the official platform\u2019s currency')
     await m2.unmount()
 
     const ctxBare = new TestClientCtx({ services: { locale: {} } })
     const m3 = await mount(h(makeView(ctxBare), {
       sessionId: 'sv-bare',
-      useProjection: projectionsFor(costed),
+      host: 'sidebar' as const,
+      useProjection: projectionsFor(deepseek),
     }))
     await flush()
-    assert.ok(text(m3.container).includes('$'))
+    assert.ok(text(m3.container).includes('¥'))
     await m3.unmount()
+  })
+
+  test('the conversation tab never shows an amount, whatever the session used', async () => {
+    // The tab answers for the context only: money lives in the sidebar column and on the
+    // statistics page, so a session that spent money must still show none of it here.
+    const priced = timeline({
+      provider: 'deepseek-official',
+      cost: { 'deepseek-official': { 'deepseek-v4-flash': { peak: { uncached: 1000000, output: 0, cacheRead: 0, cacheWrite: 0 } } } },
+      calls: { 'deepseek-official': { 'deepseek-v4-flash': 1 } },
+    })
+    const m = await mount(h(makeView(new TestClientCtx()), {
+      sessionId: 'sv-tab',
+      useProjection: projectionsFor(priced),
+    }))
+    await flush()
+    assert.ok(!text(m.container).includes('¥'), 'no CNY figure on the context page')
+    assert.ok(!text(m.container).includes('$'), 'no USD figure either')
+    await m.unmount()
   })
 
   test('mount-time granularity/trend/file-sort defaults come from the bound settings scope', async () => {

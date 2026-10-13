@@ -4,52 +4,15 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactElement, type ReactNode } from 'react'
 import type { ContextEventRecord, ContextTimeline, RequestRecord, SessionCostUsage, SurfaceNode, TimelineCounts } from '../../shared/types'
-import { estimateSessionCost, billedTokensOf, formatCost, formatPriceRate, mergeCostUsage, priceFaceOf, toCurrency } from '../cost'
-import type { CostCurrency, ModelBook, PriceFace } from '../cost'
+import { billedTokensOf, mergeCostUsage } from '../cost'
 import { sessionsFaceOf, subagentCostFoldOf } from '../agentTree'
 import type { AgentHeads } from '../agentHeads'
 import { useSessionsSnapshot } from '../agentHeads'
-import { useModelPrices } from '../modelPrices'
 import { revealInScrollParent } from '../revealScroll'
-import { asRecord, type ClientCtx } from '../services'
-import { isDeepSeekProvider } from '../../shared/providers'
+import type { ClientCtx } from '../services'
 import type { ViewKit } from '../viewkit'
 
-/** 一行已计价的记录，以 `provider/model` 为 key；face 携带费率及其来源，
- *  供提示里的费率清单使用。 */
-interface PriceRow { key: string; face: PriceFace }
-
-/** 四个费率带，按提示里的列出顺序排列，以及它们的标签 key。 */
-const BANDS: readonly (readonly [keyof PriceFace['rate'], string])[] = [
-  ['hit', 'stats.costHit'],
-  ['miss', 'stats.costMiss'],
-  ['write', 'stats.costWrite'],
-  ['out', 'stats.costOut'],
-]
-
-/** 折叠后的用量中每个已计价 provider/model 出一行费率；价目表无法
- *  定价的模型直接丢掉，而不是以零费率列出。 */
-function priceRowsOf(usage: SessionCostUsage | undefined, book: ModelBook | null): PriceRow[] {
-  // book 为 null 时照样出行：官方 CNY 表不需要任何 registry 的价目表。
-  if (usage === undefined) return []
-  const rows: PriceRow[] = []
-  for (const provider of Object.keys(usage)) {
-    const models = asRecord(usage[provider])
-    /* fold 的输入就是 mergeCostUsage 自己的输出
-       * （恶意分支在合并时就被丢掉），所以非记录的支路永远到不了
-       * 这里；留着这个守卫是为了 helper 自己的契约。 */
-    if (models === null) continue
-    for (const model of Object.keys(models)) {
-      const face = priceFaceOf(book, provider, model)
-      if (face === null) continue
-      rows.push({ key: provider + '/' + model, face })
-    }
-  }
-  return rows
-}
-
-/**
- * 构造出与宿主拆分代际头部所携带的同一份计数，好让内联代际
+/** 构造出与宿主拆分代际头部所携带的同一份计数，好让内联代际
  * 与远程代际无法互相矛盾。`steps` 是请求数，`turns` 是去重后的轮次
  * 编号（没有编号的轮次折成 0），技能则按 inject 事件的
  * `sub: 'skill'` 标记计数，而不是按任何节点形状。
@@ -208,63 +171,9 @@ export function makeStatsContext(
 ): (props: StatsContextProps) => ReactElement {
   const { t, fmt } = kit
   return function StatsContext(props: StatsContextProps): ReactElement {
-    const currency: CostCurrency = props.locale === 'zh' ? 'cny' : 'usd'
-    const { book, failed } = useModelPrices()
     const sub = useSubagentCost(props.sessionId)
     const subUsage = sub.usage
     const usage = mergeCostUsage(props.cost, subUsage) ?? undefined
-    const cost = estimateSessionCost(usage, book, currency)
-    const subCost = estimateSessionCost(subUsage, book, currency)
-    const fmtRate = (usd: number): string => formatPriceRate(toCurrency(usd, currency), currency)
-    const rows = priceRowsOf(usage, book)
-    const subRows = priceRowsOf(subUsage ?? undefined, book)
-    const deepseek = usage !== undefined && Object.keys(usage).some(p => isDeepSeekProvider(p))
-    const subDeepseek = subUsage !== null && Object.keys(subUsage).some(p => isDeepSeekProvider(p))
-    // 折叠出的用量里没有任何可定价的行（价目表未加载，或里面没有本作用域的模型）：如实说出来，而不是只给一条短横线。
-    const unpriced = rows.length === 0 && usage !== undefined && Object.keys(usage).length > 0
-      && (failed || book !== null)
-    const subUnpriced = subRows.length === 0 && subUsage !== null && (failed || book !== null)
-    const pricesBlock = (blocks: PriceRow[]): ReactNode =>
-      blocks.length > 0 ? (
-        <span key="prices" className="lc-stat-tip-prices">
-          <span className="lc-stat-tip-head">{t('stats.costPriceHead')}</span>
-          {blocks.map(r => (
-            <span key={r.key} className="lc-stat-tip-row">
-              {BANDS.filter(([bucket]) => r.face.rate[bucket] > 0).map(([bucket, label]) => (
-                <span key={bucket} className="lc-stat-tip-band">
-                  <i>{t(label)}</i>
-                  {' '}
-                  <b>{fmtRate(r.face.rate[bucket])}</b>
-                </span>
-              ))}
-              <span className="lc-stat-tip-by">
-                {r.face.official === true
-                  ? t('stats.costPriceOfficial', { m: r.face.mid })
-                  : t('stats.costPriceBy', { p: r.face.pid, m: r.face.mid })}
-              </span>
-            </span>
-          ))}
-        </span>
-      ) : null
-    const notes = (deep: boolean): ReactElement[] =>
-      [
-        currency === 'cny' ? <span key="cny">{t('stats.costTipCny')}</span> : null,
-        deep ? <span key="peak">{t('stats.costTipDeepseek')}</span> : null,
-      ].filter((el): el is ReactElement => el !== null)
-    const costTip: ReactNode = [
-      t('stats.costTip'),
-      <span key="billed" className="lc-stat-tip-row">{t('stats.billedTip')}</span>,
-      pricesBlock(rows),
-      ...notes(deepseek),
-      unpriced ? <span key="unavailable">{t('stats.costUnavailable')}</span> : null,
-    ]
-    const subTip: ReactNode = [
-      t('stats.subCostTip'),
-      <span key="billed" className="lc-stat-tip-row">{t('stats.billedTip')}</span>,
-      pricesBlock(subRows),
-      ...notes(subDeepseek),
-      subUnpriced ? <span key="unavailable">{t('stats.costUnavailable')}</span> : null,
-    ]
     // 一个无依赖的布局 effect 在每次渲染后重新测量（同字符串的退让让它不成环）；
     // ResizeObserver 的跳动则覆盖窗格拖拽——那不会改变任何 prop。
     const flowRef = useRef<HTMLDivElement | null>(null)
@@ -350,24 +259,11 @@ export function makeStatsContext(
         <i>{label}</i>
       </span>
     )
-    // 只有当每一行已计价记录都来自那个 registry 且同属一个 provider 时，
-    // 头部才打开 models.dev 的列表页：官方的 CNY 行没有 registry face，
-    // 而混合作用域没有单一页面可开。
-    const registryPids = new Set(rows.filter(r => r.face.official !== true).map(r => r.face.pid).filter(p => p !== ''))
-    const allRegistry = rows.length > 0 && rows.every(r => r.face.official !== true)
-    const costHref = allRegistry && registryPids.size === 1
-      ? 'https://models.dev/providers/' + [...registryPids][0] + '/'
-      : undefined
-    const ownCost = estimateSessionCost(props.cost, book, currency)
+    // 这张卡只讲 token：金额属于费用那一段（平台卡与明细表），
+    // 在同一张卡里并排「token / 金额」会让读者以为两者可以跨界比较。
     const familyTokens = billedTokensOf(usage)
     const ownTokens = billedTokensOf(props.cost)
     const subTokens = billedTokensOf(subUsage)
-    const pair = (tokens: number, costText: string): ReactElement => (
-      <span className="lc-flow-pair"><b>{fmt(tokens)}</b><i>/</i><b>{costText}</b></span>
-    )
-    const costText = cost === null ? '—' : formatCost(cost, currency)
-    const ownText = ownCost === null ? '—' : formatCost(ownCost, currency)
-    const subText = subCost === null ? '—' : formatCost(subCost, currency)
     const revealAgents = (): void => {
       // agents 列表是页面别处的一张兄弟卡片，通过共享的
       // `.lc-root` 抵达；尚不存在的滚动父级会让这一步成为空操作。
@@ -463,19 +359,19 @@ export function makeStatsContext(
               onClick={onTeamClick}
               onKeyDown={onTeamKeyDown}
             >
-              {head(t('agents.title'), pair(familyTokens, costText), costTip, costHref)}
+              {head(t('agents.title'), fmt(familyTokens), t('stats.teamTip'))}
               <div className="lc-flow-rows">
                 <div className="lc-flow-row">
                   <span className="lc-flow-row-label">{t('stats.currentAgent')}</span>
-                  {pair(ownTokens, ownText)}
+                  <span className="lc-flow-pair"><b>{fmt(ownTokens)}</b></span>
                 </div>
                 <div className="lc-flow-row lc-stat-tipped group/tip">
                   <span className="lc-flow-row-label">
                     {t('stats.teamSubs', { n: sub.count })}
                     <i className="lc-stat-q group-hover/tip:text-(--dsw-alias-label-primary) group-hover/tip:border-(--dsw-alias-label-primary)" aria-hidden="true">?</i>
                   </span>
-                  {pair(subTokens, subText)}
-                  <span className="lc-tip lc-stat-tip group-hover/tip:opacity-100" role="tooltip">{subTip}</span>
+                  <span className="lc-flow-pair"><b>{fmt(subTokens)}</b></span>
+                  <span className="lc-tip lc-stat-tip group-hover/tip:opacity-100" role="tooltip">{t('stats.subTokensTip')}</span>
                 </div>
               </div>
             </div>

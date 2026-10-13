@@ -195,14 +195,14 @@ describe('StatsContext', () => {
     const nodes = flowNodes(m.container)
     const { labels, totals } = headsOf(m.container)
     assert.deepEqual(labels, ['Input / Output', 'Context Events', 'Tool Calls', 'Agent Network?'])
-    // I/O totals the inputs plus every file op (7 + 9 + 2 + 4 + 1); the family's 1M
-    // uncached input bills the doubled peak rate — the team's header pairs its tokens with it.
-    assert.deepEqual(totals, ['23', '6', '12', '1.0M/$0.30'])
+    // I/O totals the inputs plus every file op (7 + 9 + 2 + 4 + 1); the family header
+    // carries the billed TOKEN face only — money lives in the platform spend section.
+    assert.deepEqual(totals, ['23', '6', '12', '1.0M'])
     assert.deepEqual(pillsOf(nodes[0]), ['Human Inputs?7', 'Read9', 'Written2', 'Searched4', 'Images1'])
     assert.deepEqual(pillsOf(nodes[1]), ['Inject3', 'Compact2', 'Prune1'])
     // The three most-called tools pill out; the rest fold into the overflow pill.
     assert.deepEqual(pillsOf(nodes[3]), ['read8', 'bash3', 'grep2', '+2 more'])
-    assert.deepEqual(rowsOf(nodes[4]), ['Current Agent1.0M/$0.30', 'Subagents × 0?0/—'])
+    assert.deepEqual(rowsOf(nodes[4]), ['Current Agent1.0M', 'Subagents × 0?0'])
     // The session node carries two figure rows under its label — turns/steps
     // above skill loads/answers (two skills, three answers above).
     assert.equal(nodes[2].querySelector('.lc-flow-label')?.textContent, 'Current Session')
@@ -227,11 +227,11 @@ describe('StatsContext', () => {
       locale: 'en',
     }))
     await flush()
-    assert.deepEqual(headsOf(m.container).totals, ['0', '0', '0', '0/—'])
+    assert.deepEqual(headsOf(m.container).totals, ['0', '0', '0', '0'])
     const nodes = flowNodes(m.container)
     assert.deepEqual(pillsOf(nodes[0]), ['Human Inputs?0', 'Read0', 'Written0'], 'searches/images pill only when they happened')
     assert.deepEqual(pillsOf(nodes[3]), [], 'no tool pills without calls')
-    assert.deepEqual(rowsOf(nodes[4]), ['Current Agent0/—', 'Subagents × 0?0/—'])
+    assert.deepEqual(rowsOf(nodes[4]), ['Current Agent0', 'Subagents × 0?0'])
     assert.equal(queryAll(nodes[0], '.lc-flow-pill-dim').length, 3, 'every zero pill dims')
     assert.equal(queryAll(nodes[1], '.lc-flow-pill-dim').length, 3)
     await m.unmount()
@@ -251,7 +251,7 @@ describe('StatsContext', () => {
     await m.unmount()
   })
 
-  test('the cost bubble lists the billed models with their billed rates', async () => {
+  test('the family and subagent tips scope their token figures, with no money anywhere', async () => {
     const m = await mount(h(StatsContext, {
       counts: NO_COUNTS,
       files: NO_FILES,
@@ -263,109 +263,16 @@ describe('StatsContext', () => {
     const tips = queryAll(m.container, '.lc-stat-tip').map(el => text(el))
     assert.equal(tips.length, 3, 'the inputs-pill, family, and sub-row tips')
     assert.ok(tips[0].includes('question answerings'), 'the human-inputs tip explains its tally')
-    const costTip = tips[1]
-    assert.ok(costTip.includes('every descendant subagent session'), 'the cost tip names the family scope — all levels')
-    assert.ok(costTip.includes('billed total'), 'the tip glosses the token face too')
-    assert.ok(costTip.includes('Per-1M-token rates:'))
-    assert.ok(costTip.includes('Priced from the official CNY table for DeepSeek-V4.1-Flash'), 'an official row names its own table, not a registry face')
-    // The table lists the official off-peak rates (the footnotes carry the peak scheme).
-    assert.ok(costTip.includes('Cache input $0.00'))
-    assert.ok(costTip.includes('Uncached input $0.15'))
-    assert.ok(costTip.includes('Cache write $0.15'))
-    assert.ok(costTip.includes('Output $0.60'))
-    assert.ok(costTip.includes('peak windows'), 'a DeepSeek session explains the peak/off-peak scheme')
-    assert.ok(!costTip.includes('|'), 'no peak|off pairs — the footnotes carry the scheme')
+    assert.ok(tips[1].includes('descendant subagent'), 'the family tip names the scope')
+    assert.ok(tips[1].includes('billed tokens only'))
+    assert.ok(tips[2].includes('descendant subagent'), 'the sub tip spells out the subtree covers all levels')
+    // A money figure must never appear in this card, at any locale or scope.
+    for (const tip of tips) assert.ok(!tip.includes('$') && !tip.includes('¥'), tip)
+    assert.ok(!text(m.container).includes('$'))
     await m.unmount()
   })
 
-  test('a non-DeepSeek session never sees DeepSeek-specific notes', async () => {
-    const m = await mount(h(StatsContext, {
-      counts: NO_COUNTS,
-      files: NO_FILES,
-      tools: [],
-      cost: { 'zai-coding-cn': { 'glm-5.3-flash': { peak: { uncached: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } } } },
-      locale: 'en',
-    }))
-    await flush()
-    const costTip = text(queryAll(m.container, '.lc-stat-tip')[1])
-    assert.ok(costTip.includes('Priced as listed on models.dev for zhipuai · glm-5.3-flash.'))
-    assert.ok(!costTip.includes('DeepSeek'), 'the DeepSeek scheme note stays out of other providers’ bubbles')
-    // glm-5.3-flash lists cache_write at 0 — the zero band drops from the table.
-    assert.ok(costTip.includes('Uncached input $0.07'))
-    assert.ok(!costTip.includes('Cache write'))
-    await m.unmount()
-  })
-
-  test('the cost header links to the models.dev provider listing when one registry provider priced the scope', async () => {
-    const m = await mount(h(StatsContext, {
-      counts: NO_COUNTS,
-      files: NO_FILES,
-      tools: [],
-      cost: { 'zai-coding-cn': { 'glm-5.3-flash': { peak: { uncached: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } } } },
-      locale: 'en',
-    }))
-    await flush()
-    const links = queryAll(m.container, 'a.lc-flow-head')
-    assert.equal(links.length, 1, 'the cost header is the only link')
-    assert.equal(links[0].getAttribute('href'), 'https://models.dev/providers/zhipuai/')
-    assert.equal(links[0].getAttribute('target'), '_blank')
-    assert.ok(links[0].textContent.includes('$0.075'), 'the link keeps the header body')
-    assert.ok(queryAll(m.container, '.lc-flow-head').length > links.length, 'the sibling headers stay plain')
-    await m.unmount()
-  })
-
-  test('an official-only scope keeps the cost header unlinked (no registry face to open)', async () => {
-    const m = await mount(h(StatsContext, {
-      counts: NO_COUNTS,
-      files: NO_FILES,
-      tools: [],
-      cost: COST,
-      locale: 'en',
-    }))
-    await flush()
-    assert.equal(queryAll(m.container, 'a.lc-flow-head').length, 0)
-    await m.unmount()
-  })
-
-  test('a multi-provider scope keeps the cost header unlinked', async () => {
-    const two: SessionCostUsage = {
-      'deepseek-official': { 'deepseek-v4-flash': { peak: { uncached: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } } },
-      'zai-coding-cn': { 'glm-5.3-flash': { peak: { uncached: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } } },
-    }
-    const m = await mount(h(StatsContext, {
-      counts: NO_COUNTS,
-      files: NO_FILES,
-      tools: [],
-      cost: two,
-      locale: 'en',
-    }))
-    await flush()
-    assert.equal(queryAll(m.container, 'a.lc-flow-head').length, 0, 'two providers name their faces in the tooltip instead')
-    await m.unmount()
-  })
-
-  test('a multi-provider session names each listing line’s own source', async () => {
-    const two: SessionCostUsage = {
-      'deepseek-official': { 'deepseek-v4-flash': { peak: { uncached: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } } },
-      'zai-coding-cn': { 'glm-5.3-flash': { peak: { uncached: 2_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } } },
-    }
-    const m = await mount(h(StatsContext, {
-      counts: NO_COUNTS,
-      files: NO_FILES,
-      tools: [],
-      cost: two,
-      locale: 'en',
-    }))
-    await flush()
-    const costTip = text(queryAll(m.container, '.lc-stat-tip')[1])
-    assert.ok(costTip.includes('official CNY table for DeepSeek-V4.1-Flash'))
-    assert.ok(costTip.includes('for zhipuai · glm-5.3-flash.'))
-    // 1M × $0.15 × 2 (the DeepSeek peak) + 2M × $0.075 = $0.45; the tokens total too.
-    assert.ok(headsOf(m.container).totals[3] === '3.0M/$0.45')
-    await m.unmount()
-  })
-
-  test('the zh locale localizes the cards and prices the cost in CNY at 1 CNY = 0.15 USD', async () => {
+  test('the zh locale localizes the cards but prices nothing', async () => {
     const m = await mount(h(StatsContextZh, {
       counts: { turns: 1, steps: 1, injects: 0, compactions: 1, prunes: 0, skills: 5 },
       answers: 4,
@@ -379,29 +286,22 @@ describe('StatsContext', () => {
     const nodes = flowNodes(m.container)
     const { labels, totals } = headsOf(m.container)
     assert.deepEqual(labels, ['输入输出', '上下文事件', '工具调用', 'Agent 网络?'])
-    // $0.30 / 0.15 = ¥2; the rates convert through the same fixed rate.
-    assert.deepEqual(totals, ['3', '1', '2', '1.0M/¥2.00'])
+    assert.deepEqual(totals, ['3', '1', '2', '1.0M'])
     assert.deepEqual(pillsOf(nodes[0]), ['用户输入?0', '读取2', '写入1'])
     assert.deepEqual(pillsOf(nodes[1]), ['注入0', '压缩1', '剪枝0'])
     assert.deepEqual(pillsOf(nodes[3]), ['read2'])
-    assert.deepEqual(rowsOf(nodes[4]), ['当前 Agent1.0M/¥2.00', '子 Agent × 0?0/—'])
+    assert.deepEqual(rowsOf(nodes[4]), ['当前 Agent1.0M', '子 Agent × 0?0'])
     assert.equal(nodes[2].querySelector('.lc-flow-label')?.textContent, '当前会话')
     const selfRowsZh = queryAll(nodes[2], '.lc-flow-self-stats')
     assert.deepEqual(selfRowsZh.map(row => queryAll(row, '.lc-flow-kv i').map(el => el.textContent)), [['轮次', '步数'], ['技能加载', '模型回复']])
     assert.deepEqual(selfRowsZh.map(row => queryAll(row, '.lc-flow-kv b').map(el => el.textContent)), [['1', '1'], ['5', '4']])
     const costTip = text(queryAll(m.container, '.lc-stat-tip')[1])
-    assert.ok(costTip.includes('含当前智能体及所有层级的子智能体'), 'the cost tip names the family scope too — all levels')
-    assert.ok(costTip.includes('每百万 Token 价格'))
-    assert.ok(costTip.includes('按官方价目表 DeepSeek-V4.1-Flash 计费（峰谷见下）。'))
-    assert.ok(costTip.includes('人民币按 1 元 = 0.15 美元换算。'), 'the CNY display carries the conversion footnote')
-    assert.ok(costTip.includes('缓存输入 ¥0.02'))
-    assert.ok(costTip.includes('未缓存输入 ¥1.00'))
-    assert.ok(costTip.includes('缓存写入 ¥1.00'))
-    assert.ok(costTip.includes('输出 ¥4.00'))
+    assert.ok(costTip.includes('含当前智能体及所有层级的子智能体'), 'the tip names the family scope')
+    assert.ok(!costTip.includes('¥'))
     await m.unmount()
   })
 
-  test('the official table prices a DeepSeek session even while the book is pending', async () => {
+  test('token figures stand on their own: no price book is needed to read them', async () => {
     setModelPricesLoader(() => new Promise(() => {}))
     const m = await mount(h(StatsContext, {
       counts: NO_COUNTS,
@@ -411,28 +311,12 @@ describe('StatsContext', () => {
       locale: 'en',
     }))
     await flush()
-    // Official rows need no registry book: the figure lands from the CNY table alone.
-    assert.ok(headsOf(m.container).totals[3] === '1.0M/$0.30')
+    assert.ok(headsOf(m.container).totals[3] === '1.0M', 'a pending book cannot blank a token count')
     assert.ok(!text(m.container).includes('unavailable'), 'a pending fetch is not a failure')
     await m.unmount()
   })
 
-  test('a model the official table lacks stays dashed while the book is pending', async () => {
-    setModelPricesLoader(() => new Promise(() => {}))
-    const m = await mount(h(StatsContext, {
-      counts: NO_COUNTS,
-      files: NO_FILES,
-      tools: [],
-      cost: { 'kimi-coding': { 'kimi-k2.7-code': { peak: { uncached: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } } } },
-      locale: 'en',
-    }))
-    await flush()
-    assert.ok(headsOf(m.container).totals[3] === '1.0M/—')
-    assert.ok(!text(m.container).includes('unavailable'), 'a pending fetch is not a failure')
-    await m.unmount()
-  })
-
-  test('a failed price fetch still prices official rows and notes the outage for the rest', async () => {
+  test('an unpriceable model still reports its billed tokens — dashes were a money concern', async () => {
     setModelPricesLoader(() => Promise.reject(new Error('down')))
     const m = await mount(h(StatsContext, {
       counts: NO_COUNTS,
@@ -442,71 +326,11 @@ describe('StatsContext', () => {
       locale: 'en',
     }))
     await flush()
-    assert.ok(headsOf(m.container).totals[3] === '1.0M/—', 'a registry-only model has no rate without the book')
-    const costTip = text(queryAll(m.container, '.lc-stat-tip')[1])
-    assert.ok(costTip.includes('unavailable'))
-    assert.ok(!costTip.includes('Per-1M-token rates'))
+    assert.ok(headsOf(m.container).totals[3] === '1.0M', 'metered tokens are exact regardless of pricing')
     await m.unmount()
   })
 
-  test('a failed price fetch does not dash an official-only session', async () => {
-    setModelPricesLoader(() => Promise.reject(new Error('down')))
-    const m = await mount(h(StatsContext, {
-      counts: NO_COUNTS,
-      files: NO_FILES,
-      tools: [],
-      cost: COST,
-      locale: 'en',
-    }))
-    await flush()
-    assert.ok(headsOf(m.container).totals[3] === '1.0M/$0.30', 'the official table is local, so a registry outage cannot blank it')
-    const costTip = text(queryAll(m.container, '.lc-stat-tip')[1])
-    assert.ok(!costTip.includes('unavailable'), 'nothing about this scope is unpriced')
-    await m.unmount()
-  })
-
-  test('a DeepSeek off bucket prices at book and the footnotes carry the peak scheme', async () => {
-    const split: SessionCostUsage = {
-      'deepseek-official': {
-        'deepseek-v4-flash': {
-          peak: { uncached: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 0 },
-          off: { uncached: 2_000_000, cacheRead: 0, cacheWrite: 0, output: 0 },
-        },
-      },
-    }
-    const m = await mount(h(StatsContext, {
-      counts: NO_COUNTS,
-      files: NO_FILES,
-      tools: [],
-      cost: split,
-      locale: 'en',
-    }))
-    await flush()
-    // 1M at the doubled $0.3 peak miss rate + 2M at the $0.15 off-peak (book) rate.
-    assert.ok(headsOf(m.container).totals[3] === '3.0M/$0.60')
-    const costTip = text(queryAll(m.container, '.lc-stat-tip')[1])
-    assert.ok(costTip.includes('Cache input $0.00'), 'the table lists the book rates once, whatever the billed buckets')
-    assert.ok(costTip.includes('Uncached input $0.15'))
-    assert.ok(costTip.includes('peak windows'), 'the peak-window footnote explains the bucket split')
-    assert.ok(!costTip.includes('|'))
-    await m.unmount()
-  })
-
-  test('a session whose models the book cannot price notes the outage too', async () => {
-    const m = await mount(h(StatsContext, {
-      counts: NO_COUNTS,
-      files: NO_FILES,
-      tools: [],
-      cost: { 'future-provider': { 'mystery-model': { peak: { uncached: 1, cacheRead: 0, cacheWrite: 0, output: 0 } } } },
-      locale: 'en',
-    }))
-    await flush()
-    assert.ok(headsOf(m.container).totals[3] === '1/—')
-    assert.ok(text(queryAll(m.container, '.lc-stat-tip')[1]).includes('unavailable'))
-    await m.unmount()
-  })
-
-  test('a hostile cost branch is skipped by the tooltip rows, not fatal', async () => {
+  test('a hostile cost branch cannot break the token tallies', async () => {
     const hostile = {
       junk: 5,
       'zai-coding-cn': {
@@ -524,19 +348,11 @@ describe('StatsContext', () => {
       locale: 'en',
     }))
     await flush()
-    const costTip = text(queryAll(m.container, '.lc-stat-tip')[1])
-    assert.ok(costTip.includes('glm-5.3-flash'))
-    assert.ok(!costTip.includes('junk'))
-    // No row may show the peak|off-peak pair — that is DeepSeek's alone.
-    const rows = queryAll(m.container, '.lc-stat-tip-row').map(el => text(el))
-    assert.ok(rows.every(r => !r.includes('|')))
-    // Both buckets bill at list price: 2M × $0.075 — no half-price off-peak.
-    assert.ok(headsOf(m.container).totals[3] === '2.0M/$0.15')
+    assert.ok(headsOf(m.container).totals[3] === '2.0M')
     await m.unmount()
   })
 
-  test('clicking the team card scrolls its Agent-network namesake into view; the price link stays out of it', async () => {
-    // A registry-priced scope, since only those rows carry a models.dev link.
+  test('clicking the team card scrolls its Agent-network namesake into view', async () => {
     const linked: SessionCostUsage = {
       'zai-coding-cn': { 'glm-5.3-flash': { peak: { uncached: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } } },
     }
@@ -555,8 +371,8 @@ describe('StatsContext', () => {
     await click(team)
     assert.equal(root.scrollTop, 120)
     root.scrollTop = 0
-    await click(query(m.container, 'a.lc-flow-head'))
-    assert.equal(root.scrollTop, 0, 'the price link never triggers the reveal')
+    // No header of this card is a link: money left with its own section.
+    assert.equal(queryAll(m.container, 'a.lc-flow-head').length, 0)
     // Keyboard parity: Enter/Space reveal, anything else stays quiet.
     team.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
     assert.equal(root.scrollTop, 120)
@@ -617,7 +433,7 @@ describe('StatsContext — the subagent split (injected seat)', () => {
     'zai-coding-cn': { 'glm-5.3-flash': { peak: { uncached: 2_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } } },
   }
 
-  test('the family figure merges the subagent usage in; the split pills price each share alone', async () => {
+  test('the family figure merges the subagent tokens in; each share stays readable', async () => {
     const Stats = makeStatsContext(kit, () => ({ usage: SUB, count: 2 }))
     const m = await mount(h(Stats, {
       counts: NO_COUNTS,
@@ -627,20 +443,17 @@ describe('StatsContext — the subagent split (injected seat)', () => {
       locale: 'en',
     }))
     await flush()
-    // Family total: 1M × $0.30 (the doubled peak) + 2M × $0.075; own share $0.30, the subagents' $0.15.
-    assert.equal(headsOf(m.container).totals[3], '3.0M/$0.45')
-    assert.deepEqual(rowsOf(flowNodes(m.container)[4]), ['Current Agent1.0M/$0.30', 'Subagents × 2?2.0M/$0.15'])
+    // Family total: the own 1M plus the subagents' 2M, and nothing else.
+    assert.equal(headsOf(m.container).totals[3], '3.0M')
+    assert.deepEqual(rowsOf(flowNodes(m.container)[4]), ['Current Agent1.0M', 'Subagents × 2?2.0M'])
     assert.deepEqual(queryAll(flowNodes(m.container)[4], '.lc-flow-row-label').map(el => el.textContent), ['Current Agent', 'Subagents × 2?'])
     const tips = queryAll(m.container, '.lc-stat-tip').map(el => text(el))
-    assert.ok(tips[1].includes('official CNY table for DeepSeek-V4.1-Flash'))
-    assert.ok(tips[1].includes('for zhipuai · glm-5.3-flash.'))
-    assert.ok(tips[2].includes('every descendant subagent session'))
-    assert.ok(tips[2].includes('all levels'), 'the sub tip spells out the subtree covers all levels')
-    assert.ok(tips[2].includes('for zhipuai · glm-5.3-flash.'), 'the sub tip carries its own price table')
+    assert.ok(tips[2].includes('descendant subagent'), 'the sub tip names the subtree')
+    assert.ok(tips[2].includes('all levels'))
     await m.unmount()
   })
 
-  test('subagent usage alone (no own cost) still prices the family and dashes the own pill', async () => {
+  test('subagent usage alone still counts the family, with the own share at zero', async () => {
     const Stats = makeStatsContext(kit, () => ({ usage: SUB, count: 1 }))
     const m = await mount(h(Stats, {
       counts: NO_COUNTS,
@@ -649,52 +462,12 @@ describe('StatsContext — the subagent split (injected seat)', () => {
       locale: 'en',
     }))
     await flush()
-    assert.equal(headsOf(m.container).totals[3], '2.0M/$0.15')
-    assert.deepEqual(rowsOf(flowNodes(m.container)[4]), ['Current Agent0/—', 'Subagents × 1?2.0M/$0.15'])
+    assert.equal(headsOf(m.container).totals[3], '2.0M')
+    assert.deepEqual(rowsOf(flowNodes(m.container)[4]), ['Current Agent0', 'Subagents × 1?2.0M'])
     await m.unmount()
   })
 
-  test('a DeepSeek-billing subagent surfaces the peak/off-peak note under both tips', async () => {
-    const deepseekSub: SessionCostUsage = {
-      'deepseek-official': { 'deepseek-v4-flash': { off: { uncached: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } } },
-    }
-    const Stats = makeStatsContext(kit, () => ({ usage: deepseekSub, count: 1 }))
-    const m = await mount(h(Stats, {
-      counts: NO_COUNTS,
-      files: NO_FILES,
-      tools: [],
-      locale: 'en',
-    }))
-    await flush()
-    // The off bucket bills at book: 1M × $0.15.
-    assert.equal(headsOf(m.container).totals[3], '1.0M/$0.15')
-    const tips = queryAll(m.container, '.lc-stat-tip').map(el => text(el))
-    assert.ok(tips[1].includes('peak windows'))
-    assert.ok(tips[2].includes('peak windows'), 'the sub tip explains the scheme its own figure rides')
-    await m.unmount()
-  })
-
-  test('a sub usage the book cannot price dashes the sub pill and notes the outage in its tip', async () => {
-    const Stats = makeStatsContext(kit, () => ({ usage: { future: { 'mystery-model': { peak: { uncached: 1, cacheRead: 0, cacheWrite: 0, output: 0 } } } }, count: 1 }))
-    const m = await mount(h(Stats, {
-      counts: NO_COUNTS,
-      files: NO_FILES,
-      tools: [],
-      cost: COST,
-      locale: 'en',
-    }))
-    await flush()
-    // The family's own model still prices: $0.30 (the doubled peak). The
-    // unpriceable sub branch merges in (pricing zero) but cannot lift the
-    // total — the sub cost dashes; its single token still reads.
-    assert.equal(headsOf(m.container).totals[3], '1.0M/$0.30')
-    assert.deepEqual(rowsOf(flowNodes(m.container)[4]), ['Current Agent1.0M/$0.30', 'Subagents × 1?1/—'])
-    const tips = queryAll(m.container, '.lc-stat-tip').map(el => text(el))
-    assert.ok(tips[2].includes('unavailable'))
-    await m.unmount()
-  })
-
-  test('a null seat keeps the figure dashed with the ledger zeroed and no outage notes', async () => {
+  test('a null seat keeps the ledger zeroed with no outage notes', async () => {
     const m = await mount(h(StatsContext, {
       counts: NO_COUNTS,
       files: NO_FILES,
@@ -702,8 +475,8 @@ describe('StatsContext — the subagent split (injected seat)', () => {
       locale: 'en',
     }))
     await flush()
-    assert.equal(headsOf(m.container).totals[3], '0/—')
-    assert.deepEqual(rowsOf(flowNodes(m.container)[4]), ['Current Agent0/—', 'Subagents × 0?0/—'])
+    assert.equal(headsOf(m.container).totals[3], '0')
+    assert.deepEqual(rowsOf(flowNodes(m.container)[4]), ['Current Agent0', 'Subagents × 0?0'])
     assert.ok(!text(m.container).includes('unavailable'))
     await m.unmount()
   })
@@ -780,9 +553,9 @@ describe('StatsContext — the real subagent-cost seat (makeSubagentCost)', () =
       sessionId: 'root',
     }))
     await flush()
-    // The warm row's usage prices while the cold read is still in flight.
-    assert.equal(headsOf(m.container).totals[3], '2.0M/$0.15')
-    assert.deepEqual(rowsOf(flowNodes(m.container)[4]), ['Current Agent0/—', 'Subagents × 2?2.0M/$0.15'])
+    // The warm row's tokens count while the cold read is still in flight.
+    assert.equal(headsOf(m.container).totals[3], '2.0M')
+    assert.deepEqual(rowsOf(flowNodes(m.container)[4]), ['Current Agent0', 'Subagents × 2?2.0M'])
     assert.deepEqual(calls, ['cold'], 'only the timeline-less relative fetched')
     // Both descendants count in the ledger's subtree row, cold included.
     assert.deepEqual(queryAll(flowNodes(m.container)[4], '.lc-flow-row-label').map(el => el.textContent), ['Current Agent', 'Subagents × 2?'])
@@ -796,7 +569,7 @@ describe('StatsContext — the real subagent-cost seat (makeSubagentCost)', () =
       })
     })
     await flush()
-    // The cold read lands: its $0.15 merges into the family and the sub share.
+    // The cold read lands: its 2M merges into the family and the sub share.
     await act(async () => {
       release?.({
         ok: true,
@@ -816,8 +589,8 @@ describe('StatsContext — the real subagent-cost seat (makeSubagentCost)', () =
       })
     })
     await flush()
-    assert.equal(headsOf(m.container).totals[3], '4.0M/$0.30')
-    assert.deepEqual(rowsOf(flowNodes(m.container)[4]), ['Current Agent0/—', 'Subagents × 2?4.0M/$0.30'])
+    assert.equal(headsOf(m.container).totals[3], '4.0M')
+    assert.deepEqual(rowsOf(flowNodes(m.container)[4]), ['Current Agent0', 'Subagents × 2?4.0M'])
     await m.unmount()
   })
 
@@ -840,8 +613,8 @@ describe('StatsContext — the real subagent-cost seat (makeSubagentCost)', () =
     }))
     await flush()
     assert.deepEqual(calls, ['cold'])
-    assert.equal(headsOf(m.container).totals[3], '0/—')
-    assert.deepEqual(rowsOf(flowNodes(m.container)[4]), ['Current Agent0/—', 'Subagents × 1?0/—'])
+    assert.equal(headsOf(m.container).totals[3], '0')
+    assert.deepEqual(rowsOf(flowNodes(m.container)[4]), ['Current Agent0', 'Subagents × 1?0'])
     // The cold descendant still counts in the ledger's subtree row — a subagent is one whether or not its usage priced.
     assert.deepEqual(queryAll(flowNodes(m.container)[4], '.lc-flow-row-label').map(el => el.textContent), ['Current Agent', 'Subagents × 1?'])
     // A later snapshot tick re-folds the subtree; the sticky failure never re-fetches.
@@ -881,8 +654,8 @@ describe('StatsContext — the real subagent-cost seat (makeSubagentCost)', () =
     await flush()
     assert.deepEqual(calls, ['headless', 'absent'])
     // Neither read carried a head: nothing lands, the figures stay zeroed, no throw.
-    assert.equal(headsOf(m.container).totals[3], '0/—')
-    assert.deepEqual(rowsOf(flowNodes(m.container)[4]), ['Current Agent0/—', 'Subagents × 2?0/—'])
+    assert.equal(headsOf(m.container).totals[3], '0')
+    assert.deepEqual(rowsOf(flowNodes(m.container)[4]), ['Current Agent0', 'Subagents × 2?0'])
     // A later tick re-attaches to the settled nulls without re-fetching.
     await act(async () => {
       face.setState({
@@ -907,8 +680,8 @@ describe('StatsContext — the real subagent-cost seat (makeSubagentCost)', () =
       sessionId: 'root',
     }))
     await flush()
-    assert.equal(headsOf(m.container).totals[3], '0/—')
-    assert.deepEqual(rowsOf(flowNodes(m.container)[4]), ['Current Agent0/—', 'Subagents × 0?0/—'])
+    assert.equal(headsOf(m.container).totals[3], '0')
+    assert.deepEqual(rowsOf(flowNodes(m.container)[4]), ['Current Agent0', 'Subagents × 0?0'])
     await m.unmount()
   })
 
@@ -929,8 +702,8 @@ describe('StatsContext — the real subagent-cost seat (makeSubagentCost)', () =
     }))
     await flush()
     assert.deepEqual(calls, [])
-    assert.equal(headsOf(m.container).totals[3], '0/—')
-    assert.deepEqual(rowsOf(flowNodes(m.container)[4]), ['Current Agent0/—', 'Subagents × 0?0/—'])
+    assert.equal(headsOf(m.container).totals[3], '0')
+    assert.deepEqual(rowsOf(flowNodes(m.container)[4]), ['Current Agent0', 'Subagents × 0?0'])
     await m.unmount()
   })
 })

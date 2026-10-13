@@ -13,3 +13,22 @@ if (typeof Element !== 'undefined' && Element.prototype.scrollIntoView === undef
 // inject their own loader (resetModelPrices + setModelPricesLoader, see modelPrices.spec).
 resetModelPrices()
 setModelPricesLoader(() => new Promise(() => {}))
+
+// jsdom's storage never lands on `globalThis` in this toolchain (Node 26 installs its own
+// `localStorage` accessor that resolves to undefined without --localstorage-file), so the
+// plugin's `globalThis.localStorage` probe and every spec that seeds a remembered balance
+// would see nothing. Install the platform's own storage shape instead.
+if (globalThis.localStorage === undefined) {
+  const store = new Map<string, string>()
+  Object.defineProperty(globalThis, 'localStorage', {
+    configurable: true,
+    value: {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => { store.set(key, String(value)) },
+      removeItem: (key: string) => { store.delete(key) },
+      clear: () => { store.clear() },
+      key: (index: number) => [...store.keys()][index] ?? null,
+      get length() { return store.size },
+    },
+  })
+}

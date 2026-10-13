@@ -117,15 +117,42 @@ bluish-850 (#2c2c2e), so the open card read noticeably darker than the harness's
 own popovers; in the light theme both resolve to pure white, so the change has no
 effect there.
 
-UI label rename (own code): the two entry points are named by what they show.
-The session-scoped view — the conversation tab strip and the right-side tab, panel
-and guide card — is ONE component serving one dataset, so all of those surfaces now
-share a single name, "汇总统计" / "Summary Statistics"; they previously split into
-"上下文" for the tab and "汇总统计" for the card, which made one view look like two
-features. The account-level page (the left-nav entry and that page's heading) stays
+UI label rename (own code, superseded below): the two entry points are named by what
+they show. The account-level page (the left-nav entry and that page's heading) is
 "统计" / "Statistics". The `sidebar.guideTitle` key this briefly introduced was
-retired once the tab and the card agreed, so the name has one source rather than
-two that could drift. Both dictionaries were changed in step, and the assertions
-that pin these strings were updated with them. Note that the panel keeps the term
-"上下文" inside itself where it is accurate ("当前上下文", "上下文趋势"); that is
-panel vocabulary, not the entry's name.
+retired once the tab and the card agreed, so the name had one source rather than two
+that could drift. Note that a panel keeps the term "上下文" inside itself where it is
+accurate ("当前上下文", "上下文趋势"); that is panel vocabulary, not an entry's name.
+
+Token and cost separated per surface (own code): the three surfaces were doing
+overlapping jobs and the names followed the jobs. The conversation tab — which shows
+context composition, trend, browser, events, file activity, the agent network and the
+token card, and no amount whatsoever — is now "上下文" / "Context". The right-side
+column is "本会话汇总" / "Session Summary": one token section (the same Token card the
+tab and the composer card use, so all three agree) above one spend section. The
+left-nav page stays "统计" / "Statistics" and covers EVERY session, its token and spend
+sections likewise kept apart. This reverses the previous entry in this file, which had
+made all three share "汇总统计" / "Summary Statistics"; that name stopped being true the
+moment each surface began answering a different question. `client/sidebar.ts` and
+`client/icon.tsx` (`makeContextTabTitle` now takes the key) were changed so the sidebar
+can carry its own label. Tokens never appear next to an amount: the agent-network node
+cards report token volume only, and the daily chart is a token-only chart.
+
+Per-platform spend is billed in the platform's own currency (own code): each platform
+gets its own card carrying its own billing currency and remaining balance, and the
+cards are never summed — adding credits to yuan to dollars yields a number that means
+nothing. DeepSeek shows ¥, third parties $, credit platforms credits, whatever the UI
+locale; this deliberately reverses upstream's "convert everything to the display
+currency" behaviour. `formatNativeSpend` in `client/cost.ts` performs the one-way
+conversion, `client/platformSpend.ts` tags each row with its currency and with the
+models it could not price, and `client/platformBalanceState.ts` is the single balance
+poll shared by the statistics page, the session summary and the composer readout.
+Per-model rows live inside each platform card rather than in a second table, which had
+repeated the card's own figures verbatim.
+
+Test harness fix (own code): `tests/client/setup.ts` installs a localStorage shim when
+`globalThis.localStorage` is undefined. Node 26 defines its own `localStorage` accessor
+that resolves to undefined without `--localstorage-file`, and it shadows jsdom's, so
+every spec that seeded or read a remembered balance failed with "Cannot read properties
+of undefined" (82 cases across three files). The shim supplies the platform's storage
+shape; no production code was relying on the broken behaviour.

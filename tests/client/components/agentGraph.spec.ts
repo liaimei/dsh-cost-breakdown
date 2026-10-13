@@ -20,11 +20,6 @@ afterEach(() => {
   resetModelPrices()
 })
 
-/** The price-book fixture (the stats board specs' own): deepseek-v4-flash at $0.15/$0.6/$0.003 per 1M. */
-const PROVIDERS = {
-  deepseek: { models: { 'deepseek-v4-flash': { cost: { input: 0.15, output: 0.6, cache_read: 0.003 } } } },
-}
-
 function timeline(total: number, requests = 0): unknown {
   return {
     ok: true,
@@ -459,19 +454,19 @@ describe('AgentGraph — the family tree', () => {
     await m.unmount()
   })
 
-  /** peak: (1M uncached × $0.15 + 0.5M output × $0.6) × DeepSeek's peak factor 2 = $0.90 (¥6.00). */
+  /** A cost ledger the graph must NEVER render as money: this card lives on the
+   *  context-only page, so the ledger's only surviving use is its token volume. */
   const COST_LEDGER = { 'deepseek-official': { 'deepseek-v4-flash': { peak: { uncached: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 500_000 } } } }
 
-  test('the headline prices the consumed tokens once the price book lands', async () => {
-    setModelPricesLoader(() => Promise.resolve(PROVIDERS))
+  test('the headline counts tokens and never prices them, whatever the locale', async () => {
     const rows = family() as {
       worker: { projectionValues: Record<string, unknown> }
     }
-    // worker: both the tokenUsage tally and the cost ledger → '150 · $0.90'.
+    // worker: both the tokenUsage tally and the cost ledger -> the tally wins, tokens only.
     rows.worker.projectionValues.contextTimeline = { ...(timeline(800, 5) as Record<string, unknown>), cost: COST_LEDGER }
     const byId: Record<string, unknown> = {
       ...rows,
-      // cold: no tokenUsage tally at all — the fold's own cost ledger stands in (1.5M tokens priced).
+      // cold: no tokenUsage tally at all — the ledger's token volume stands in (1.5M tokens).
       cold: {
         parentId: 'root', origin: 'subagent', running: false, updatedAt: 4,
         projectionValues: { contextTimeline: { ...(timeline(100, 0) as Record<string, unknown>), cost: COST_LEDGER } },
@@ -479,26 +474,22 @@ describe('AgentGraph — the family tree', () => {
     }
     const View = makeView(new FakeSessions(byId))
     const m = await mount(h(View, { sessionId: 'root', self: selfStats() }))
-    await until(() => text(query(m.container, '[data-agent="worker"]')).includes('$0.90'), 'worker cost estimate')
-    // The tally wins over the ledger when both exist (150, not 1.5M); the ledger stands in for a tally-less node.
-    assert.ok(text(query(m.container, '[data-agent="worker"]')).includes('150 · $0.90'))
-    assert.ok(text(query(m.container, '[data-agent="cold"]')).includes('1.5M · $0.90'))
+    await until(() => text(query(m.container, '[data-agent="worker"]')).includes('150'), 'worker token tally')
+    // The tally wins over the ledger when both exist (150, not 1.5M); a tally-less node
+    // falls back to the ledger's TOKEN volume — and no amount is ever printed.
+    assert.ok(text(query(m.container, '[data-agent="worker"]')).includes('150'))
+    assert.ok(text(query(m.container, '[data-agent="cold"]')).includes('1.5M'))
+    assert.ok(!text(m.container).includes('$'), 'no USD figure on the context page')
+    assert.ok(!text(m.container).includes('¥'), 'no CNY figure either')
     await m.unmount()
 
-    // zh reads the price in CNY.
+    // The zh locale changes nothing about money, because there is none to format.
     const ViewZh = makeView(new FakeSessions(byId), { locale: 'zh' })
     const mz = await mount(h(ViewZh, { sessionId: 'root', self: selfStats() }))
-    await until(() => text(query(mz.container, '[data-agent="worker"]')).includes('¥6.00'), 'zh cost estimate')
+    await until(() => text(query(mz.container, '[data-agent="worker"]')).includes('150'), 'zh token tally')
+    assert.ok(!text(mz.container).includes('¥'), 'still no amount under zh')
+    assert.ok(!text(mz.container).includes('$'))
     await mz.unmount()
-
-    // A locale face without getLocale falls back to USD.
-    const bare = new TestClientCtx({
-      services: { sessions: new FakeSessions(byId), uiWorkspace: { openSession: () => {} } },
-    })
-    Object.defineProperty(bare, 'locale', { value: {} })
-    const mb = await mount(h(makeAgentGraph(asClientCtx(bare), kit), { sessionId: 'root', self: selfStats() }))
-    await until(() => text(query(mb.container, '[data-agent="worker"]')).includes('$0.90'), 'usd fallback')
-    await mb.unmount()
   })
 })
 

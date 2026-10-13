@@ -3,8 +3,9 @@
  *  两个页面（会话页与概览页）都要给平台卡准备这份数据，因此放在这里共用：
  *  否则两处各写一遍，迟早对同一个余额给出不同答案。
  *
- *  金额平台用余额接口的数字并按显示货币取符号；积分平台取**自己那一版**的积分池
- *  （CN 与国际版是两套账户，不能互相顶替），无限额的不显示这一行。
+ *  金额平台用余额接口的数字并**按账户自己的币种**取符号——绝不跟着界面语言走：
+ *  一个以人民币记账的账户换成美元显示，读起来就不是它的账单。积分平台取**自己那一版**
+ *  的积分池（CN 与国际版是两套账户，不能互相顶替），无限额的不显示这一行。
  */
 
 import { balanceEntryOf } from './balance'
@@ -12,16 +13,23 @@ import type { PlatformBalance } from '../shared/types'
 import type { PlatformCreditsTable } from './platformCredits'
 import type { PlatformSpend } from './platformSpend'
 import { isDeepSeekProvider } from '../shared/providers'
-import { symbolOf, type CostCurrency } from './cost'
+import { symbolOf } from './cost'
 import { fmtCredits } from './turnSpend'
+
+/** 该平台的账户余额条目：只有官方 DeepSeek 有余额来源，而它按人民币记账
+ *  （`spendCurrencyOf` 与 `isDeepSeekProvider` 是同一个判定），因此先取 CNY 那一条，
+ *  账户只持有别的币种时才退回第一条。第三方金额平台没有余额来源，整行不出现。 */
+function balanceFor(row: PlatformSpend, balance: PlatformBalance | null): { text: string } | undefined {
+  if (!isDeepSeekProvider(row.provider)) return undefined
+  const entry = balanceEntryOf(balance, 'cny')
+  return entry === null ? undefined : { text: symbolOf(entry.currency) + entry.total.toFixed(2) }
+}
 
 export function platformBalanceTexts(
   rows: readonly PlatformSpend[],
   balance: PlatformBalance | null,
   credits: PlatformCreditsTable | null,
-  currency: CostCurrency,
 ): Record<string, { text: string } | undefined> {
-  const deepseek = balanceEntryOf(balance, currency)
   const out: Record<string, { text: string } | undefined> = {}
   for (const row of rows) {
     if (row.unit === 'credits') {
@@ -31,9 +39,7 @@ export function platformBalanceTexts(
       continue
     }
     // 余额只归自己那一张卡：把某家的余额放在别家名下是错的。
-    out[row.provider] = isDeepSeekProvider(row.provider) && deepseek !== null
-      ? { text: symbolOf(deepseek.currency) + deepseek.total.toFixed(2) }
-      : undefined
+    out[row.provider] = balanceFor(row, balance)
   }
   return out
 }

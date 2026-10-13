@@ -24,8 +24,7 @@ import { StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
 import { CATS } from '../categories'
 import type { AgentHeads } from '../agentHeads'
 import { makeAgentHeads, useSessionsSnapshot } from '../agentHeads'
-import { billedTokensOf, estimateSessionCost, formatCost, type CostCurrency, type ModelBook } from '../cost'
-import { useModelPrices } from '../modelPrices'
+import { billedTokensOf } from '../cost'
 import { containHorizontalOverscroll } from '../overscroll'
 import { openSessionVia, type ClientCtx } from '../services'
 import type { ViewKit } from '../viewkit'
@@ -72,12 +71,6 @@ export function makeAgentGraph(
 ): (props: AgentGraphProps) => ReactElement | null {
   const { t, fmt, catLabel } = kit
 
-  /** 展示货币跟随当前语言——每次渲染都读：槽位出口在切换语言时会重新渲染。 */
-  function activeCurrency(): CostCurrency {
-    const locale = ctx.locale
-    return typeof locale.getLocale === 'function' && locale.getLocale().active === 'zh' ? 'cny' : 'usd'
-  }
-
   function AgentGraph(props: AgentGraphProps): ReactElement | null {
     // 在挂载时惰性解析（而不是在 apply 时）：对外 sessions 服务属于客户端运行时
     // 的组装，没有它的部署就让这张卡片保持隐藏。
@@ -85,10 +78,6 @@ export function makeAgentGraph(
     const snapshot = useSessionsSnapshot(face)
     const sessionId = props.sessionId
     const [hoverId, setHoverId] = useState<string | null>(null)
-    // 共享的价目表（统计板自己的 store）：卡片的成本估算
-    // 等价目表落地后才出现，且从不阻塞卡片的其余部分。
-    const { book } = useModelPrices()
-    const currency = activeCurrency()
 
     // 布局是完全自适应的：只要舞台可见宽度变化就重跑一次
     // （侧边栏开关、窗口缩放、分屏）。
@@ -242,8 +231,6 @@ export function makeAgentGraph(
                   onHover={setHoverId}
                   onOpen={open}
                   onKeyOpen={keyOpen(node.id)}
-                  book={book}
-                  currency={currency}
                   t={t}
                   fmt={fmt}
                 />
@@ -291,28 +278,24 @@ interface CardProps {
   onHover: (id: string | null) => void
   onOpen: (id: string) => void
   onKeyOpen: (ev: KeyboardEvent) => void
-  /** 成本估算所用的价目表与展示货币（book 为 null → 不显示估算）。 */
-  book: ModelBook | null
-  currency: CostCurrency
   t: ViewKit['t']
   fmt: ViewKit['fmt']
 }
 
 /** 一个节点卡片。`consumed` 优先取 tokenUsage 计数，缺失时退回 fold 自己的
  *  成本台账，因为一个冷亲属可能只携带其中之一；当前节点上的点击不响应，
- *  它也是唯一一个不带 button role 渲染的节点。 */
+ *  它也是唯一一个不带 button role 渲染的节点。这里**只报 token**：金额属于费用那一侧，
+ *  而这张卡片长在只讲上下文的页面上。 */
 function AgentCard(props: CardProps): ReactElement {
   const { node, x, y, width } = props
   const pct = node.head !== null ? node.head.pct : null
   const segs = node.head !== null ? barSegments(node.head.parts, pct, pressureColorOf(pct)) : []
   // 头条数字是这个 agent 的「消耗量」：tokenUsage 计数，
-  // 计数缺失（冷亲属）时由 fold 自己的成本台账顶上。
+  // 计数缺失（冷亲属）时由 fold 自己的成本台账顶上（取它的 token 量，不取金额）。
   const consumed = node.billed !== null && node.billed > 0 ? node.billed
     : node.costUsage !== null ? billedTokensOf(node.costUsage) : null
-  const cost = estimateSessionCost(node.costUsage, props.book, props.currency)
   const metricBits: string[] = []
   if (consumed !== null && consumed > 0) metricBits.push(props.fmt(consumed))
-  if (cost !== null) metricBits.push(formatCost(cost, props.currency))
   // 活动页脚：本次运行的时长，然后是它的步骤数。任一项都可能缺失——
   // 从未运行过的节点没有步骤，冷节点则还没有计时。
   const meta: string[] = []

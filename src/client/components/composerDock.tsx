@@ -12,22 +12,23 @@
  */
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactElement } from 'react'
-import { balanceEntryOf, readPlatformBalance } from '../balance'
-import {formatCost, formatPriceRate, fromCny, toCurrency, type CostCurrency, symbolOf } from '../cost'
+import { formatNativeSpend, formatPriceRate, fromCny, type CostCurrency } from '../cost'
 import { readDock, useDockBook, usePricingPeriod } from '../dockReading'
 import { fmtCountdown } from '../format'
 import { contextBreakdownOf, projectionOf, tokenUsageOf } from '../services'
 import type { ClientCtx, SessionStandardProps } from '../services'
 import type { ViewKit } from '../viewkit'
 import { allDayOffReason, OFFICIAL_MODELS, peakWindowsText } from '../../shared/officialRates'
-import { BALANCE_POLL_MS } from '../constants'
 import { DOCK_CARD_MIN_HEIGHT, placeDockCard } from '../dockPlacement'
 import { officialOverlayOpen } from '../officialOverlays'
 import { isDeepSeekProvider } from '../../shared/providers'
-import type { PlatformBalance, PlatformBalanceEntry } from '../../shared/types'
+import type { PlatformBalance } from '../../shared/types'
 import { fmtCredits } from '../turnSpend'
 import { platformSpendsOf, type PlatformSpend } from '../platformSpend'
-import { readPlatformCredits, type PlatformCreditsTable } from '../platformCredits'
+import type { PlatformCreditsTable } from '../platformCredits'
+import { usePlatformBalances } from '../platformBalanceState'
+import { platformBalanceTexts } from '../platformBalances'
+import { moneyRates } from '../rateTables'
 import { InsightPanelIcon } from '../icon'
 import { Donut } from './donut'
 import { makeStatsCost } from './statsCost'
@@ -43,14 +44,13 @@ import { makeStatsTokens } from './statsTokens'
  *  剩下的空间，好让卡片滚动而不是跑出屏幕。 */
 interface Anchor { left: number; top: number; width: number; maxHeight: number }
 
-/** 卡片宽度（px）：对齐**同一行**那个官方浮层的宽度——`ContextMeter.module.css`
- *  的 `width: min(264px, 100vw - 24px)`。
+/** 卡片宽度的**下限**（px）：与同一行那个官方浮层并排时不至于显得局促
+ *  （`ContextMeter.module.css` 的 `width: min(264px, 100vw - 24px)`）。
  *
- *  这里曾经取 440px（`stat-dialog` 的宽度）。那个参照物是错的选择：`stat-dialog` 是
- *  居中弹窗，而这一行的邻居是窄的锚定浮层（264px）。两个浮层都会挂在同一层级上，
- *  宽出一大截的那张会压到侧栏上，看起来像被切了一块。
- *  实际宽度再受触发条与视口约束（见 `dockPlacement.ts`）。 */
-const CARD_WIDTH = 264
+ *  上限与「随内容变宽」交给样式表（`width: max-content` + `max-width: min(560px, 100vw - 24px)`）：
+ *  固定 264px 时，环图占掉 96px 后图例只剩约 132px，而图例网格的最小列宽是 150px，
+ *  于是每一项都折成两行。JS 只量出实际宽度用于水平夹取。 */
+const CARD_MIN_WIDTH = 264
 
 /** 视口两侧各留的边距（px）：卡片是 `position: fixed`，留出它才不会贴边。
  *  与官方面板的 `100vw - 24px` 同源（每侧 12px）。 */
@@ -71,47 +71,28 @@ function platformLabel(row: PlatformSpend, t: ViewKit['t']): string {
  *  取不到就返回 null，那一截不渲染：宁可少一个数字，也不显示过期或错配的额度。 */
 /** 该平台的剩余额度那一截（余额或剩余积分）。
  *
- *  两者都**只归到自己那一行**：把某个平台的余额挂到别家名下会是错的。
- *  取不到就返回 null，那一截不渲染——宁可少一个数字，也不显示过期或错配的额度。
- *  余额沿用既有的 `.lc-dock-balance` 类名，因此配色与既有样式一致。 */
+ *  两者都**只归到自己那一行**：把某个平台的余额挂到别家名下会是错的。归属规则走
+ *  与统计页同一个 `platformBalanceTexts`，因此三个界面不会对同一个余额给出不同答案。 */
 function balanceCellFor(
   row: PlatformSpend,
+  balance: PlatformBalance | null,
   credits: PlatformCreditsTable | null,
-  balance: PlatformBalanceEntry | null,
-  symbolOf: (currency: string) => string,
   t: ViewKit['t'],
 ): ReactElement | null {
-  if (row.unit === 'credits') {
-    // 按 provider 取**该版本自己的**余额：两版是两套积分池。
-    const own = credits?.[row.provider]
-    if (own === undefined || own.unlimited) return null
-    return <span className="lc-dock-left">{t('dock.creditsLeft', { n: fmtCredits(own.total) })}</span>
-  }
-  // 金额平台：只有 DeepSeek 的余额我们读得到，因此只给它这一行。
-  if (!isDeepSeekProvider(row.provider) || balance === null) return null
-  return <span className="lc-dock-balance">{symbolOf(balance.currency) + balance.total.toFixed(2)}</span>
+  const text = platformBalanceTexts([row], balance, credits)[row.provider]?.text
+  if (text === undefined) return null
+  return row.unit === 'credits'
+    ? <span className="lc-dock-left">{t('dock.creditsLeft', { n: text })}</span>
+    : <span className="lc-dock-balance">{text}</span>
 }
 
-
-/** 各平台在展开卡里的余额文案。归属规则与统计页一致：DeepSeek 的账户余额只给
- *  DeepSeek，剩余积分只给积分平台；读不到的整行不出现。 */
+/** 各平台在展开卡里的余额文案；与统计页共用同一个归属函数。 */
 function dockBalanceTexts(
   rows: readonly PlatformSpend[],
-  entry: PlatformBalanceEntry | null,
+  balance: PlatformBalance | null,
   credits: PlatformCreditsTable | null,
 ): Record<string, { text: string } | undefined> {
-  const out: Record<string, { text: string } | undefined> = {}
-  for (const row of rows) {
-    if (row.unit === 'credits') {
-      const own = credits?.[row.provider]
-      out[row.provider] = own === undefined || own.unlimited ? undefined : { text: fmtCredits(own.total) }
-      continue
-    }
-    out[row.provider] = isDeepSeekProvider(row.provider) && entry !== null
-      ? { text: symbolOf(entry.currency) + entry.total.toFixed(2) }
-      : undefined
-  }
-  return out
+  return platformBalanceTexts(rows, balance, credits)
 }
 
 /**
@@ -153,9 +134,9 @@ export function makeComposerDock(
     /** 完整读数的量宽探针：始终按完整排版，因此与当前显示哪种形态无关，判据不自激。 */
     const probeRef = useRef<HTMLSpanElement | null>(null)
     const [anchor, setAnchor] = useState<Anchor | null>(null)
-    const [balance, setBalance] = useState<PlatformBalance | null>(null)
-    // 平台的剩余积分（积分制平台）；与余额同一套「先画记住的数字、再后台校正」的语义。
-    const [credits, setCredits] = useState<PlatformCreditsTable | null>(() => readPlatformCredits((v: PlatformCreditsTable) => { setCredits(v) }))
+    // 余额与剩余积分由共享座位读取：与统计页、会话页同一份轮询，
+    // 三个界面因此不会对同一个余额给出不同答案（收起那一行也靠它保持诚实）。
+    const { balance, credits } = usePlatformBalances()
     const triggerRef = useRef<HTMLButtonElement | null>(null)
     const cardRef = useRef<HTMLDivElement | null>(null)
     // 宽度够不够：比的是「留给本行的可用宽度」与「完整读数需要的宽度」，
@@ -187,15 +168,6 @@ export function makeComposerDock(
       return () => { observer.disconnect() }
     }, [ready])
 
-    // 收起那一行自己也要显示余额，所以这份读取不能省：先画记住的数字，
-    // 随后在 dock 保持挂载期间由轮询让它保持诚实，切换会话时清理计时器。
-    // （展开卡里的余额行由费用卡自己承担，见下面的 StatsCost。）
-    useEffect(() => {
-      setBalance(readPlatformBalance(setBalance))
-      const timer = setInterval(() => { setBalance(readPlatformBalance(setBalance)) }, BALANCE_POLL_MS)
-      return () => { clearInterval(timer) }
-    }, [])
-
     /** 上一次真正应用过的锚点。ResizeObserver 的回调会因为卡片自身尺寸变化而再次触发，
      *  而 `maxHeight` 又取决于测得的高度——没有这道闸门，两者会互相推动形成循环。 */
     const appliedAnchor = useRef<string>('')
@@ -216,13 +188,17 @@ export function makeComposerDock(
       const boxHeight = card?.getBoundingClientRect().height ?? 0
       const contentHeight = card?.scrollHeight ?? 0
       const natural = Math.max(boxHeight, contentHeight) || 260
+      // 宽度由样式表按内容定（`width: max-content`），这里只量出来用于水平夹取。
+      // 首帧样式还没生效时量到 0，交给 `minWidth` 兜底。
+      const cardWidth = card?.getBoundingClientRect().width ?? 0
       // 几何判据在 dockPlacement.ts 里（纯函数，可单测）：它负责「上方优先、确有必要
       // 才翻转、且高度有下限」这三件事——此前把触发条贴底的情形算成了屏幕外的窄带。
       const next: Anchor = placeDockCard({
         trigger: { top: rect.top, left: rect.left, width: rect.width, bottom: rect.bottom },
         viewport: { width: window.innerWidth, height: window.innerHeight },
         natural,
-        preferredWidth: CARD_WIDTH,
+        cardWidth,
+        minWidth: CARD_MIN_WIDTH,
         gutter: VIEWPORT_GUTTER,
         gap: 8,
         minHeight: DOCK_CARD_MIN_HEIGHT,
@@ -304,7 +280,6 @@ export function makeComposerDock(
     // 第一个推来的值出现之前没有什么可报告的：宁可不渲染任何单元格，
     // 也不要渲染一个误导性的 0。
     if (reading.timeline === null) return null
-    const entry = balanceEntryOf(balance, currency)
     // 峰谷只对**官方计价**的平台成立：其他平台的 `peak` 桶就是普通牌价，
     // 给它们标「峰/谷」等于替别家发明一套时段规则。当前路由未知时按官方处理，
     // 因为官方价目表是这套拆分的唯一来源。
@@ -335,11 +310,12 @@ export function makeComposerDock(
     // 用破折号如实表达。
     const costTextFallback = '—'
     // 按平台拆分本会话消费：每个平台各自带自己的单位与余额。
-    // 这是这行读数的主内容——不同平台的账单单位不同，合成一个数字没有意义。
-    // 只讲**当前在用**的那个平台：这一行是「此刻的状态」，不是账单。
-    // 用过的其他平台仍完整地留在展开卡与统计页里，那里才是看总账的地方。
-    // 当前路由未知时才回退到全部平台（宁可多讲，也不要因为缺一个字段就不说话）。
-    const allPlatforms = platformSpendsOf(reading.usage, reading.calls, reading.book, null, reading.creditRates)
+    // 不同平台的账单单位不同，合成一个数字没有意义。
+    //
+    // 这里分成两个作用域，因为它们回答的不是同一个问题：
+    // - **收起那一行**只讲「此刻在用什么」：那是状态读数，不是账单，因此只取当前路由。
+    // - **展开卡**是账单视图：本会话用过几个平台就列几张卡，与统计页同一个口径。
+    const allPlatforms = platformSpendsOf(reading.usage, reading.calls, reading.book, moneyRates(), reading.creditRates)
     const active = reading.active
     // 当前路由所在的那一行；「这一轮还没入账」或「拿不到费率」时会是 undefined，
     // 那时状态栏不报读数（据实），但**不**退回列出全部平台。
@@ -350,8 +326,8 @@ export function makeComposerDock(
       platformLabel(row, t)
       + (row.unit === 'credits'
         ? t('dock.creditsSpent', { n: fmtCredits(row.value) })
-        : t('dock.moneySpent', { n: formatCost(toCurrency(row.value, currency), currency) }))
-      + (balanceCellFor(row, credits, entry, symbolOf, t) !== null ? ' ' + t('dock.creditsLeft', { n: '' }) : '')
+        : t('dock.moneySpent', { n: formatNativeSpend(row.value, row.currency ?? 'USD') }))
+      + (balanceCellFor(row, balance, credits, t) !== null ? ' ' + t('dock.creditsLeft', { n: '' }) : '')
     )).join(' · ') + (onOfficialRates ? ' · ' + periodLabel : '')
     const periodTip = [
       t('dock.peakWindows', { windows }),
@@ -390,11 +366,9 @@ export function makeComposerDock(
                     <span className="lc-dock-spend">
                       {row.unit === 'credits'
                         ? t('dock.creditsSpent', { n: fmtCredits(row.value) })
-                        : t('dock.moneySpent', { n: formatCost(toCurrency(row.value, currency), currency) })}
+                        : t('dock.moneySpent', { n: formatNativeSpend(row.value, row.currency ?? 'USD') })}
                     </span>
-                    {balanceCellFor(row, credits, entry, symbolOf, t) !== null
-                      ? balanceCellFor(row, credits, entry, symbolOf, t)
-                      : null}
+                    {balanceCellFor(row, balance, credits, t)}
                   </span>
                 ))}
                 {/* 时段徽标：峰/谷是这一行唯一保留语义色的地方，它回答「此刻贵不贵」。
@@ -426,7 +400,6 @@ export function makeComposerDock(
               style={{
                 left: anchor === null ? 0 : anchor.left,
                 top: anchor === null ? 0 : anchor.top,
-                minWidth: anchor === null ? undefined : anchor.width,
                 maxHeight: anchor === null ? undefined : anchor.maxHeight,
                 visibility: anchor === null ? 'hidden' : undefined,
               }}
@@ -471,11 +444,13 @@ export function makeComposerDock(
                   />
                   )
                   : null}
-                {/* 每个平台一张卡，与统计页同一个组件、同一份数据。 */}
+                {/* 每个平台一张卡：本会话用过几个平台就列几张，与统计页同一个组件、
+                    同一份数据。这里用**全部**平台而不是收起那一行的单个路由——
+                    展开卡是账单视图，不是「此刻在用什么」的状态读数。 */}
                 <StatsPlatforms
-                  rows={platforms}
+                  rows={allPlatforms}
                   currency={currency}
-                  balances={dockBalanceTexts(platforms, entry, credits)}
+                  balances={dockBalanceTexts(allPlatforms, balance, credits)}
                 />
               </div>
               {/* 价目表是**官方人民币**的费率表，只对走官方计价的平台显示：

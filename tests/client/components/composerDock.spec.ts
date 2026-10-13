@@ -127,12 +127,12 @@ describe('ComposerDock — the collapsed readout', () => {
     const D = Dock()
     const m = await mount(h(D, { sessionId: 's1', ...seatOf(timelineWith(DEEPSEEK_PEAK)) }))
     await flush()
-    // 1M uncached × ¥2 peak = ¥2.00 for a zh locale; the official table needs no registry.
+    // 金额挂在各自的平台行上（DeepSeek 那条）。DeepSeek 按人民币记账，因此这一行
+    // 读的是 ¥2.00 而非换算成美元——同一个数字在两种语言下都是 ¥2.00。
     const DZh = Dock(new TestClientCtx({ locale: 'zh' }), kitZh)
     const m2 = await mount(h(DZh, { sessionId: 's1', ...seatOf(timelineWith(DEEPSEEK_PEAK)) }))
     await flush()
-    // 金额现在挂在各自的平台行上（DeepSeek 那条），不再是一个未标注的裸总额。
-    assert.equal(query(m.container, '.lc-dock-spend')?.textContent, '$0.30')
+    assert.equal(query(m.container, '.lc-dock-spend')?.textContent, '¥2.00')
     assert.equal(query(m2.container, '.lc-dock-spend')?.textContent, '¥2.00')
     await m.unmount()
     await m2.unmount()
@@ -250,7 +250,10 @@ describe('ComposerDock — the expanded card', () => {
 
   test('the card carries the two summary cards plus the rate table', async () => {
     const D = Dock()
-    const m = await mount(h(D, { sessionId: 's1', ...seatOf(timelineWith(MIXED)) }))
+    // Pin the route in force: without a `provider` the readout falls back to listing every
+    // platform anyway, which would let the "one card per platform" assertion below pass
+    // even if the expanded card were scoped to the active route alone.
+    const m = await mount(h(D, { sessionId: 's1', ...seatOf(timelineWith(MIXED, { provider: 'deepseek-official', model: 'deepseek-v4-flash' })) }))
     await flush()
     await click(query(m.container, '.lc-dock'))
     const card = query(m.container, '.lc-dock-card')
@@ -264,6 +267,10 @@ describe('ComposerDock — the expanded card', () => {
     const cards = queryAll(card, '.lc-dock-cards > .lc-card')
     const platformCards = queryAll(card, '.lc-dock-cards > .lc-pf-card').length
     assert.equal(cards.length - platformCards, 2, 'token + cost, the same two cards the page draws')
+    // The session used two platforms, so the card must list two — not just the one in use.
+    // The collapsed readout is a status reading and stays scoped to the active route; the
+    // expanded card is the billing view and shows every platform that was charged.
+    assert.equal(platformCards, 2, 'one card per platform the session used')
     // The rate table quotes the period in force, so both official rows appear.
     const rows = queryAll(card, '.lc-dock-table tbody tr')
     assert.equal(rows.length, 2)
@@ -406,10 +413,11 @@ describe('ComposerDock — the expanded card', () => {
     await m.unmount()
   })
 
-  test('a narrow trigger still yields the card its own preferred width', async () => {
-    // The composer line can be short while the card's content is not. Following the
-    // trigger's width alone clipped the reused cards' right-hand figures, so the card
-    // falls back to its own preferred width (matching the official neighbour's).
+  test('the card takes its width from the content, not from the trigger', async () => {
+    // The composer line can be short while the card's content is not. A fixed 264px card
+    // left the legend ~132px after the 96px ring, under its own 150px minimum column —
+    // so every legend row folded onto two lines. The stylesheet therefore sizes the card
+    // (`width: max-content`) and the geometry only clamps it.
     const D = Dock()
     const m = await mount(h(D, { sessionId: 's1', ...seatOf(timelineWith(DEEPSEEK_PEAK)) }))
     await flush()
@@ -417,17 +425,22 @@ describe('ComposerDock — the expanded card', () => {
     trigger.getBoundingClientRect = () => ({ left: 40, top: 300, bottom: 320, width: 120, height: 20 }) as DOMRect
     await click(trigger)
     const style = query(m.container, '.lc-dock-card').getAttribute('style') ?? ''
-    const minWidth = Number(/min-width:\s*(\d+)px/.exec(style)?.[1] ?? '0')
-    // 264px 是同一行那个官方浮层的宽度（`ContextMeter.module.css`），因此两个浮层
-    // 同时出现时不会互相压住。
-    assert.equal(minWidth, 264, 'the card takes its preferred width, not the 120px trigger')
+    // The inline width is gone: pinning it would freeze the card at whatever was measured
+    // on the first frame and defeat `width: max-content`.
+    assert.equal(/min-width:/.test(style), false, 'no inline width pin')
+    // Anchor at the line start: the `.lc-dock, .lc-dock-card` variables rule also matches.
+    const css = readFileSync(join(process.cwd(), 'src/client/styles/composerDock.css'), 'utf8')
+    const body = /^\.lc-dock-card\s*\{([^}]*)\}/m.exec(css)?.[1] ?? ''
+    assert.match(body, /width:\s*max-content/, 'the stylesheet sizes the card from its content')
+    assert.match(body, /min-width:\s*264px/, 'with the official neighbour\'s width as the floor')
+    assert.match(body, /max-width:\s*min\(560px,\s*calc\(100vw - 24px\)\)/, 'and a viewport-aware ceiling')
     await m.unmount()
   })
 
   test('the card never exceeds the viewport, so no horizontal scrollbar appears', async () => {
     // A card wider than the viewport would overflow on the x axis; with `overflow-y: auto`
-    // that axis computes to `auto` too and a left/right scrollbar appears. The width is
-    // clamped to the viewport instead.
+    // that axis computes to `auto` too and a left/right scrollbar appears. The geometry
+    // clamps the measured width, and the stylesheet caps it at the same bound.
     const D = Dock()
     const m = await mount(h(D, { sessionId: 's1', ...seatOf(timelineWith(DEEPSEEK_PEAK)) }))
     await flush()
@@ -437,10 +450,14 @@ describe('ComposerDock — the expanded card', () => {
       trigger.getBoundingClientRect = () => ({ left: 10, top: 300, bottom: 320, width: 100, height: 20 }) as DOMRect
       await click(trigger)
       const style = query(m.container, '.lc-dock-card').getAttribute('style') ?? ''
-      const width = Number(/min-width:\s*(\d+)px/.exec(style)?.[1] ?? '0')
-      assert.ok(width <= 380 - 16, `the card fits the viewport, got ${width}px in a 380px viewport`)
+      // jsdom reports a 0-width card, so the clamped anchor falls back to the 264px floor;
+      // what matters is that the anchor is viewport-aware and the left edge stays inside.
       const left = Number(/left:\s*(\d+)px/.exec(style)?.[1] ?? '0')
-      assert.ok(left >= 0 && left + width <= 380, `the clamped card stays inside the viewport (left=${left}, width=${width})`)
+      assert.ok(left >= 0 && left <= 380, `the clamped card stays inside the viewport (left=${left})`)
+      // A 264px floor is itself wider than this 380px viewport's usable 356px? No — it fits,
+      // but the ceiling must still be the smaller of 560px and the viewport.
+      const css = readFileSync(join(process.cwd(), 'src/client/styles/composerDock.css'), 'utf8')
+      assert.match(css, /max-width:\s*min\(560px,\s*calc\(100vw - 24px\)\)/, 'the ceiling tracks the viewport')
     } finally {
       vi.unstubAllGlobals()
       await m.unmount()
@@ -598,7 +615,7 @@ describe('ComposerDock — the expanded card', () => {
     await m.unmount()
   })
 
-  test('a hostile locale service degrades to the USD display instead of throwing', async () => {
+  test('a hostile locale service degrades to the English chrome without throwing', async () => {
     const ctx = new TestClientCtx()
     Object.defineProperty(ctx, 'locale', {
       get() { throw new Error('hostile locale') },
@@ -607,17 +624,18 @@ describe('ComposerDock — the expanded card', () => {
     const D = makeComposerDock(asClientCtx(ctx), kit)
     const m = await mount(h(D, { sessionId: 's1', ...seatOf(timelineWith(DEEPSEEK_PEAK)) }))
     await flush()
-    assert.equal(query(m.container, '.lc-dock-spend')?.textContent, '$0.30', 'USD is the fallback')
+    // The platform's own currency is locale-independent, so the figure reads the same.
+    assert.equal(query(m.container, '.lc-dock-spend')?.textContent, '¥2.00')
     await m.unmount()
   })
 
-  test('a locale service without getLocale also falls back to USD', async () => {
+  test('a locale service without getLocale still renders the platform currency', async () => {
     const ctx = new TestClientCtx()
     Object.defineProperty(ctx, 'locale', { get: () => ({ bind: () => () => '' }), configurable: true })
     const D = makeComposerDock(asClientCtx(ctx), kit)
     const m = await mount(h(D, { sessionId: 's1', ...seatOf(timelineWith(DEEPSEEK_PEAK)) }))
     await flush()
-    assert.equal(query(m.container, '.lc-dock-spend')?.textContent, '$0.30')
+    assert.equal(query(m.container, '.lc-dock-spend')?.textContent, '¥2.00')
     await m.unmount()
   })
 
@@ -705,7 +723,11 @@ describe('ComposerDock — the expanded card matches the official popup layer', 
     // `ContextMeter.module.css` — `width: min(264px, 100vw - 24px)`, `padding: 12px`.
     const body = ruleOf('.lc-dock-card')
     assert.match(body, /padding:\s*12px/, 'the neighbour\u2019s padding')
-    assert.match(src, /const CARD_WIDTH = 264/, 'and its width, not the centred dialog\u2019s 440')
+    // The neighbour\'s 264px is now the card\'s FLOOR rather than its fixed width: a fixed
+    // 264px left the legend ~132px once the 96px ring took its share, under the legend\'s
+    // own 150px minimum column, so every row folded onto two lines.
+    assert.match(src, /const CARD_MIN_WIDTH = 264/, 'the neighbour\'s width, as the floor')
+    assert.match(body, /width:\s*max-content/, 'while the content decides the actual width')
   })
 
   test('every block inside the card is border-box, so none of them overflow', () => {

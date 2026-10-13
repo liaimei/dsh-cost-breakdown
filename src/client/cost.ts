@@ -446,6 +446,20 @@ export function formatPriceRate(amount: number, currency: CostCurrency): string 
   return (currency === 'cny' ? '¥' : '$') + amount.toFixed(2)
 }
 
+/** 一个平台的**账单币种**。账本一律以美元空间记账，但每个平台的账单是以自己的
+ *  币种开出来的：DeepSeek 官方按人民币报价（它的美元数字本就是由人民币费率换算来的），
+ *  第三方平台与 models.dev 注册表按美元报价。displayed 绝不把两者归并成一种货币再相加。 */
+export type SpendCurrency = 'CNY' | 'USD'
+
+/** 把一笔以美元空间记账的金额还原成**平台自己的**币种并格式化。
+ *
+ *  与 {@link formatCost} 的区别是：后者的货币来自界面语言，会把所有平台的账单
+ *  统一成一种货币；这里按平台账单的原始币种呈现，人民币平台显示 ¥、美元平台显示 $。 */
+export function formatNativeSpend(usd: number, currency: SpendCurrency): string {
+  const target: CostCurrency = currency === 'CNY' ? 'cny' : 'usd'
+  return formatCost(toCurrency(usd, target), target)
+}
+
 /** 账本里**只按人民币计价**的那部分：剔掉积分平台的 provider。
  *
  *  积分平台的用量不能按 token 换成人民币——它的账单单位是积分。把它们留在同一份

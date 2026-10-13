@@ -25,9 +25,13 @@
 .lc-sc-balance-label { color: var(--dsw-alias-label-secondary); white-space: nowrap; }
 .lc-sc-balance b { margin-left: auto; color: var(--dsw-alias-label-primary); font-variant-numeric: tabular-nums; }
 
-/* 平台卡所在的那一行：卡片按内容宽度排布、可换行，**不参与**头部三张卡的列宽分配。
+/* 平台卡所在的那一行：卡片按可用宽度铺开、可换行，**不参与**头部三张卡的列宽分配。
    平台数量随使用情况变化（可能 1 张，也可能 4 张），因此让弹性行自己决定每行放几张；
    每张卡保有一个下限宽度，避免被压成竖排窄柱。
+
+   **不设宽度上限**：面板很宽时（右侧栏最大化、统计页整宽），上限会把卡片钉在半宽上，
+   右边空出一大片，而它上方的 Token 卡是撑满的——同一列里两种宽度读起来像排版坏了。
+   只有一张卡时它就占满整行；多张时按 240px 的下限自动换行。
 
    `align-items: flex-start` 而不是 `stretch`：卡片的**内容**长度天然不同——积分平台可能
    没有环图（消费为 0 时没有可分的段），也可能还有余额行。`stretch` 会把短卡拉到与最长
@@ -36,7 +40,6 @@
 .lc-platform-row > .lc-pf-card {
   flex: 1 1 auto;
   min-width: min(240px, 100%);
-  max-width: min(420px, 100%);
 }
 /* 每张平台卡是一个独立的容器：环图与图例的窄容器断点（`@max-[320px]/lc-card`）
    才会各自按卡宽生效，而不是按整页宽度。 */

@@ -1,17 +1,14 @@
 /**
- * Cost Statistics 面板里那张具体的用量卡片：本区间由 provider 上报的
- * 计费分桶，完全按实际计量——缓存命中、未缓存输入、缓存写入
- * 与输出——外加各定价时段各自花了多少。
+ * 统计页那张**计费 Token** 卡：本区间由 provider 上报的四个计费分桶，
+ * 完全按实际计量——缓存命中、未缓存输入、缓存写入与输出。
  *
- * 这是账单一侧的数字。旁边的 Token Stats 卡片把同一个总量按
- * 上下文类别分摊（说明 token「是什么」）；这张卡片则按平台实际计费的
- * 分桶来拆，读的人由此能看出这笔开销里有多少走在缓存命中上，
- * 多少是全新输入。
+ * 只讲 token。旁边同样口径的组成环图说明 token「是什么」，这张卡则按平台
+ * 实际计费的分桶来拆，读的人由此能看出这些量里有多少走在缓存命中上、
+ * 多少是全新输入。费用有它自己那一段（平台卡 + 明细表），不在这里出现。
  */
 
 import { useState, type ReactElement } from 'react'
 import type { BilledTotals } from '../overview'
-import { formatCost, toCurrency, type CostCurrency } from '../cost'
 import type { ViewKit } from '../viewkit'
 
 import { SliceList } from './sliceList'
@@ -30,10 +27,9 @@ const BUCKETS: readonly { key: 'cacheRead' | 'uncached' | 'cacheWrite' | 'output
  *  为 null 的那种情况表示本区间什么都没计量到。 */
 export function makeOverviewBilled(kit: ViewKit, Donut: (props: DonutProps) => ReactElement): (props: {
   billed: BilledTotals | null
-  currency: CostCurrency
 }) => ReactElement {
   const { t, fmt, fmtShare } = kit
-  return function OverviewBilled(props: { billed: BilledTotals | null; currency: CostCurrency }): ReactElement {
+  return function OverviewBilled(props: { billed: BilledTotals | null }): ReactElement {
     const [hoverKey, setHoverKey] = useState<string | null>(null)
     const billed = props.billed
     const head = (
@@ -70,10 +66,8 @@ export function makeOverviewBilled(kit: ViewKit, Donut: (props: DonutProps) => R
       // 这里的每个数字都由 provider 上报，因此没有一个是估计值。
       count: fmt(billed[b.key]),
     }))
-    // 按时段拆分，取自同一份台账，用展示货币计价。
-    const peak = toCurrency(billed.cost.peak, props.currency)
-    const off = toCurrency(billed.cost.off, props.currency)
-    const periodSum = peak + off
+    // 这张卡只讲 token：峰谷费用拆分属于费用那一段（平台卡与明细表），
+    // 混在这里会让同一张卡同时声称两种量纲。
     return (
       <div className="lc-card lc-col-donut flex-1 min-w-[min(360px,100%)]">
         {head}
@@ -90,31 +84,6 @@ export function makeOverviewBilled(kit: ViewKit, Donut: (props: DonutProps) => R
           <SliceList rows={rows} hoverKey={hoverKey} onHoverKey={setHoverKey} />
         </div>
         ) : null}
-        {/* 按时段拆分：这笔开销落在费率卡的哪一侧。
-            已计量、但涉及的模型没有费率的区间没有可展示的拆分。 */}
-        {periodSum > 0
-          ? (
-            <div className="lc-ov-billed-periods">
-              <span className="lc-ov-billed-period">
-                <i style={{ background: 'var(--color-red-500)' }} />
-                {t('dock.peak')}
-                {' '}
-                <b>{formatCost(peak, props.currency)}</b>
-                <em>{fmtShare(peak, periodSum)}</em>
-              </span>
-              <span className="lc-ov-billed-period">
-                <i style={{ background: 'var(--color-green-500)' }} />
-                {t('dock.off')}
-                {' '}
-                <b>{formatCost(off, props.currency)}</b>
-                <em>{fmtShare(off, periodSum)}</em>
-              </span>
-            </div>
-          )
-          : null}
-        {/* 平台明细交给同一组平台卡渲染（与单会话页同一个组件），
-            因此两处不会对同一批数据给出不同的拆分与措辞。 */}
-        {null}
       </div>
     )
   }

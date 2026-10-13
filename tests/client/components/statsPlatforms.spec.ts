@@ -28,7 +28,7 @@ const ROWS: PlatformSpend[] = [
     models: ['deepseek-v4.1-flash'], byModel: { 'deepseek-v4.1-flash': 0 }, callsByModel: { 'deepseek-v4.1-flash': 465 },
   },
   {
-    provider: 'deepseek-account', unit: 'money', value: 28, calls: 612,
+    provider: 'deepseek-account', unit: 'money', currency: 'CNY', value: 28, calls: 612,
     models: ['deepseek-v4.1-flash'], byModel: { 'deepseek-v4.1-flash': 28 }, callsByModel: { 'deepseek-v4.1-flash': 612 },
   },
 ]
@@ -125,6 +125,47 @@ describe('each platform gets its own card', () => {
       const card = queryAll(m.container, '.lc-pf-card')[0]
       assert.equal(queryAll(card, '.lc-sl-row').length, 2, 'one legend row per model')
       assert.deepEqual(queryAll(card, '.lc-sl-pct').map(el => el.textContent), ['75.0%', '25.0%'])
+    } finally { await m.unmount() }
+  })
+
+  test('each card carries its own per-model rows, so no second table is needed', async () => {
+    // The standalone detail table this used to sit above repeated the card's own figures
+    // verbatim (platform, model, spend, calls, balance), so every number appeared twice.
+    // The per-model rows now live in the card, where the ring's segments point at them.
+    const Cards = makeStatsPlatforms(kitZh, Donut)
+    const m = await mount(h(Cards as never, { rows: [ROWS[0]], currency: 'cny' } as never))
+    try {
+      const card = queryAll(m.container, '.lc-pf-card')[0]
+      const rows = queryAll(card, '.lc-pf-models tr').map(tr => ({
+        model: tr.querySelector('.lc-pf-model-name')?.textContent ?? '',
+        spend: tr.querySelector('.lc-pf-model-spend')?.textContent ?? '',
+        calls: tr.querySelector('.lc-pf-model-calls')?.textContent ?? '',
+      }))
+      // Ordered by spend, biggest first: glm-5.3 (90) before deepseek-v4.1-flash (30.78).
+      assert.deepEqual(rows.map(r => r.model), ['glm-5.3', 'deepseek-v4.1-flash'])
+      assert.deepEqual(rows.map(r => r.spend), ['90', '30.78'])
+      assert.deepEqual(rows.map(r => r.calls), ['900', '198'])
+    } finally { await m.unmount() }
+  })
+
+  test('a model with no rate is labelled, never shown as a zero spend', async () => {
+    // "No rate configured" and "these calls were free" are different claims; a 0 would
+    // silently make the second one.
+    const Cards = makeStatsPlatforms(kitZh, Donut)
+    const unrated = {
+      ...ROWS[0],
+      models: ['glm-5.3', 'mystery-model'],
+      byModel: { 'glm-5.3': 90 },
+      callsByModel: { 'glm-5.3': 900, 'mystery-model': 5 },
+    }
+    const m = await mount(h(Cards as never, { rows: [unrated], currency: 'cny' } as never))
+    try {
+      const rows = queryAll(m.container, '.lc-pf-models tr')
+      assert.equal(rows.length, 2)
+      const last = rows[1]
+      assert.ok((last.textContent ?? '').includes('未配置费率'), 'the reason is stated')
+      assert.ok(last.className.includes('lc-pf-model-unpriced'), 'and the row is dimmed')
+      assert.ok((last.textContent ?? '').includes('5'), 'the calls are still reported')
     } finally { await m.unmount() }
   })
 })

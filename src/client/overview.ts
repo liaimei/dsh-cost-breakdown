@@ -16,6 +16,7 @@ import { cacheHitPercent } from './format'
 import { estimateSessionCost, estimateSessionCostByPeriod, mergeCostUsage, moneyOnlyUsage } from './cost'
 import { mergeCallCounts, mergePlatformSpends, platformSpendsOf, type PlatformSpend } from './platformSpend'
 import type { CostCurrency, ModelBook } from './cost'
+import type { ThirdPartyRates } from '../shared/thirdPartyRates'
 import { agentRowOf } from './agentTree'
 import { activityOf, asRecord, timelineOf, type ClientCtx, type SessionsFace } from './services'
 import type { ActivityDay, ContextActivity, ContextTimeline, SessionCallCounts, SessionCostUsage, TimingTotals, TokenUsage, ToolTimingTotals } from '../shared/types'
@@ -643,17 +644,20 @@ export function billedTotalsOf(
   rows: readonly OverviewRow[],
   book: ModelBook | null | undefined,
   credits?: Record<string, Record<string, number>> | null,
+  moneyRates?: ThirdPartyRates | null,
 ): BilledTotals | null {
   const usage = mergeCostUsage(...rows.map(row => row.familyCost))
   const totals = usageTotalsOf(usage)
   if (totals === null) return null
   // 跨会话按平台汇总：积分平台与人民币平台各自成行，口径与单会话卡片完全一致
   // （同一个 platformSpendsOf），因此两个页面不会对同一批数据给出不同的拆分。
+  // 用户声明的第三方费率必须传进来：没有它，那些平台在概览页会整行缺席，
+  // 而单会话页却算得出来——同一份数据在两个页面给出不同答案。
   const platforms = mergePlatformSpends(...rows.map(row => platformSpendsOf(
     row.familyCost,
     row.familyCalls ?? null,
     book,
-    null,
+    moneyRates ?? null,
     credits ?? null,
   )))
   return {
@@ -696,6 +700,7 @@ export function kpisOf(
   listed: number,
   book: ModelBook | null | undefined,
   currency: CostCurrency,
+  moneyRates?: ThirdPartyRates | null,
 ): OverviewKpis {
   // 积分费率取自各行的 timeline——与单会话那张卡用的是同一份数据。
   // **必须**传给 `billedTotalsOf`：没有它，积分平台判定不出来（`platformSpendsOf`
@@ -739,7 +744,7 @@ export function kpisOf(
     calls,
     wallMs,
     tokenParts: tokenPartsOf(rows),
-    billed: billedTotalsOf(rows, book, credits),
+    billed: billedTotalsOf(rows, book, credits, moneyRates),
     timing: timingSumOf(rows),
   }
 }

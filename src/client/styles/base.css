@@ -57,7 +57,6 @@
 .lc-error { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 40px 16px; }
 .lc-error-msg { font-family: var(--ds-font-family-code, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 12px; color: var(--dsw-alias-state-error-primary); background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 4px 8px; max-width: 100%; overflow-wrap: anywhere; }
 .lc-error-retry { border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); font: inherit; font-size: 12px; padding: 4px 14px; border-radius: 6px; cursor: pointer; transition: border-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
-.lc-foot { color: var(--dsw-alias-label-secondary); font-size: 12px; margin-top: 4px; }
 /* 插件界面接管内容区时隐藏输入区，但审批 / 提问 / 计划评审提示仍保留它。 */
 [data-conversation-scroll]:has(.lc-root) > [data-composer-seat]:not(:has([data-approval-key], [data-question-key], [data-plan-review-key])) { display: none; }
 /* harness 的对话宽度拖拽手柄是共享滚动容器的后续兄弟节点，所以必须用 `~`，后代组合器什么都匹配不到（issue #50）。`.lc-root` 或 `.lc-modal-backdrop` 挂载时隐藏它们，否则会横穿内容区拖拽并浮在模态遮罩之上。 */

@@ -42,11 +42,12 @@ export function watchSidebarContextTab(
       own(tabs.register({
         id: SIDEBAR_CONTEXT_ID,
         kind: SIDEBAR_CONTEXT_KIND,
-        // 与对话区标签同名：两处挂的是同一个 ContextView，只是一份视图的两个位置。
-        title: () => t('tab'),
+        // 这一列只讲平台消费，与对话区那个只讲上下文的标签页已经不是同一件事，
+        // 因此各用其名——同名会让用户以为点开的是同一份视图。
+        title: () => t('sidebar.title'),
         guide: [{
           order: GUIDE_ORDER,
-          title: () => t('tab'),
+          title: () => t('sidebar.title'),
           description: () => t('sidebar.guideDescription'),
           icon: ContextIcon,
         }],
@@ -58,7 +59,7 @@ export function watchSidebarContextTab(
       // 挂在类型 id 之下，kit 因此只为该类型的标签页派发它。
       own(injected.slots.inject('sidebar.right.pane.tab.title', () => injected.slots.register(
         { name: 'sidebar.right.pane.tab.title', key: SIDEBAR_CONTEXT_ID },
-        makeContextTabTitle(t),
+        makeContextTabTitle(t, 'sidebar.title'),
       )))
     } catch {
       for (const dispose of disposers) dispose()

@@ -42,6 +42,7 @@ import './styles/attachments.css'
 import './styles/agentGraph.css'
 import './styles/overview.css'
 import './styles/dateRange.css'
+import './styles/spend.css'
 import './styles/composerDock.css'
 
 const NS = 'dsh-cost-breakdown'

@@ -1,6 +1,7 @@
-// The Statistics panel's CONCRETE billed-usage card (src/client/components/overviewBilled.tsx) rendered with
-// real React: the donut centered on the range's provider-reported billed total, split by the four buckets the
-// platform actually bills, with the peak/off-peak cost split underneath.
+// The Statistics panel's billed-TOKEN card (src/client/components/overviewBilled.tsx), rendered with real
+// React: the donut centered on the range's provider-reported billed total, split by the four buckets the
+// platform actually bills. Money has its own section (platform cards + detail table) — this card must never
+// grow a cost figure, because token and amount are different quantities.
 
 import { createElement as h } from 'react'
 import assert from 'node:assert/strict'
@@ -38,7 +39,7 @@ function rowOf(container: HTMLElement, i: number): { pct: string; label: string;
 
 describe('OverviewBilled', () => {
   test('the ring splits the billed total by the platform buckets, all figures exact (no ≈)', async () => {
-    const m = await mount(h(Billed, { billed: BILLED, currency: 'usd' }))
+    const m = await mount(h(Billed, { billed: BILLED }))
     assert.equal(query(m.container, '.lc-donut-center b').textContent, '1.8k')
     assert.equal(query(m.container, '.lc-donut-center span').textContent, 'Total')
     // Zero buckets drop out; the remaining three keep their billed order.
@@ -51,54 +52,43 @@ describe('OverviewBilled', () => {
     await m.unmount()
   })
 
-  test('the peak/off-peak cost split sits under the ring with its shares', async () => {
-    const m = await mount(h(Billed, { billed: BILLED, currency: 'usd' }))
-    const periods = queryAll(m.container, '.lc-ov-billed-period')
-    assert.equal(periods.length, 2)
-    const read = (el: Element): { label: string; cost: string; pct: string } => ({
-      label: el.querySelector('i')?.nextSibling?.textContent?.trim() ?? '',
-      cost: el.querySelector('b')?.textContent ?? '',
-      pct: el.querySelector('em')?.textContent ?? '',
-    })
-    assert.deepEqual(read(periods[0]), { label: 'Peak', cost: '$0.30', pct: '75.0%' })
-    assert.deepEqual(read(periods[1]), { label: 'Off-peak', cost: '$0.10', pct: '25.0%' })
+  test('no money ever appears, even when the range is fully priced', async () => {
+    // The fixture carries a peak/off split; this card must ignore it entirely and
+    // render tokens only — the split belongs to the platform spend section.
+    const m = await mount(h(Billed, { billed: BILLED }))
+    assert.equal(queryAll(m.container, '.lc-ov-billed-period').length, 0)
+    assert.equal(text(m.container).includes('$'), false)
+    assert.equal(text(m.container).includes('¥'), false)
     await m.unmount()
   })
 
-  test('the zh locale prices the split in CNY with localized labels', async () => {
-    const m = await mount(h(BilledZh, { billed: BILLED, currency: 'cny' }))
+  test('the zh locale localizes the card without pricing anything', async () => {
+    const m = await mount(h(BilledZh, { billed: BILLED }))
     assert.ok(text(m.container).includes('计费 Token'))
-    const periods = queryAll(m.container, '.lc-ov-billed-period')
-    // 0.3 USD / 0.15 = ¥2.00; 0.1 / 0.15 = ¥0.67.
-    assert.equal(query(periods[0], 'b').textContent, '¥2.00')
-    assert.equal(query(periods[0], 'em').textContent, '75.0%')
-    assert.equal(query(periods[1], 'b').textContent, '¥0.67')
-    assert.equal(query(periods[1], 'em').textContent, '25.0%')
-    assert.ok(text(periods[0]).startsWith('峰'))
+    assert.equal(text(m.container).includes('费用'), false)
+    assert.equal(queryAll(m.container, '.lc-ov-billed-period').length, 0)
     await m.unmount()
   })
 
-  test('nothing billed renders the empty note: no ring and no period split', async () => {
+  test('nothing billed renders the empty note: no ring', async () => {
     for (const billed of [null, { ...BILLED, total: 0, cacheRead: 0, uncached: 0, output: 0 }]) {
-      const m = await mount(h(Billed, { billed, currency: 'usd' }))
+      const m = await mount(h(Billed, { billed }))
       assert.equal(queryAll(m.container, '.lc-donut').length, 0)
-      assert.equal(queryAll(m.container, '.lc-ov-billed-period').length, 0)
       assert.ok(text(m.container).includes('No billed tokens in this range'))
       await m.unmount()
     }
   })
 
-  test('a billed range that priced nothing keeps its buckets and drops the split', async () => {
+  test('a billed range that priced nothing keeps its buckets', async () => {
     // The buckets are metered even when no rate applied (an unpriced model).
     const unpriced: BilledTotals = { ...BILLED, cost: { peak: 0, off: 0, any: false }, platforms: [] }
-    const m = await mount(h(Billed, { billed: unpriced, currency: 'usd' }))
+    const m = await mount(h(Billed, { billed: unpriced }))
     assert.equal(queryAll(m.container, '.lc-sl-row').length, 3)
-    assert.equal(queryAll(m.container, '.lc-ov-billed-period').length, 0)
     await m.unmount()
   })
 
   test('hovering a legend row lights its donut segment and the row itself', async () => {
-    const m = await mount(h(Billed, { billed: BILLED, currency: 'usd' }))
+    const m = await mount(h(Billed, { billed: BILLED }))
     const rows = queryAll(m.container, '.lc-sl-row')
     await hover(rows[1])
     assert.ok(query(m.container, '.lc-donut').className.includes('lc-donut-dim'))

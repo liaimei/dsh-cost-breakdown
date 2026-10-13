@@ -123,7 +123,7 @@ describe.skipIf(staging.artifactsMissing())('bundle smoke — the built lib/clie
     assert.equal(state.slots.length, 7, 'view tab + two assistant actions + input overlay + composer dock + insight page and sidebar entry slots')
     assert.equal(state.slots[0]?.[0], 'conversation.view')
     assert.equal(state.slots[0]?.[1].order, 20)
-    assert.equal(state.slots[0]?.[1].label?.(), '汇总统计', 'tab label localized')
+    assert.equal(state.slots[0]?.[1].label?.(), '上下文', 'tab label localized')
     assert.equal(state.slots[1]?.[0], 'conversation.chat.assistant-actions')
     assert.equal(state.slots[1]?.[1].id, 'context-jump', 'jump action rides its own slot id')
     assert.equal(state.slots[2]?.[0], 'conversation.composer.dock', 'the cost readout rides the composer dock')

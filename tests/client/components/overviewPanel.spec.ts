@@ -5,6 +5,7 @@ import { act, createElement as h } from 'react'
 import assert from 'node:assert/strict'
 import { afterEach, beforeEach, describe, test, vi } from 'vitest'
 import { makeOverviewPanel } from '../../../src/client/components/overviewPanel'
+import { DICT_ZH } from '../../../src/client/i18n'
 import { resetModelPrices, setModelPricesLoader } from '../../../src/client/modelPrices'
 import { dayKeyOf } from '../../../src/shared/days'
 import { TestClientCtx, asClientCtx } from '../helpers/harness'
@@ -137,34 +138,39 @@ describe('OverviewPanel', () => {
     assert.equal(pulls, 1, 'the baseline re-pull fires on mount')
     assert.deepEqual(backfillPosts, ['/api/dsh-cost-breakdown/backfill'], 'the warm-up trigger POST fires on mount')
     assert.ok(text(m.container).includes('Statistics'))
-    // The page chrome: the section's one scroll region carries the centered
-    // content column — the page heading, then the 1:1 first row (the KPI
-    // band beside the last-7-days usage chart), the aggregate stats pair, and the insight/session body.
+    // The page chrome: the section's one scroll region carries the centered content
+    // column — the page heading, then the 1:1 first row (the token KPI band beside the
+    // last-7-days TOKEN chart), the token stats row, the platform SPEND section, and the
+    // insight/session body. Tokens and money are separate sections by design.
     const page = query(m.container, 'section.lc-ov-page')
     assert.equal(page.getAttribute('aria-label'), 'Statistics')
     const scrollRows = [...query(m.container, '.lc-ov-pagecontent').children].map(el => el.className.split(' ')[0])
-    assert.deepEqual(scrollRows, ['lc-ov-pagehead', 'lc-ov-first', 'lc-ov-stats', 'lc-ov-body'])
+    assert.deepEqual(scrollRows, ['lc-ov-pagehead', 'lc-ov-first', 'lc-ov-stats', 'lc-ov-spend', 'lc-ov-body'])
     assert.equal(query(m.container, '.lc-ov-pagehead h1.lc-ov-pagetitle').textContent, 'Statistics')
     // The pair's halves: the KPI band's six cells.
     assert.equal(queryAll(m.container, '.lc-ov-first > .lc-ov-kpis .lc-stat').length, 6)
     assert.ok(query(m.container, '.lc-ov-first > .lc-card.lc-ov-usage') !== null, 'the usage chart rides the row')
-    // KPI band: 2 sessions in the 30d range, 1750 tokens billed, priced cost, cache hit.
+    // KPI band: 2 sessions in the 30d range, 1750 tokens billed, cache hit.
+    // Money is NOT here: the band is the token/activity face, and the spend section
+    // below owns every amount.
     const labels = queryAll(m.container, '.lc-stat-label').map(el => el.textContent)
-    assert.deepEqual(labels, ['Active Sessions', 'Tokens Used', 'Cost', 'Cache Hit', 'Tool Calls', 'Active Time'])
+    assert.deepEqual(labels, ['Active Sessions', 'Tokens Used', 'Cache Hit', 'Tool Calls', 'Active Time', 'Model Calls'])
     const values = queryAll(m.container, '.lc-stat-value').map(el => el.textContent)
     assert.equal(values[0], '2')
     assert.equal(values[1], '1.8k')
-    assert.ok(values[2].startsWith('$'), 'priced from the book')
-    assert.equal(values[3], '33.33%')
+    assert.equal(values[2], '33.33%')
     // Tools + active time: both timed sessions fold into the band (7 calls each).
-    assert.equal(values[4], '14')
-    assert.equal(values[5], '3m0s')
+    assert.equal(values[3], '14')
+    assert.equal(values[4], '3m0s')
+    assert.equal(values[5], '8')
     assert.ok(text(m.container).includes('tool runs 40.0s'), 'the tool calls cell qualifies with the summed run time')
     assert.ok(text(m.container).includes('8 model calls'), 'the active-time cell qualifies with the model-call count')
-    // Cost and cache hit qualify with the session count each figure covers
-    // (only session a carries usage; b folds no cost at all).
+    // The cache-hit and model-call cells qualify with the session counts they cover.
     const subs = queryAll(m.container, '.lc-stat-sub').map(el => el.textContent)
-    assert.deepEqual(subs.slice(2, 4), ['1 of 2 sessions priced', 'across 1 sessions'])
+    assert.equal(subs[0], 'of 3 total')
+    assert.equal(subs[1], 'Turns 6')
+    assert.equal(subs[2], 'across 1 sessions', 'the cache-hit cell qualifies with the sessions it covers')
+    assert.equal(subs[5], '1 of 2 sessions priced', 'the model-call cell qualifies with the priced sessions')
     // The aggregate stats row: the CONCRETE billed buckets (provider-reported:
     // 500 cache read, 1000 uncached, 250 output) beside the Token Stats ring
     // folded into the Context tab's OWN composition categories, beside the
@@ -519,17 +525,17 @@ describe('OverviewPanel', () => {
     })
     assert.ok(text(noTimeline.m.container).includes('No context data yet'))
     const kpiValues = queryAll(noTimeline.m.container, '.lc-stat-value').map(el => el.textContent)
-    assert.equal(kpiValues[1], '0')
-    assert.equal(kpiValues[2], '—', 'nothing priced without cost buckets')
-    assert.equal(kpiValues[3], '—', 'no cache hit without billed input')
-    assert.equal(kpiValues[4], '0', 'no tool calls without timing')
-    assert.equal(kpiValues[5], '—', 'no active time without timing')
+    assert.equal(kpiValues[1], '0', 'no billed tokens')
+    assert.equal(kpiValues[2], '—', 'no cache hit without billed input')
+    assert.equal(kpiValues[3], '0', 'no tool calls without timing')
+    assert.equal(kpiValues[4], '—', 'no active time without timing')
+    assert.equal(kpiValues[5], '0', 'no model calls without requests')
     assert.ok(text(noTimeline.m.container).includes('No billed tokens in this range'))
     assert.ok(text(noTimeline.m.container).includes('No timing data yet'))
     await noTimeline.m.unmount()
   })
 
-  test('the zh locale renders translated chrome and CNY cost', async () => {
+  test('the zh locale renders translated chrome, with the spend section in zh', async () => {
     const ctx = new TestClientCtx({ locale: 'zh' })
     const Panel = makeOverviewPanel(asClientCtx(ctx), makeKit('zh'))
     const m = await mount(h(Panel, {
@@ -541,10 +547,20 @@ describe('OverviewPanel', () => {
     assert.ok(text(m.container).includes('活跃会话'))
     assert.ok(text(m.container).includes('Token 统计'), 'the aggregate stats row rides the zh dictionary too')
     assert.ok(text(m.container).includes('系统提示词'), 'the Context tab\'s composition categories render in zh')
+    assert.ok(text(m.container).includes('费用汇总'), 'the spend section header is localized')
     assert.equal(query<HTMLButtonElement>(m.container, '.lc-ov-settings').title, '打开插件设置', 'the settings chip rides the zh dictionary too')
-    await flush() // the price book lands
-    const values = queryAll(m.container, '.lc-stat-value').map(el => el.textContent)
-    assert.ok(values[2].startsWith('¥'), 'CNY under the zh locale')
+    await m.unmount()
+  })
+
+  test('the spend section carries no cross-platform total', async () => {
+    // Credits, yuan and dollars cannot be added into one figure, so the section must not
+    // offer a headline total — each platform card and its detail row speaks for itself.
+    const ctx = makeCtx()
+    const { m } = await openPanel(ctx)
+    const spend = query(m.container, '.lc-ov-spend')
+    assert.equal(queryAll(spend, '.lc-ov-spend-total').length, 0, 'no aggregate total element')
+    // And the label for one is gone from the shipped dictionary entirely.
+    assert.equal(Object.hasOwn(DICT_ZH, 'ov.spend.moneyTotal'), false, 'the key was removed, not just unused')
     await m.unmount()
   })
 
@@ -577,7 +593,7 @@ describe('OverviewPanel', () => {
     await m.unmount()
   })
 
-  test('a locale service without getLocale falls back to USD', async () => {
+  test('a locale service without getLocale falls back to the English chrome', async () => {
     // A hand-rolled ctx: the locale face carries no getLocale at all.
     const bare = {
       locale: {
@@ -592,9 +608,10 @@ describe('OverviewPanel', () => {
       useWorkspaces: useHookOf(workspacesSnapshotValue),
     }))
     await flush()
-    await flush() // the price book lands
-    const values = queryAll(m.container, '.lc-stat-value').map(el => el.textContent)
-    assert.ok(values[2].startsWith('$'), 'USD when the locale face cannot report an active locale')
+    // The token band carries no currency at all: with no usable locale face the
+    // chrome falls back to English, and the spend section keeps each platform in
+    // its own billing currency regardless.
+    assert.ok(text(m.container).includes('Statistics'), 'the English chrome when the locale face reports nothing')
     await m.unmount()
   })
 

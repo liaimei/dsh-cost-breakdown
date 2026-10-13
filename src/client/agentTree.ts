@@ -38,13 +38,14 @@ export interface AgentIdentity {
 }
 
 /** 单个 agent 的渲染输入，完全由其所在行的投影值推导而来。`billed` 与
- *  `costUsage` 刻意使用不同口径：前者是计量后的
- *  token 总量，后者是价格估算所依据的账本。 */
+ *  `costUsage` 刻意使用不同口径：前者是计量后的 token 总量，
+ *  后者是逐桶的计量账本（只读它的 token 量——Agent 网络长在只讲上下文的页面上，
+ *  从不在这张卡片上标价）。 */
 export interface AgentStats {
   head: Headline | null
   requests: number
   billed: number | null
-  /** 取自 timeline 的累计 session 成本账本——卡片的价格估算就挂在它上面。 */
+  /** 取自 timeline 的累计计量账本；卡片只在缺少 `billed` 时取它的 token 量顶替。 */
   costUsage: SessionCostUsage | null
   durationMs: number | null
   identity: AgentIdentity | null
@@ -55,7 +56,7 @@ export interface AgentSelfStats {
   head: Headline | null
   billed: number | null
   requests: number
-  /** 本标签页自己的成本账本（统计面板的 `data.cost`）。 */
+  /** 本标签页自己的计量账本（统计面板的 `data.cost`）；同样只取其 token 量。 */
   costUsage?: SessionCostUsage | null
   /** 当前 session 的整步耗时（`data.timing.wallMs`，由 host 在完整日志上折叠得出）。
    * 不是 harness 的 subagent 度量——那个只折叠 turn 窗口，且父 session 根本不会带

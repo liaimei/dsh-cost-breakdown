@@ -8,13 +8,11 @@ import type { ClientCtx, ConversationNodeLike } from '../services'
 import { makeContentFetcher, makeHeaderFetcher, useHistoryFace } from '../historyPage'
 import { useTimelineSource } from '../timelineSource'
 import { makeDetailNote } from './detailNote'
-import { readPlatformBalance } from '../balance'
 import { useModelPrices } from '../modelPrices'
+import { usePlatformBalances } from '../platformBalanceState'
+import { moneyRates } from '../rateTables'
 import { isDeepSeekProvider } from '../../shared/providers'
 import type { CostCurrency } from '../cost'
-import { readPlatformCredits, type PlatformCreditsTable } from '../platformCredits'
-import { BALANCE_POLL_MS } from '../constants'
-import type { PlatformBalance } from '../../shared/types'
 import { canOpenPathsOf, openPathVia, openResourceVia, workspaceOf } from '../services'
 import { activityOf, activityOfOps, locateStepOf, previewAddressOf } from '../fileActivity'
 import type { FileEntry, FileOp } from '../fileActivity'
@@ -87,25 +85,11 @@ export function makeContextView(
   const AgentGraph = makeAgentGraph(ctx, kit, heads)
   const ErrorBoundary = makeErrorBoundary(t)
 
-
-/** 各平台的剩余额度文案。余额只归自己那一张卡：DeepSeek 的账户余额给 DeepSeek，
- *  剩余积分给积分平台；读不到的整行不出现（宁可少一个数字，也不显示错配的额度）。 */
-
   function ContextViewBody(props: ContextViewProps): ReactElement {
     // 价目册与平台余额：与输入框那行读数共用同一套读取器，两处因此不会对同一次
     // 结算或同一个余额给出不同答案。
     const { book } = useModelPrices()
-    const [balance, setBalance] = useState<PlatformBalance | null>(null)
-    const [credits, setCredits] = useState<PlatformCreditsTable | null>(null)
-    useEffect(() => {
-      setBalance(readPlatformBalance(setBalance))
-      setCredits(readPlatformCredits(setCredits))
-      const timer = setInterval(() => {
-        setBalance(readPlatformBalance(setBalance))
-        setCredits(readPlatformCredits(setCredits))
-      }, BALANCE_POLL_MS)
-      return () => { clearInterval(timer) }
-    }, [])
+    const { balance, credits } = usePlatformBalances()
     const sessionId = props.sessionId
     const inSidebar = props.host === 'sidebar'
     // 标签页与 /context 弹窗共享这份逐会话明细存储，所以已打开的标签页
@@ -403,20 +387,68 @@ export function makeContextView(
     // 显示货币与平台行：算一次供头部那三张卡与下面独立的平台行共用，
     // 两者因此不会各算各的。
     const displayCurrency: CostCurrency = activeLocale === 'zh' ? 'cny' : 'usd'
-    const platformRows = platformSpendsOf(data.cost ?? null, data.calls ?? null, book, null, data.creditRates ?? null)
+    const platformRows = platformSpendsOf(data.cost ?? null, data.calls ?? null, book, moneyRates(), data.creditRates ?? null)
     // 当前在用的平台：`Snapshot.provider` 是 harness 逐请求更新的路由。
     // 当前路由直接取快照字段，**不**从可定价的平台行里反查：那一行可能因为
-    // 「这一轮还没入账」或「拿不到费率」而不存在，反查会得到 null，进而让费用卡
-    // 退回按整个账本计价（跨平台求和）。单位与积分值才需要那一行。
+    // 「这一轮还没入账」或「拿不到费率」而不存在，反查会得到 null。
     const activeProvider = data.provider ?? null
-    const activePlatform = platformRows.find(r => r.provider === activeProvider) ?? null
-    // 会话里**出现过官方模型**吗？没有的话整块金额统计都不成立：峰谷时段、人民币
-    // 价目表、按 token 计价的拆分全都是官方计价才有的概念。一个只用了积分平台的
-    // 会话，显示一张人民币费用卡（外加峰谷徽标与价目表）等于凭空造出一笔账单。
-    const usedOfficial = data.cost !== null && data.cost !== undefined
-      && Object.keys(data.cost).some(provider => isDeepSeekProvider(provider))
     const subtitle = (data.model ?? '') + (data.provider ? ' · ' + data.provider : '')
     const gate = unsupportedOf(data.unsupported)
+    const balanceTexts = platformBalanceTexts(platformRows, balance, credits)
+    // 会话里**出现过官方模型**吗？峰谷拆分与人民币价目表都是官方计价才有的概念，
+    // 所以那张卡只对有官方用量的会话出现，且只算当前在用的那个平台。
+    const usedOfficial = data.cost !== null && data.cost !== undefined
+      && Object.keys(data.cost).some(provider => isDeepSeekProvider(provider))
+    const activePlatform = platformRows.find(r => r.provider === activeProvider) ?? null
+
+    /** 本会话的 **Token 汇总**：按 token「是什么」拆分（上下文类别 + 精确 output），
+     *  与对话标签页上那张卡同一个组件、同一份口径。与下面费用段严格分栏——
+     *  token 汇总里不出现金额，费用汇总里不出现 token 数。 */
+    const tokenSection = (
+      <div className="lc-sect">
+        <div className="lc-sect-head">
+          <span className="lc-sect-title">{t('tokens.title')}</span>
+          <span className="lc-sect-sub">{t('sidebar.tokensSub')}</span>
+        </div>
+        <div className="lc-cols lc-head">
+          <StatsTokens usage={usage} current={data.current} breakdown={breakdown} />
+        </div>
+      </div>
+    )
+
+    /** 各平台的消费汇总。这是**费用**的那一半：每张卡一个平台、各自带自己的账单单位
+     *  与剩余额度，下面再摊开逐模型的明细。与上方纯上下文的卡片组严格分栏——
+     *  token 汇总里不出现金额，费用汇总里不出现 token 数。 */
+    const spendSection = platformRows.length > 0
+      ? (
+        <div className="lc-sect">
+          <div className="lc-sect-head">
+            <span className="lc-sect-title">{t('spend.title')}</span>
+            <span className="lc-sect-sub">{t('spend.sub')}</span>
+          </div>
+          <div className="lc-cols lc-platform-row">
+            <StatsPlatforms rows={platformRows} currency={displayCurrency} balances={balanceTexts} />
+          </div>
+          {/* 官方计价才有峰谷：只算当前在用的那个平台，积分平台不按人民币计价。
+              它属于费用一侧，因此住在这里而不是上方那摞上下文卡片里。 */}
+          {usedOfficial
+            ? (
+              <div className="lc-cols lc-head">
+                <StatsCost
+                  usage={data.cost ?? null}
+                  calls={data.calls ?? null}
+                  creditRates={data.creditRates ?? null}
+                  provider={activeProvider}
+                  unit={activePlatform?.unit}
+                  creditsValue={activePlatform?.unit === 'credits' ? activePlatform.value : undefined}
+                  currency={displayCurrency}
+                />
+              </div>
+            )
+            : null}
+        </div>
+      )
+      : null
 
     const compositionCard = (
       <CurrentComposition
@@ -547,53 +579,35 @@ export function makeContextView(
       />
     )
 
+    // 右侧栏座位只回答「本会话的汇总」，分两段：先 Token、后费用。
+    // 上下文那一整摞（组成、趋势、浏览器、事件、文件、Agent 网络）留在对话标签页上——
+    // 右侧栏本来就窄，把上下文与分析工具叠进来，两件都读不清。
+    if (inSidebar) {
+      return (
+        <div className="lc-root" ref={rootRef}>
+          {tokenSection}
+          {spendSection ?? <div className="lc-empty">{t('spend.empty')}</div>}
+          {gate !== null && (
+            <UpgradeGate sessionId={sessionId} current={gate.current} minimum={gate.minimum} />
+          )}
+        </div>
+      )
+    }
+
     return (
       <div className="lc-root" ref={rootRef}>
 
-        {inSidebar ? null : (
-          <div className="lc-cols lc-head">
-            <StatsContext counts={counts} humanInputs={data.humanInputs} answers={data.answers} toolCalls={data.toolCalls}
-              files={ioTotals} tools={toolTally}
-              cost={data.cost} locale={activeLocale} sessionId={typeof sessionId === 'string' ? sessionId : undefined}
-              onFigureClick={onFigureClick} />
-            <PluginInfo />
-          </div>
-        )}
+        <div className="lc-cols lc-head">
+          <StatsContext counts={counts} humanInputs={data.humanInputs} answers={data.answers} toolCalls={data.toolCalls}
+            files={ioTotals} tools={toolTally}
+            locale={activeLocale} sessionId={typeof sessionId === 'string' ? sessionId : undefined}
+            onFigureClick={onFigureClick} />
+          <PluginInfo />
+        </div>
         <div className="lc-cols lc-head">
           <StatsTokens usage={usage} current={data.current} breakdown={breakdown} />
-          {/* 只在**用过官方模型**时才出现（见上面 `usedOfficial`）：没有官方用量时
-              这张卡连同峰谷拆分与价目表一起省略。只算当前在用的那个平台——
-              积分平台的用量不能按人民币计价。 */}
-          {usedOfficial
-            ? (
-          <StatsCost
-            usage={data.cost ?? null}
-            calls={data.calls ?? null}
-            creditRates={data.creditRates ?? null}
-            provider={activeProvider}
-            unit={activePlatform?.unit}
-                creditsValue={activePlatform?.unit === 'credits' ? activePlatform.value : undefined}
-                currency={displayCurrency}
-              />
-            )
-            : null}
           <StatsTiming timing={data.timing ?? null} spans={data.spans} />
         </div>
-
-        {/* 平台卡**单独成行**：头部那三张卡各有 `min-width: min(360px, 100%)`，
-            再往里塞就会把每张压成一条竖排窄柱。这里也不与它们共享列宽——
-            平台数量本来就随使用情况变化，行数因此自行决定。 */}
-        {platformRows.length > 0
-          ? (
-            <div className="lc-cols lc-platform-row">
-              <StatsPlatforms
-                rows={platformRows}
-                currency={displayCurrency}
-                balances={platformBalanceTexts(platformRows, balance, credits, displayCurrency)}
-              />
-            </div>
-          )
-          : null}
 
         <div className="lc-cols lc-cols-main">
           <div className="lc-col flex-1 min-w-[min(360px,100%)]">{compositionCard}{trendCard}</div>
@@ -641,7 +655,8 @@ export function makeContextView(
           }}
         />
 
-        <div className="lc-foot">{t('footer')}</div>
+        {/* 这一页只讲上下文与 Token：平台消费住右侧栏那一列（以及左侧统计页的费用段），
+            放在这里会让同一页同时出现两种量纲。 */}
 
         {gate !== null && (
           <UpgradeGate sessionId={sessionId} current={gate.current} minimum={gate.minimum} />

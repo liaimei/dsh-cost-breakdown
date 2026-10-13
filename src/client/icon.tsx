@@ -51,13 +51,14 @@ export function InsightPanelIcon({ size = 18 }: { size?: number }): ReactElement
 
 /** 标签芯片的标题座位：标签前的徽标，通过插件自己绑定的翻译函数读取，
  *  使芯片跟随 locale——而不用标签信息 hook，后者遇到尚未提交的标签记录可能抛错。
+ *  `key` 由调用方给出：对话区那页与右侧栏那一列各讲一件事，因此各有各的名字。
  *  标签尾部的间隙（`.lc-title-label`）让激活芯片的淡出效果不压到末尾几个字形上。 */
-export function makeContextTabTitle(t: Translate): () => ReactElement {
+export function makeContextTabTitle(t: Translate, key = 'tab'): () => ReactElement {
   return function ContextTabTitle(): ReactElement {
     return (
       <>
         <ContextIcon size={16} className="lc-title-icon" />
-        <span className="lc-title-label">{t('tab')}</span>
+        <span className="lc-title-label">{t(key)}</span>
       </>
     )
   }

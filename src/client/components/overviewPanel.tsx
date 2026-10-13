@@ -18,6 +18,7 @@ import { useEffect, useMemo, useState, type ReactElement } from 'react'
 import { estimateSessionCost, formatCost, moneyOnlyUsage, type CostCurrency, type ModelBook } from '../cost'
 import { fmt } from '../format'
 import { useModelPrices } from '../modelPrices'
+import { moneyRates } from '../rateTables'
 import { platformBalanceTexts } from '../platformBalances'
 import { BALANCE_POLL_MS } from '../constants'
 import { readPlatformBalance } from '../balance'
@@ -188,8 +189,11 @@ export function makeOverviewPanel(ctx: ClientCtx, kit: ViewKit): (props: Overvie
       sort,
     )
     const paged = pageOf(visible, page)
-    const kpi = kpisOf(ranged, allRows.length, book, currency)
+    const kpi = kpisOf(ranged, allRows.length, book, currency, moneyRates())
     const days = aggregateDays(allRows, book, currency)
+    // 平台消费一行行列出来：概览页统计的是全部会话，因此这里的每一行都是
+    // 跨会话合并后的平台消费（各平台仍按自己的账单单位）。
+    const platformRows = kpi.billed?.platforms ?? []
     const openOne = (id: string): void => {
       // 视图主人的动词会把中间那列导航回
       // 对话本身（selectPanel(null)），所以这个页面无需自己关闭。
@@ -235,7 +239,9 @@ export function makeOverviewPanel(ctx: ClientCtx, kit: ViewKit): (props: Overvie
               <div className="lc-empty">{t('ov.unavailable')}</div>
             ) : (
               <>
-                {/* 区间选择器不约束用法图；后者读的是合并后的每日台账。 */}
+                {/* 左侧这一页统计的是**全部会话**的汇总，因此 token 与费用各自成段：
+                    上面只讲 token（用量、构成、缓存命中），下面只讲钱与积分。
+                    两段之间不共享数字，读者不会在一张卡里读到两种口径。 */}
                 <div className="lc-ov-first">
                   <div className="lc-ov-kpis">
                     <div className="lc-stat lc-ov-kpi">
@@ -247,11 +253,6 @@ export function makeOverviewPanel(ctx: ClientCtx, kit: ViewKit): (props: Overvie
                       <span className="lc-stat-label">{t('ov.kpi.tokens')}</span>
                       <span className="lc-stat-value">{fmt(kpi.tokens)}</span>
                       <span className="lc-stat-sub">{t('stats.turns')} {fmt(kpi.turns)}</span>
-                    </div>
-                    <div className="lc-stat lc-ov-kpi">
-                      <span className="lc-stat-label">{t('stats.cost')}</span>
-                      <span className="lc-stat-value">{kpi.cost === null ? '—' : formatCost(kpi.cost, currency)}</span>
-                      <span className="lc-stat-sub">{t('ov.kpi.pricedSub', { n: kpi.costSessions, total: kpi.sessions })}</span>
                     </div>
                     <div className="lc-stat lc-ov-kpi">
                       <span className="lc-stat-label">{t('stats.cacheHit')}</span>
@@ -268,19 +269,38 @@ export function makeOverviewPanel(ctx: ClientCtx, kit: ViewKit): (props: Overvie
                       <span className="lc-stat-value">{fmtDuration(kpi.wallMs)}</span>
                       <span className="lc-stat-sub">{t('ov.kpi.wallSub', { n: fmt(kpi.calls) })}</span>
                     </div>
+                    <div className="lc-stat lc-ov-kpi">
+                      <span className="lc-stat-label">{t('ov.kpi.modelCalls')}</span>
+                      <span className="lc-stat-value">{fmt(kpi.calls)}</span>
+                      <span className="lc-stat-sub">{t('ov.kpi.pricedSub', { n: kpi.costSessions, total: kpi.sessions })}</span>
+                    </div>
                   </div>
-                  <OverviewUsage days={days} currency={currency} today={todayKey()} />
+                  <OverviewUsage days={days} today={todayKey()} />
                 </div>
                 <div className="lc-ov-stats">
-                  <OverviewBilled billed={kpi.billed} currency={currency} />
-                  {/* 每个平台一张卡：跨会话按平台汇总，与单会话页同一个组件。 */}
-                  <StatsPlatforms
-                    rows={kpi.billed?.platforms ?? []}
-                    currency={currency}
-                    balances={platformBalanceTexts(kpi.billed?.platforms ?? [], balance, credits, currency)}
-                  />
+                  {/* 计费桶与上下文组成都按 token 口径，属于上面那一段。 */}
+                  <OverviewBilled billed={kpi.billed} />
                   <OverviewTokens tokens={kpi.tokenParts} />
                   <StatsTiming timing={kpi.timing} />
+                </div>
+
+                {/* 费用汇总单独成段：各平台按自己的账单单位与币种分行，
+                    下面再摊开逐模型的明细。**不给合计**：把积分与人民币加成一个数字
+                    没有意义，各平台的卡片与明细表已经各自给出了自己的读数。 */}
+                <div className="lc-ov-spend">
+                  <div className="lc-ov-spend-head">
+                    <span className="lc-ov-spend-title">{t('ov.spend.title')}</span>
+                    <span className="lc-ov-spend-sub">{t('ov.spend.sub')}</span>
+                  </div>
+                  {platformRows.length > 0 ? (
+                    <div className="lc-ov-platform-row">
+                      <StatsPlatforms
+                        rows={platformRows}
+                        currency={currency}
+                        balances={platformBalanceTexts(platformRows, balance, credits)}
+                      />
+                    </div>
+                  ) : <div className="lc-empty">{t('ov.spend.empty')}</div>}
                 </div>
                 <div className="lc-ov-body">
                   <div className="lc-ov-left">

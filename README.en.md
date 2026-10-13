@@ -14,11 +14,13 @@ every context-insight surface is preserved:
 
 - **Context dashboard**: composition (system / tools / user / assistant / tool results),
   trend chart, context browser, event list, file activity, agent network;
-- **Cost Statistics page** (left nav, the renamed Context Insights page): cross-session KPI
-  band, billed tokens split by the platform's own four buckets, context-composition donut,
-  7-day usage chart, activity heatmap, skill loads, per-session cards, account-balance capsule;
+- **Statistics page** (left nav): **every session's** token summary (billed tokens split by the
+  platform's four buckets, context-composition donut, 7-day token chart, activity heatmap, skill
+  loads, per-session cards) and **spend summary** (each platform in its own billing unit and
+  currency, expanded model by model);
 - **the `/context` command** and its modal;
-- **the per-session token and cost cards** (subagent costs folded in).
+- **the per-session token card** (subagent usage folded in) and **platform spend summary**
+  (one card per platform, its per-model rows inside it).
 
 ## What this fork adds
 
@@ -101,12 +103,21 @@ and (2) the API-key provider when no account service exists. The remembered figu
 immediately and the readout re-reads it on a **60-second** cadence: the number moves with every
 billed request, so a long-lived mount that read once would show a stale figure.
 
-### ③ The Cost Statistics page: the platform's own billing buckets (`src/client/components/overviewBilled.tsx`)
+### ③ One question per surface
 
-The left-nav page, the right-sidebar tab and the conversation tab are all named **Cost Statistics**
-now (renamed from Context Insights), and the page gains a
-**Billed Tokens** card: the four buckets the platform actually bills, all **provider-reported and
-exact** (never estimated).
+| Surface | The question it answers |
+|---|---|
+| **Left-nav Statistics page** | **Every session's** totals — tokens and spend as two separate sections |
+| **In-session "Context" tab** | **Context and tokens only** — no amount appears on this page |
+| **Right-sidebar "Session Summary" panel** | This session in two sections: **token summary** (by context category) and **per-platform spend** |
+| **Composer readout** | The platform in use right now, its spend and its balance |
+
+**Tokens and money never share a section**: the conversation tab carries context and tokens only
+and shows **no amount at all** (even its Agent-network node cards report tokens alone); money lives
+in the right-sidebar "Session Summary" panel's spend section and in the statistics page's spend section. Neither side
+prints a token count and an amount into one string — they are different quantities, and putting them
+together invites a comparison that does not exist. The Billed Tokens card counts the four buckets the
+platform actually bills, all **provider-reported and exact** (never estimated):
 
 | Bucket | Meaning |
 |---|---|
@@ -114,29 +125,27 @@ exact** (never estimated).
 | Uncached input | `inputTokens` (cache writes included), billed at the miss rate |
 | Output | `outputTokens`, reasoning included |
 
-Under the ring sits the **peak / off-peak cost split**, answering "how much of this rode the peak
-rate". It complements the **context-composition donut** beside it — the same tokens, split by what
-they were (system / tools / user / assistant / tool results): one says when the money was spent,
-the other says what the tokens contained.
+### ④ Platform spend (`src/client/components/statsPlatforms.tsx` + `platformSpendDetail.tsx`)
 
-### ④ The session's cost card (`src/client/components/statsCost.tsx`)
+One session can use several platforms at once, and **each bills in its own unit**: DeepSeek
+officially in CNY tokens (peak/off-peak), credit platforms per call, third parties in USD. So:
 
-The Summary Statistics head row gains a **Cost Stats** card between **Token Stats** and
-**Timing Stats**, laid out like the donut cards on either side:
+- **one card per platform**, each carrying its own billing currency and remaining balance, and they
+  are **never summed** — adding two currencies yields a number that means nothing;
+- each card carries its **per-model rows** (model → spend, calls), sourced from the same data as
+  the ring — a second table would only repeat what the card already shows;
+- **a model that cannot be priced is labelled "No rate configured"**, never shown as ¥0: those are
+  different claims.
+- **the currency follows the platform's own bill**, not the UI locale: ¥ for DeepSeek, $ for third
+  parties, credits for credit platforms. This deliberately reverses upstream's
+  "convert everything to the display currency" behaviour.
 
-- **Bucket costs**: the session's spend split by the four billed buckets — cache input / uncached
-  input / cache write / output. The ring carries the shares; each legend sub-row carries that
-  bucket's money. Rates come from the same table the Token card uses, so "used more" and "paid
-  more" are two views of one number.
-- **Peak / off-peak split**: how much of the money rode each window, with its share. A zero window
-  is still listed — the ring skips a zero arc, but the legend should not vanish with it.
-- **Account balance**: the same two sources as the Insights capsule — the remembered figure is
-  painted first, then the host route refreshes it. When neither answers, the row is absent rather
-  than a zero standing in for "unknown".
+The official peak/off-peak split (the cost card) appears only for sessions that actually used an
+official model, counts only the platform in use, and lives in the spend section rather than among
+the context cards.
 
-All four cost surfaces (this card, the dock readout, the billed-tokens card and the Token card's
-figures) price through the one entry point in `client/cost.ts` (`estimateSessionCostByBucket`), so
-they cannot drift apart.
+All spend surfaces (the platform cards and the composer readout) price through the
+one entry point in `client/cost.ts` (`estimateSessionCostByBucket`), so they cannot drift apart.
 
 ## Relationship to upstream
 
@@ -144,7 +153,8 @@ they cannot drift apart.
 |---|---|
 | Official CNY table + peak/off-peak + Chinese holidays | models.dev USD book + flat `PEAK_FACTOR = 2`, no holiday table |
 | Persistent composer-dock readout | none |
-| Cost Stats card on the Summary Statistics page (buckets + peak/off-peak + balance) | none |
+| Platform spend summary: one card per platform with its per-model rows inside it, each in its own billing currency | converts to the display currency; platforms are not itemised by model |
+| Tokens and money in separate sections (the context page carries no amount) | cost card and token card share one head row |
 | `holidays` field in `host/config.ts` | none |
 | `contextTimeline` stateVersion 29, `contextActivity` 6 | 27 / 4 |
 
