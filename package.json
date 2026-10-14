@@ -1,6 +1,6 @@
 {
   "name": "dsh-cost-breakdown",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Token 用量与费用：按平台分别计价，各用自己的账单单位（人民币 / 美元 / 积分），卡内含逐模型消费与调用次数；官方人民币价目表含峰谷与法定节假日。同时保留上下文仪表盘、浏览器与 /context 命令。",
   "icon": "icon.svg",
   "author": "liaimei",
