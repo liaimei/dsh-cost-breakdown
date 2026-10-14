@@ -146,7 +146,7 @@ export interface Baseline {
     transportFile: string
     transportPresent: boolean
   }
-  /** The balance capsule's host seam (src/host/balance.ts). The facts fold
+  /** The balance route's host seam (src/host/balance.ts). The facts fold
    * reads the DeepSeek API-key provider's settings row off the Config-form
    * `describe()` projection — the provider row is the entry whose served
    * value declares the top-level `apiKeyEnv` credential ref, preferred under

@@ -36,7 +36,6 @@ import { openPluginSettings } from '../settingsJump'
 import type { PlatformBalance, SkillInfo } from '../../shared/types'
 import { dayKeyOf } from '../../shared/days'
 import type { ViewKit } from '../viewkit'
-import { makeBalanceCapsule } from './balanceCapsule'
 import { makeDateRange } from './dateRange'
 import { makeErrorBoundary } from './errorBoundary'
 import { makeHeatmap, todayKey, type HeatMetric } from './heatmap'
@@ -76,7 +75,6 @@ export function makeOverviewPanel(ctx: ClientCtx, kit: ViewKit): (props: Overvie
   const { t, fmtDuration } = kit
   const Heatmap = makeHeatmap(kit)
   const OverviewCard = makeOverviewCard(kit)
-  const BalanceCapsule = makeBalanceCapsule(ctx, kit)
   const DateRange = makeDateRange(kit)
   const OverviewBilled = makeOverviewBilled(kit, Donut)
   const StatsPlatforms = makeStatsPlatforms(kit, Donut)
@@ -211,8 +209,6 @@ export function makeOverviewPanel(ctx: ClientCtx, kit: ViewKit): (props: Overvie
               <button type="button" className="lc-ov-settings" title={t('plugin.settingsOpen')} onClick={() => { openPluginSettings() }}>
                 <IconSettings size={14} />{t('plugin.settings')}
               </button>
-              {/* 在实时数字落地之前什么都不渲染，所以标题行永远不会因它而重排。 */}
-              <BalanceCapsule />
               {/* 用一个包裹层，好让头部右侧那一簇只推挤一次；一个裸的 `.lc-gran` 兄弟节点会把这块自由空间劈开。 */}
               <div className="lc-ov-headctl">
                 <DateRange

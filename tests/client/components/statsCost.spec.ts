@@ -1,6 +1,6 @@
 // The cost card on the session view (src/client/components/statsCost.tsx) rendered with real React:
 // the donut splits the session's spend by the four billed buckets, the peak/off-peak split sits
-// underneath, and the account balance rides the same two sources as the Insights capsule.
+// underneath, and the account balance rides the same reader as the platform cards and the composer readout.
 
 import { createElement as h } from 'react'
 import assert from 'node:assert/strict'

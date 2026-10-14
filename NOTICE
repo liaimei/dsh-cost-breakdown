@@ -179,3 +179,17 @@ that resolves to undefined without `--localstorage-file`, and it shadows jsdom's
 every spec that seeded or read a remembered balance failed with "Cannot read properties
 of undefined" (82 cases across three files). The shim supplies the platform's storage
 shape; no production code was relying on the broken behaviour.
+
+Header balance pill removed (own code): the Statistics page's heading carried a
+`DeepSeek 余额 ¥36.79` capsule (src/client/components/balanceCapsule.tsx, its
+`.lc-ov-balance*` rules in client/styles/overview.css and
+tests/client/components/balanceCapsule.spec.ts), fed by the same client/balance.ts
+reader. The account balance is already stated by the cost card's own balance row
+(`.lc-sc-balance`, layout `statsCost.tsx`) and by the per-platform cards' remaining
+amounts, so the heading repeated one figure a third time and sat between the page
+title and the date-range controls. The component, its spec, its CSS and its mount
+in `client/components/overviewPanel.tsx` are gone; `client/balance.ts` and
+`host/balance.ts` stay, since the cost card, the platform cards and the composer
+readout still read through them (their doc comments no longer call the consumer a
+"capsule").
+

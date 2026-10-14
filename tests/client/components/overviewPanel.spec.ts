@@ -3,6 +3,8 @@
 
 import { act, createElement as h } from 'react'
 import assert from 'node:assert/strict'
+import { readFileSync, readdirSync } from 'node:fs'
+import { join } from 'node:path'
 import { afterEach, beforeEach, describe, test, vi } from 'vitest'
 import { makeOverviewPanel } from '../../../src/client/components/overviewPanel'
 import { DICT_ZH } from '../../../src/client/i18n'
@@ -115,8 +117,8 @@ beforeEach(() => {
   resetModelPrices()
   setModelPricesLoader(() => Promise.resolve(PROVIDERS))
   backfillPosts.length = 0
-  // The heading's balance capsule POSTs its own route on mount (client/balance.ts);
-  // only the warm-up trigger is this spec's subject.
+  // The panel POSTs the balance route for its platform cards' remaining-balance rows
+  // (client/balance.ts); only the warm-up trigger is this spec's subject.
   vi.stubGlobal('fetch', async (url: string | URL) => {
     const route = String(url)
     if (route.endsWith('/backfill')) backfillPosts.push(route)
@@ -479,6 +481,28 @@ describe('OverviewPanel', () => {
     } finally {
       chrome.remove()
     }
+  })
+
+  test('the heading lost its balance pill: the account balance lives on the cards, not in the title row', async () => {
+    // The heading carried a `DeepSeek 余额 ¥…` capsule fed by client/balance.ts, so the
+    // same figure appeared a third time (the cost card's own balance row and the platform
+    // cards already carry it) and it separated the title from the range controls.
+    const ctx = makeCtx()
+    const { m } = await openPanel(ctx)
+    const head = query(m.container, '.lc-ov-pagehead')
+    assert.equal(head.querySelector('.lc-ov-balance'), null, 'no balance pill in the heading')
+    // The title row is just the title, the settings chip, and the right-hand controls.
+    assert.deepEqual(
+      [...head.children].map(el => el.className.split(' ')[0]),
+      ['lc-ov-pagetitle', 'lc-ov-settings', 'lc-ov-headctl'],
+    )
+    const src = readFileSync(join(process.cwd(), 'src/client/components/overviewPanel.tsx'), 'utf8')
+    assert.doesNotMatch(src, /BalanceCapsule/, 'the heading no longer mounts one')
+    assert.equal(readdirSync(join(process.cwd(), 'src/client/components')).includes('balanceCapsule.tsx'), false,
+      'and the component itself was deleted')
+    assert.equal(readFileSync(join(process.cwd(), 'src/client/styles/overview.css'), 'utf8').includes('lc-ov-balance'), false,
+      'with its stylesheet rules')
+    await m.unmount()
   })
 
   test('hovering a heat cell portals its tip to <body>; leaving hides it', async () => {

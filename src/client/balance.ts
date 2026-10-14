@@ -1,7 +1,10 @@
-/** Context Insights 页头部胶囊背后的 DeepSeek 平台余额：上一次打开记住的数字先立即
- * 绘制，随后由插件 `/api/dsh-cost-breakdown/balance` 路由（host/balance.ts）的一次
- * 后台读取校正。没记住、也没返回结果时就什么都不渲染——
- * 胶囊位置上永远不出现加载动画或错误提示。 */
+/** DeepSeek 开放平台余额背后的客户端读取：上一次打开记住的数字先立即绘制，
+ *  随后由插件 `/api/dsh-cost-breakdown/balance` 路由（host/balance.ts）的一次
+ *  后台读取校正。没记住、也没返回结果时就什么都不渲染——
+ *  读数位置上永远不出现加载动画或错误提示。
+ *
+ *  读者是费用卡上那一行余额、平台卡的剩余额度与输入框下方的读数；
+ *  本模块只负责「读」，不决定它出现在哪个界面。 */
 
 import type { PlatformBalance, PlatformBalanceEntry } from '../shared/types'
 import { asRecord } from './services'
@@ -36,9 +39,9 @@ function amountOf(value: unknown): number | null {
   return typeof n === 'number' && Number.isFinite(n) && n >= 0 ? n : null
 }
 
-/** 校验一份余额响应。没有任何条目通过时返回 null，胶囊据此读作「无可展示」——
+/** 校验一份余额响应。没有任何条目通过时返回 null，界面据此读作「无可展示」——
  *  与「合法但条目为零的响应」刻意区分开，也正是它让过期的记忆数字
- *  比一颗空白胶囊更可取。 */
+ *  比一行空白更可取。 */
 export function platformBalanceOf(value: unknown): PlatformBalance | null {
   const data = asRecord(value)
   if (data === null) return null
@@ -90,7 +93,7 @@ function storageFn(): StorageFace | null {
     const found: unknown = globalThis.localStorage
     storage = found === null || found === undefined ? null : found as StorageFace
   } catch {
-    // 某些隐私模式下光是访问 storage 就会抛错：胶囊此时就没有记住的数字可用。
+    // 某些隐私模式下光是访问 storage 就会抛错：此时就没有记住的数字可用。
     storage = null
   }
   return storage

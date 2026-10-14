@@ -112,7 +112,7 @@ describe.skipIf(reasons.length > 0)('compat matrix — real dsh sources per base
       // The balance route resolves the provider's settings row off the
       // Config-form `describe()` projection (the row matched by its own
       // apiKeyEnv-bearing section shape); the retired `get(ns)` section read
-      // is asserted absent, so a moved seam names itself instead of silently hiding the capsule.
+      // is asserted absent, so a moved seam names itself instead of silently hiding the balance rows.
       const balance = baseline.balance
       assert.equal(
         staging.dshHasString(baseline.tag, balance.settingsGetNeedle, balance.settingsFile),

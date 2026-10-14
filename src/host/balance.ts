@@ -1,6 +1,6 @@
 /**
  * DeepSeek 开放平台「余额」
- * 路由——成本统计页顶栏胶囊与输入区 dock 读数背后的数据（client/balance.ts）。
+ * 路由——费用卡余额行、平台卡剩余额度与输入区 dock 读数背后的数据（client/balance.ts）。
  *
  * 两个来源，按此顺序尝试：
  *
@@ -33,7 +33,7 @@ const DEEPSEEK_SETTINGS_NS = 'llm-deepseek'
 /** DeepSeek 平台的公开 API 根地址（`GET /user/balance`）。 */
 const PUBLIC_BASE_URL = 'https://api.deepseek.com'
 
-/** 平台读取的硬性上限：胶囊宁可不渲染，也不把页面挂住。 */
+/** 平台读取的硬性上限：余额宁可不渲染，也不把页面挂住。 */
 const FETCH_TIMEOUT_MS = 10_000
 
 /** harness `settings` service：对外只用 Config 表单的 `describe()` projection 这一个接口。 */
@@ -232,7 +232,7 @@ async function readBalance(facts: DeepSeekFacts): Promise<PlatformBalance | null
       })
       if (response.ok) value = balanceOfPayload(await response.json())
     } catch {
-      // 任何失败都返回 null——胶囊保持不显示。
+      // 任何失败都返回 null——余额那一行保持不显示。
     }
     return value
   })()

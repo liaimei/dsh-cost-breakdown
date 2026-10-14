@@ -11,10 +11,6 @@
 /* 用一个外层包住选择器与范围组，让头部只保留一次自动外边距推挤。 */
 .lc-ov-headctl { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .lc-ov-settings:hover { border-color: var(--dsw-alias-label-secondary); color: var(--dsw-alias-label-primary); }
-.lc-ov-balance { flex: none; display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 2px 10px; border-radius: 999px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l2); font-size: 12px; line-height: 18px; text-decoration: none; color: inherit; }
-.lc-ov-balance:hover .lc-ov-balance-value { text-decoration: underline; }
-.lc-ov-balance-label { color: var(--dsw-alias-label-secondary); white-space: nowrap; }
-.lc-ov-balance-value { font-variant-numeric: tabular-nums; font-weight: 600; white-space: nowrap; }
 
 .lc-hovertip { position: fixed; z-index: 300; max-width: min(320px, 50vw); white-space: pre-line; }
 
