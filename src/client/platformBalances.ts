@@ -6,12 +6,16 @@
  *  金额平台用余额接口的数字并**按账户自己的币种**取符号——绝不跟着界面语言走：
  *  一个以人民币记账的账户换成美元显示，读起来就不是它的账单。积分平台取**自己那一版**
  *  的积分池（CN 与国际版是两套账户，不能互相顶替），无限额的不显示这一行。
+ *
+ *  金额自带币种符号，而积分没有符号，因此积分那一支必须自己带上单位：
+ *  一个光秃秃的「5550」在「剩余」标签旁边读起来像钱，而它是积分。
  */
 
 import { balanceEntryOf } from './balance'
 import type { PlatformBalance } from '../shared/types'
 import type { PlatformCreditsTable } from './platformCredits'
 import type { PlatformSpend } from './platformSpend'
+import type { Translate } from './i18n'
 import { isDeepSeekProvider } from '../shared/providers'
 import { symbolOf } from './cost'
 import { fmtCredits } from './turnSpend'
@@ -29,13 +33,17 @@ export function platformBalanceTexts(
   rows: readonly PlatformSpend[],
   balance: PlatformBalance | null,
   credits: PlatformCreditsTable | null,
+  t: Translate,
 ): Record<string, { text: string } | undefined> {
   const out: Record<string, { text: string } | undefined> = {}
   for (const row of rows) {
     if (row.unit === 'credits') {
       // 按 provider 取该版本自己的余额：两版是两套积分池，不能互相顶替。
       const own = credits?.[row.provider]
-      out[row.provider] = own === undefined || own.unlimited ? undefined : { text: fmtCredits(own.total) }
+      // 单位跟着数字走：积分没有币种符号，光一个数字会被当成钱。
+      out[row.provider] = own === undefined || own.unlimited
+        ? undefined
+        : { text: t('costStat.credits', { n: fmtCredits(own.total) }) }
       continue
     }
     // 余额只归自己那一张卡：把某家的余额放在别家名下是错的。

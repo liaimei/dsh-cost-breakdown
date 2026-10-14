@@ -80,7 +80,7 @@ function balanceCellFor(
   credits: PlatformCreditsTable | null,
   t: ViewKit['t'],
 ): ReactElement | null {
-  const text = platformBalanceTexts([row], balance, credits)[row.provider]?.text
+  const text = platformBalanceTexts([row], balance, credits, t)[row.provider]?.text
   if (text === undefined) return null
   return row.unit === 'credits'
     ? <span className="lc-dock-left">{t('dock.creditsLeft', { n: text })}</span>
@@ -92,8 +92,9 @@ function dockBalanceTexts(
   rows: readonly PlatformSpend[],
   balance: PlatformBalance | null,
   credits: PlatformCreditsTable | null,
+  t: ViewKit['t'],
 ): Record<string, { text: string } | undefined> {
-  return platformBalanceTexts(rows, balance, credits)
+  return platformBalanceTexts(rows, balance, credits, t)
 }
 
 /**
@@ -454,7 +455,7 @@ export function makeComposerDock(
                 <StatsPlatforms
                   rows={allPlatforms}
                   currency={currency}
-                  balances={dockBalanceTexts(allPlatforms, balance, credits)}
+                  balances={dockBalanceTexts(allPlatforms, balance, credits, t)}
                 />
               </div>
               {/* 价目表是**官方人民币**的费率表，只对走官方计价的平台显示：

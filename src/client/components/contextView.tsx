@@ -394,7 +394,7 @@ export function makeContextView(
     const activeProvider = data.provider ?? null
     const subtitle = (data.model ?? '') + (data.provider ? ' · ' + data.provider : '')
     const gate = unsupportedOf(data.unsupported)
-    const balanceTexts = platformBalanceTexts(platformRows, balance, credits)
+    const balanceTexts = platformBalanceTexts(platformRows, balance, credits, t)
     // 会话里**出现过官方模型**吗？峰谷拆分与人民币价目表都是官方计价才有的概念，
     // 所以那张卡只对有官方用量的会话出现，且只算当前在用的那个平台。
     const usedOfficial = data.cost !== null && data.cost !== undefined

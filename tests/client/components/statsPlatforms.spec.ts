@@ -84,11 +84,13 @@ describe('each platform gets its own card', () => {
     const Cards = makeStatsPlatforms(kitZh, Donut)
     const m = await mount(h(Cards as never, {
       rows: ROWS, currency: 'cny',
-      balances: { workbuddy: { text: '剩 6387 积分' }, 'deepseek-account': { text: '¥38.12' } },
+      balances: { workbuddy: { text: '6387 积分' }, 'deepseek-account': { text: '¥38.12' } },
     } as never))
     try {
       const cards = queryAll(m.container, '.lc-pf-card')
-      assert.match(text(cards[0]), /剩 6387 积分/, 'the credit balance on the credit card')
+      // The card prints the "剩余" label itself, so the value carries only the figure
+      // and its unit — never a second copy of the label.
+      assert.match(text(cards[0]), /剩余\s*6387 积分/, 'the credit balance on the credit card')
       assert.doesNotMatch(text(cards[1]), /6387/, 'and NOT on the other credit platform')
       assert.match(text(cards[2]), /¥38\.12/, 'the account balance on DeepSeek')
     } finally { await m.unmount() }
@@ -136,7 +138,7 @@ describe('each platform gets its own card', () => {
     const m = await mount(h(Cards as never, { rows: [ROWS[0]], currency: 'cny' } as never))
     try {
       const card = queryAll(m.container, '.lc-pf-card')[0]
-      const rows = queryAll(card, '.lc-pf-models tr').map(tr => ({
+      const rows = queryAll(card, '.lc-pf-models tbody tr').map(tr => ({
         model: tr.querySelector('.lc-pf-model-name')?.textContent ?? '',
         spend: tr.querySelector('.lc-pf-model-spend')?.textContent ?? '',
         calls: tr.querySelector('.lc-pf-model-calls')?.textContent ?? '',
@@ -146,6 +148,40 @@ describe('each platform gets its own card', () => {
       assert.deepEqual(rows.map(r => r.spend), ['90', '30.78'])
       assert.deepEqual(rows.map(r => r.calls), ['900', '198'])
     } finally { await m.unmount() }
+  })
+
+  test('the table names its columns, so the two figures never read as one number', async () => {
+    // 消费 and 调用 are both right-aligned numbers; with no header and no gap between
+    // the columns they ran together ("198.111.8k", "0109").
+    const Cards = makeStatsPlatforms(kitZh, Donut)
+    const m = await mount(h(Cards as never, { rows: [ROWS[0]], currency: 'cny' } as never))
+    try {
+      const head = queryAll(m.container, '.lc-pf-card .lc-pf-models thead th')
+      assert.deepEqual(head.map(th => th.textContent), ['模型', '消费', '调用'])
+      // And each body row still carries exactly its own three cells.
+      const first = queryAll(m.container, '.lc-pf-card .lc-pf-models tbody tr')[0]
+      assert.deepEqual(
+        [...first.children].map(td => td.getAttribute('class')),
+        ['lc-pf-model-name', 'lc-pf-model-spend', 'lc-pf-model-calls'],
+      )
+    } finally { await m.unmount() }
+  })
+
+  test('the columns are separated by a padding rule the cell rule cannot override', async () => {
+    // The gap lived on `.lc-pf-model-spend { padding-left }` (0,1,0), which the
+    // `.lc-pf-models td { padding: 3px 0 }` cell rule (0,1,1) short-handed away —
+    // so the columns had no gap at all. The gap now rides a selector at least as
+    // specific as the cell rule.
+    const css = readFileSync(join(process.cwd(), 'src/client/styles/spend.css'), 'utf8')
+    const cell = /\.lc-pf-models td\s*\{([^}]*)\}/.exec(css)
+    assert.ok(cell !== null, 'the cell rule exists')
+    assert.match(cell[1], /padding:/, 'and sets the vertical padding')
+    // No bare `.lc-pf-model-spend { ... padding-left ... }` left behind.
+    const bare = /(^|\n)\.lc-pf-model-spend\s*\{/.exec(css)
+    assert.equal(bare, null, 'the spend gap is not declared on the losing bare selector')
+    const scoped = /\.lc-pf-models td\.lc-pf-model-spend\s*\{([^}]*)\}/.exec(css)
+    assert.ok(scoped !== null, 'it is declared scoped to the cell')
+    assert.match(scoped[1], /padding-left:\s*(?!0\b)\d/, 'with a real gap')
   })
 
   test('a model with no rate is labelled, never shown as a zero spend', async () => {
@@ -160,7 +196,7 @@ describe('each platform gets its own card', () => {
     }
     const m = await mount(h(Cards as never, { rows: [unrated], currency: 'cny' } as never))
     try {
-      const rows = queryAll(m.container, '.lc-pf-models tr')
+      const rows = queryAll(m.container, '.lc-pf-models tbody tr')
       assert.equal(rows.length, 2)
       const last = rows[1]
       assert.ok((last.textContent ?? '').includes('未配置费率'), 'the reason is stated')

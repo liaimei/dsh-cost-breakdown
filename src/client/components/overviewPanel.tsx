@@ -293,7 +293,7 @@ export function makeOverviewPanel(ctx: ClientCtx, kit: ViewKit): (props: Overvie
                       <StatsPlatforms
                         rows={platformRows}
                         currency={currency}
-                        balances={platformBalanceTexts(platformRows, balance, credits)}
+                        balances={platformBalanceTexts(platformRows, balance, credits, t)}
                       />
                     </div>
                   ) : <div className="lc-empty">{t('ov.spend.empty')}</div>}

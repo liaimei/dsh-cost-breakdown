@@ -15,13 +15,31 @@
   padding: 3px 0; border-top: 1px solid var(--dsw-alias-border-l1);
   color: var(--dsw-alias-label-primary); font-variant-numeric: tabular-nums;
 }
-.lc-pf-model-name {
+/* 列头：两列都是右对齐的数字，没有标题时相邻两列会读成一个数。 */
+.lc-pf-models th {
+  padding: 0 0 4px; text-align: right; font-size: 11px; font-weight: 400;
+  color: var(--dsw-alias-label-secondary); border-bottom: 1px solid var(--dsw-alias-border-l1);
+}
+.lc-pf-models th:first-child { text-align: left; }
+/* 模型名那一列吃掉剩余宽度并按需省略：它是三列里唯一可能很长的那个。 */
+.lc-pf-models td.lc-pf-model-name {
   min-width: 0; max-width: 0; width: 100%;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   color: var(--dsw-alias-label-secondary);
 }
-.lc-pf-model-spend { white-space: nowrap; text-align: right; font-weight: 600; padding-left: 10px; }
-.lc-pf-model-calls { white-space: nowrap; text-align: right; color: var(--dsw-alias-label-secondary); padding-left: 10px; }
+/* 列间距/对齐的规则同时命中 `th` 与 `td`，且选择器权重（`.lc-pf-models th.lc-pf-model-x`、
+   `.lc-pf-models td.lc-pf-model-x`，均为 0,2,1）不低于上面那条 `.lc-pf-models td`（0,1,1）：
+   早先只写 `.lc-pf-model-spend { padding-left: 10px }`（0,1,0），被那条 `td` 规则里的
+   `padding` 简写整条压掉，间隔从未生效——于是「198.11」与「1.8k」贴成了「198.111.8k」。 */
+.lc-pf-models th.lc-pf-model-spend, .lc-pf-models td.lc-pf-model-spend {
+  text-align: right; white-space: nowrap; padding-left: 16px;
+}
+.lc-pf-models th.lc-pf-model-calls, .lc-pf-models td.lc-pf-model-calls {
+  text-align: right; white-space: nowrap; padding-left: 16px;
+}
+/* 数值列的字重只给单元格：表头是引导文字，不该与数字一样重。 */
+.lc-pf-models td.lc-pf-model-spend { font-weight: 600; }
+.lc-pf-models td.lc-pf-model-calls { color: var(--dsw-alias-label-secondary); }
 /* 定不出价的模型写明「未配置费率」并整行变暗——¥0 会声称这些调用不花钱。 */
 .lc-pf-models tr.lc-pf-model-unpriced .lc-pf-model-name { color: var(--dsw-alias-label-tertiary); }
 .lc-pf-models tr.lc-pf-model-unpriced .lc-pf-model-spend {

@@ -129,8 +129,17 @@ export function makeStatsPlatforms(
                 )
                 : null}
               {/* 逐模型明细：模型 / 消费 / 调用次数。它就是这张卡的「由什么构成」，
-                  因此不再另起一张表把同样的数字再抄一遍。 */}
+                  因此不再另起一张表把同样的数字再抄一遍。
+                  列头不能省：两列都是右对齐的数字，没有标题时「198.11」与「1.8k」
+                  会读成同一个数（曾经就是如此）。 */}
               <table className="lc-pf-models">
+                <thead>
+                  <tr>
+                    <th className="lc-pf-model-name">{t('dock.model')}</th>
+                    <th className="lc-pf-model-spend">{t('costStat.spendLabel')}</th>
+                    <th className="lc-pf-model-calls">{t('costStat.callsLabel')}</th>
+                  </tr>
+                </thead>
                 <tbody>
                   {modelLines.map(line => (
                     <tr key={line.model} className={line.value === null ? 'lc-pf-model-unpriced' : undefined}>

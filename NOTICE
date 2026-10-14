@@ -193,3 +193,23 @@ in `client/components/overviewPanel.tsx` are gone; `client/balance.ts` and
 readout still read through them (their doc comments no longer call the consumer a
 "capsule").
 
+Platform card readouts made legible (own code). Two defects on the per-platform
+spend cards:
+
+  * The per-model table's Spend and Calls columns ran together ("198.111.8k",
+    "0109") and carried no column headers. The gap was declared as
+    `.lc-pf-model-spend { padding-left: 10px }` — specificity (0,1,0) — while the
+    shared cell rule `.lc-pf-models td { padding: 3px 0 }` is (0,1,1), so the gap
+    was overridden and never applied. The gap now rides
+    `.lc-pf-models td.lc-pf-model-spend` (0,2,1), and the table gained a header row
+    (Model / Spend / Calls) so two right-aligned figures are told apart by name
+    rather than position. `client/styles/spend.css` and
+    `client/components/statsPlatforms.tsx` carry the change;
+    `client/i18n.ts` gains `costStat.spendLabel` in both dictionaries.
+
+  * A credit platform's remaining balance printed as a bare number ("剩余 5550")
+    while a money balance is self-describing through its currency symbol, so the
+    credit figure read like an amount. `platformBalanceTexts` now formats the
+    credit branch through the `costStat.credits` unit, and the function takes the
+    `Translate` it needed to do so — its four call sites in
+    `client/components/{overviewPanel,contextView,composerDock}.tsx` pass it.
