@@ -181,13 +181,32 @@ export function makeComposerDock(
         setNarrow(room !== null && need > 0 && need > room)
       }
       apply()
-      if (row === null || typeof ResizeObserver === 'undefined') {
-        window.addEventListener('resize', apply)
-        return () => { window.removeEventListener('resize', apply) }
+      // **触发**判据重跑的两件事，缺一不可：
+      //
+      // 1. 整行自身的尺寸变化（拖窗口、窗格宽度变化）。它的宽度由**父级**决定。
+      // 2. 行内子节点的增删。官方那两个读数胶囊与上下文环**与本插件各自挂载**，
+      //    它们后到并不改变整行尺寸——所以只观察整行的话，观察者根本不会回调，
+      //    判据会永久停在「行里只有自己」时算出的「够宽」上（实测：官方挂载前后
+      //    行宽都是 495px，ResizeObserver 回调 0 次）。这正是线上「官方被截成
+      //    `4 ...`、插件却始终完整」的直接原因。
+      //
+      // 只观察 `childList`（不加 `subtree`）：本行切换完整/图标形态时改的是自己按钮
+      // 内部的子节点，属于子树变化，不该反过来触发重算（那才会自激）。
+      const cleanups: (() => void)[] = []
+      if (row !== null && typeof ResizeObserver !== 'undefined') {
+        const observer = new ResizeObserver(apply)
+        observer.observe(row)
+        cleanups.push(() => { observer.disconnect() })
       }
-      const observer = new ResizeObserver(apply)
-      observer.observe(row)
-      return () => { observer.disconnect() }
+      if (row !== null && typeof MutationObserver !== 'undefined') {
+        const mutations = new MutationObserver(apply)
+        mutations.observe(row, { childList: true })
+        cleanups.push(() => { mutations.disconnect() })
+      }
+      // 两个观察器都没有时（或都没触发）至少还有窗口尺寸这条退路。
+      window.addEventListener('resize', apply)
+      cleanups.push(() => { window.removeEventListener('resize', apply) })
+      return () => { for (const dispose of cleanups) dispose() }
     }, [ready])
 
     /** 上一次真正应用过的锚点。ResizeObserver 的回调会因为卡片自身尺寸变化而再次触发，

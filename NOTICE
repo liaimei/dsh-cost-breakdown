@@ -245,3 +245,17 @@ For reference, the official component this row neighbours
 `matchMedia` or `useEffect`, and shrinks purely in CSS (`.root`/`.pill`
 `min-width:0;max-width:100%` plus `.label` ellipsis). Degrading to an icon is this
 fork's own, stronger fallback, so the arithmetic it needs is this fork's to own.
+
+The verdict also never RE-RAN at the right moment (own code). Fixing the arithmetic
+was not enough, because the plugin's own data (the timeline) arrives first: its
+effect runs while its row holds only itself, computes "room 495px vs need 237px —
+fits", and the official pills and context ring then mount on their own schedule.
+That does not resize the row (a flex row's width comes from its parent; measured in
+Chrome: 495px before and after), so the `ResizeObserver` on the row never fired
+(callback count 0) and the verdict stayed frozen at "fits" for the life of the
+mount. Only a window resize re-ran it. The observer set therefore gained a
+`MutationObserver` on the row with `childList: true` — the one scope that catches
+sibling entries mounting while ignoring this button's own form toggle, which would
+otherwise feed back. Verified in Chrome with the officials mounting asynchronously
+on a 495px row: the verdict re-runs on the child-list change, the readout collapses,
+and the official pills stop being ellipsised.

@@ -1188,6 +1188,48 @@ describe('ComposerDock — the status bar wears the statistics icon, and degrade
       assert.ok(queryAll(m.container, '.lc-dock-platform').length > 0, 'the readings render')
     } finally { await m.unmount(); vi.useRealTimers() }
   })
+
+  test('the officials mounting AFTER the plugin re-runs the verdict, with no resize event', async () => {
+    // The reason the collapse kept not happening in the live UI: the plugin's own data
+    // (the timeline) arrives first, so its effect runs while its row holds ONLY itself —
+    // room 495px, need 237px, verdict "full". The official pills and context ring mount
+    // on their own schedule afterwards. That does NOT resize the row (its width comes
+    // from the parent), so a ResizeObserver on the row never fires: measured in Chrome,
+    // the row stayed 495px and the observer callback count stayed 0. The verdict was
+    // therefore frozen at "full" forever, and since the official pills are compressible
+    // they were squeezed into ellipses ("4 ...", "46....") while this line stayed whole.
+    //
+    // The observer only watches the row (not its subtree), which is the one scope that
+    // catches siblings while ignoring this button's own width toggle.
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(bj(2026, 10, 12, 10)))
+    const D = Dock(new TestClientCtx({ locale: 'zh' }), kitZh)
+    const m = await mount(h(D, { sessionId: 's1', ...seatOf(onePlatform()) }))
+    try {
+      await flush()
+      const trigger = query(m.container, '.lc-dock')
+      const row = trigger.parentElement!
+      Object.defineProperty(row, 'clientWidth', { value: 495, configurable: true })
+      const probe = query(m.container, '.lc-dock-probe')
+      Object.defineProperty(probe, 'offsetWidth', { value: 237, configurable: true })
+      // First pass, alone: nothing to subtract, so the full reading is correct.
+      await act(async () => { window.dispatchEvent(new Event('resize')) })
+      await flush()
+      assert.ok(!trigger.classList.contains('lc-dock-narrow'), 'alone on the row it keeps the full reading')
+      // The official siblings arrive later, taking most of the row.
+      const official = document.createElement('div')
+      official.getBoundingClientRect = () => ({ width: 357 }) as DOMRect
+      Object.defineProperty(official, 'clientWidth', { value: 357, configurable: true })
+      Object.defineProperty(official, 'scrollWidth', { value: 357, configurable: true })
+      await act(async () => { row.appendChild(official) })
+      await flush()
+      // 495 - 357 - 12 = 126 < 237, so the reading no longer fits.
+      assert.ok(query(trigger, 'svg') !== null, 'the icon stays')
+      assert.ok(trigger.classList.contains('lc-dock-narrow'), 'the verdict re-ran off the child-list change')
+      assert.equal(queryAll(m.container, '.lc-dock-platform').length, 0, 'the readings are gone')
+      row.removeChild(official)
+    } finally { await m.unmount(); vi.useRealTimers() }
+  })
 })
 
 describe('ComposerDock — yields to the official panel on the same row', () => {
