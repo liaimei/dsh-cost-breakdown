@@ -46,13 +46,14 @@ Changes made in this fork, as required by section 4(b) of the Apache License:
     countdown. When the row cannot fit the full reading the sentence
     degrades to a clock icon
     (`primitives.ts` gains `IconClock`, resolved from the official icon set) plus
-    `fmtCountdownCompact`. The verdict compares the space LEFT for this row (the
-    parent's content box minus the official sibling entries, which sit in the same
+    `fmtCountdownCompact`. The verdict is meant to compare the space LEFT for this row
+    (the parent's content box minus the official sibling entries, which sit in the same
     row, and the gaps) against the width the full reading needs, supplied by an
     always-rendered, visually hidden measuring probe — never a viewport check (a wide
     window with a narrow column must still degrade) and never the row's own rendered
-    width (which would oscillate). The read is injectable through an
-    `IsRowTooNarrow` seam on `makeComposerDock` so tests need not stub `window`.
+    width (which would oscillate). (As shipped, the subtraction was in fact missing and
+    the probe measured text only; both are corrected below — the seam named here never
+    existed in the code.)
     Its expanded card
     embeds the two
     Summary Statistics cards (`statsTokens`/`statsCost`) rather than drawing its own
@@ -213,3 +214,26 @@ spend cards:
     credit branch through the `costStat.credits` unit, and the function takes the
     `Translate` it needed to do so — its four call sites in
     `client/components/{overviewPanel,contextView,composerDock}.tsx` pass it.
+
+Composer-dock collapse verdict fixed (own code). The readout is meant to degrade to
+its icon when the row cannot fit the full reading, but it never fired: the verdict
+read `parent.clientWidth` — the WHOLE row — and compared the full reading against
+it. The plugin is one entry in that row (the official usage pill and context ring
+sit beside it), so on the live ~860px row with ~260px taken by the official pair,
+600px of reading compared against 860px and always "fit". The two figures the docs
+promised — the official siblings and the gaps — were never subtracted.
+
+`client/dockRow.ts` now holds that arithmetic as a pure function (`roomForEntry`:
+content box minus the siblings minus one gap per sibling, `null` when the row is
+unmeasurable so a bogus environment keeps the full reading instead of collapsing),
+and `composerDock.tsx` feeds it the row's padding, its non-trigger children and its
+`column-gap`. The measuring probe also gained the row's own box metrics — the 14px
+glyph, the 6px gap and the `1px 8px` padding — because as a bare text span it
+under-measured the reading by ~36px and left borderline rows one size too long.
+
+For reference, the official component this row neighbours
+(`ui-chat/src/client/chat/StatsPills.tsx`) does no measurement at all: it has no
+`ResizeObserver`, `offsetWidth`, `getBoundingClientRect`, `clientWidth`,
+`matchMedia` or `useEffect`, and shrinks purely in CSS (`.root`/`.pill`
+`min-width:0;max-width:100%` plus `.label` ellipsis). Degrading to an icon is this
+fork's own, stronger fallback, so the arithmetic it needs is this fork's to own.

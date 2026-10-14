@@ -1025,6 +1025,23 @@ describe('ComposerDock — the status bar wears the statistics icon, and degrade
     assert.match(src, /className="lc-dock-probe"/, 'rendered unconditionally, not only in one branch')
   })
 
+  test('the probe carries the row\'s own box metrics, so it measures the reading and not just its text', async () => {
+    // The visible row is `[14px icon][gap 6][platform run…][padding 1px 8px]`; a probe
+    // that is a bare text span under-measures by ~36px, and near the boundary the row
+    // then keeps the full reading one size too long.
+    const css = readFileSync(join(process.cwd(), 'src/client/styles/composerDock.css'), 'utf8')
+    const probe = /\.lc-dock-probe\s*\{([^}]*)\}/.exec(css)
+    assert.ok(probe !== null, 'the probe rule exists')
+    assert.match(probe[1], /display:\s*inline-flex/, 'laid out as the row is')
+    assert.match(probe[1], /gap:\s*6px/, 'the row gap')
+    assert.match(probe[1], /padding:\s*1px 8px/, 'the row padding')
+    assert.match(css, /\.lc-dock-probe\s*>\s*svg\s*\{[^}]*width:\s*14px/, 'and the pinned 14px glyph')
+    const src = readFileSync(join(process.cwd(), 'src/client/components/composerDock.tsx'), 'utf8')
+    const probeBody = /className="lc-dock-probe"[\s\S]{0,220}?<\/span>/.exec(src)
+    assert.ok(probeBody !== null, 'the probe body is readable')
+    assert.match(probeBody[0], /InsightPanelIcon/, 'the probe renders the icon the row renders')
+  })
+
   test('the observer is attached on the frame the button mounts', async () => {
     // 真实时序：timeline 在首帧之后才推入，按钮与探针因此都是第二帧才出现的。
     // 测量 effect 必须在它们出现时自己重跑——依赖里若没有那个「已就绪」信号，
@@ -1080,6 +1097,60 @@ describe('ComposerDock — the status bar wears the statistics icon, and degrade
       // 可见的那部分——探针正是判据不自激的原因，它本来就该一直量着完整读数。
       assert.equal(queryAll(m.container, '.lc-dock-platform').length, 0, 'the readings are gone')
       assert.ok(query(m.container, '.lc-dock').classList.contains('lc-dock-narrow'), 'collapsed form')
+    } finally { await m.unmount(); vi.useRealTimers() }
+  })
+
+  test('a WIDE row whose official siblings eat the space still collapses (the shipped bug)', async () => {
+    // The bug in one line: the verdict compared the full reading against the ROW width,
+    // so it only collapsed when the plugin was wider than the entire row. Online the row
+    // is ~860px, the official pills/ring take ~260px, leaving ~570px for a reading that
+    // needs ~600px — but 600 < 860, so the icon form never appeared at all.
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(bj(2026, 10, 12, 10)))
+    const D = Dock(new TestClientCtx({ locale: 'zh' }), kitZh)
+    const m = await mount(h(D, { sessionId: 's1', ...seatOf(onePlatform()) }))
+    try {
+      await flush()
+      const trigger = query(m.container, '.lc-dock')
+      const row = trigger.parentElement!
+      // A same-row sibling standing in for the official readouts.
+      const sibling = document.createElement('span')
+      sibling.getBoundingClientRect = () => ({ width: 260 }) as DOMRect
+      row.appendChild(sibling)
+      row.style.columnGap = '12px'
+      // The ROW is comfortably wide — the old comparison would have said "fits".
+      Object.defineProperty(row, 'clientWidth', { value: 860, configurable: true })
+      const probe = query(m.container, '.lc-dock-probe')
+      Object.defineProperty(probe, 'offsetWidth', { value: 600, configurable: true })
+      await act(async () => { window.dispatchEvent(new Event('resize')) })
+      await flush()
+      // Sanity: this is precisely the case the row-width comparison got wrong.
+      assert.ok(probe.offsetWidth < row.clientWidth, 'the reading is narrower than the row…')
+      assert.ok(probe.offsetWidth > 860 - 260 - 12, '…but wider than what is actually left')
+      assert.equal(queryAll(m.container, '.lc-dock-platform').length, 0, 'so the readings are gone')
+      assert.ok(query(m.container, '.lc-dock').classList.contains('lc-dock-narrow'), 'collapsed form')
+      assert.ok(query(m.container, '.lc-dock').querySelector('svg') !== null, 'the icon stays')
+      row.removeChild(sibling)
+    } finally { await m.unmount(); vi.useRealTimers() }
+  })
+
+  test('a lone entry on a wide row keeps the full reading', async () => {
+    // The other half of the contract: with no siblings there is nothing to subtract, so
+    // the same width that collapsed above must NOT collapse here.
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(bj(2026, 10, 12, 10)))
+    const D = Dock(new TestClientCtx({ locale: 'zh' }), kitZh)
+    const m = await mount(h(D, { sessionId: 's1', ...seatOf(onePlatform()) }))
+    try {
+      await flush()
+      const row = query(m.container, '.lc-dock').parentElement!
+      Object.defineProperty(row, 'clientWidth', { value: 860, configurable: true })
+      const probe = query(m.container, '.lc-dock-probe')
+      Object.defineProperty(probe, 'offsetWidth', { value: 600, configurable: true })
+      await act(async () => { window.dispatchEvent(new Event('resize')) })
+      await flush()
+      assert.ok(!query(m.container, '.lc-dock').classList.contains('lc-dock-narrow'), 'full reading kept')
+      assert.ok(queryAll(m.container, '.lc-dock-platform').length > 0, 'the readings render')
     } finally { await m.unmount(); vi.useRealTimers() }
   })
 })

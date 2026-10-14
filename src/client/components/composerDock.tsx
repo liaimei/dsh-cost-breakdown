@@ -21,6 +21,7 @@ import type { ClientCtx, SessionStandardProps } from '../services'
 import type { ViewKit } from '../viewkit'
 import { allDayOffReason, OFFICIAL_MODELS, peakWindowsText } from '../../shared/officialRates'
 import { DOCK_CARD_MIN_HEIGHT, placeDockCard } from '../dockPlacement'
+import { roomForEntry } from '../dockRow'
 import { officialOverlayOpen } from '../officialOverlays'
 import { isDeepSeekProvider } from '../../shared/providers'
 import type { PlatformBalance } from '../../shared/types'
@@ -152,21 +153,37 @@ export function makeComposerDock(
       // null。effect 必须在它们出现时**重跑**一次——依赖里放 `ready` 就是为此；
       // 否则依赖永不变化，观察者永远挂不上，判据会一直停在初始的「够宽」。
       if (trigger === null || probe === null) return
+      const row = trigger.parentElement
       const apply = (): void => {
-        const parent = trigger.parentElement
-        const row = parent?.clientWidth ?? 0
         const need = probe.offsetWidth
+        // 「留给本行」= 整行内容宽 − **同行其他条目** − 条目间距（算术在 dockRow.ts 里，
+        // 是个纯函数）。早先这里直接拿整行宽度比，兄弟与间距都没减，于是插件只有在比
+        // **整行**还宽时才会收缩——线上因此从不收缩。
+        let room: number | null = null
+        if (row !== null) {
+          // 一次 `getComputedStyle` 读齐三个值；逐次重读只会多几次样式解析。
+          const style = getComputedStyle(row)
+          room = roomForEntry({
+            rowWidth: row.clientWidth,
+            paddingLeft: Number.parseFloat(style.paddingLeft),
+            paddingRight: Number.parseFloat(style.paddingRight),
+            // 同行其他条目：官方用量胶囊与上下文环都住这一行，插件只是其中一个。
+            siblingWidths: [...row.children]
+              .filter(child => child !== trigger)
+              .map(child => child.getBoundingClientRect().width),
+            gap: Number.parseFloat(style.columnGap),
+          })
+        }
         // 量不到时按「够宽」处理：宁可显示完整读数，也不要在异常环境里退化成图标。
-        setNarrow(row > 0 && need > 0 && need > row)
+        setNarrow(room !== null && need > 0 && need > room)
       }
       apply()
-      const target = trigger.parentElement
-      if (target === null || typeof ResizeObserver === 'undefined') {
+      if (row === null || typeof ResizeObserver === 'undefined') {
         window.addEventListener('resize', apply)
         return () => { window.removeEventListener('resize', apply) }
       }
       const observer = new ResizeObserver(apply)
-      observer.observe(target)
+      observer.observe(row)
       return () => { observer.disconnect() }
     }, [ready])
 
@@ -387,8 +404,14 @@ export function makeComposerDock(
                   </>
             )}
           {/* 量宽探针：**始终**按完整读数排版，因此它的宽度与当前显示图标还是全文无关——
-              判据靠它才不自激。CSS 把它移出可视区，不占排布。 */}
-          <span ref={probeRef} className="lc-dock-probe" aria-hidden="true">{probeText}</span>
+              判据靠它才不自激。它必须量到**整条读数**而不只是文字：可见那一行是
+              `[图标][平台段…]`，图标本身 14px、两侧内边距 16px、图标与首个数值之间还有
+              6px 间距；只量文字会少算约 36px，边界上就会多留一档完整读数。
+              CSS 把它移出可视区、按同一套盒子度量，因此不占排布。 */}
+          <span ref={probeRef} className="lc-dock-probe" aria-hidden="true">
+            <InsightPanelIcon size={14} />
+            {probeText}
+          </span>
         </button>
         {/* 只在 `open` 时挂载：`place()` 需要在同一个布局趟里量到真实高度，
             所以卡片不能等 `anchor` 就绪才出现（那时 ref 还是 null，只能退回兜底高度，
