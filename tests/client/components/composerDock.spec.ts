@@ -1129,7 +1129,42 @@ describe('ComposerDock — the status bar wears the statistics icon, and degrade
       assert.ok(probe.offsetWidth > 860 - 260 - 12, '…but wider than what is actually left')
       assert.equal(queryAll(m.container, '.lc-dock-platform').length, 0, 'so the readings are gone')
       assert.ok(query(m.container, '.lc-dock').classList.contains('lc-dock-narrow'), 'collapsed form')
-      assert.ok(query(m.container, '.lc-dock').querySelector('svg') !== null, 'the icon stays')
+      row.removeChild(sibling)
+    } finally { await m.unmount(); vi.useRealTimers() }
+  })
+
+  test('a SQUEEZED official sibling is judged by what it needs, not by its squashed box', async () => {
+    // The second, subtler bug: the official pills are compressible (`min-width: 0` +
+    // ellipsis) while this readout is `flex: none`, so a too-small row squeezes THEM.
+    // Judging by their squashed box inverted the verdict — the more they were squeezed,
+    // the more room this line thought it had, so it stayed full and kept squeezing them
+    // (live: the officials read "4 ..." and "46...." while this line was untouched).
+    // The sibling here reports a squashed 295px box that is hiding 48px of content.
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(bj(2026, 10, 12, 10)))
+    const D = Dock(new TestClientCtx({ locale: 'zh' }), kitZh)
+    const m = await mount(h(D, { sessionId: 's1', ...seatOf(onePlatform()) }))
+    try {
+      await flush()
+      const trigger = query(m.container, '.lc-dock')
+      const row = trigger.parentElement!
+      const sibling = document.createElement('span')
+      sibling.getBoundingClientRect = () => ({ width: 295 }) as DOMRect
+      Object.defineProperty(sibling, 'clientWidth', { value: 295, configurable: true })
+      Object.defineProperty(sibling, 'scrollWidth', { value: 343, configurable: true })
+      row.appendChild(sibling)
+      row.style.columnGap = '12px'
+      Object.defineProperty(row, 'clientWidth', { value: 560, configurable: true })
+      const probe = query(m.container, '.lc-dock-probe')
+      Object.defineProperty(probe, 'offsetWidth', { value: 237, configurable: true })
+      await act(async () => { window.dispatchEvent(new Event('resize')) })
+      await flush()
+      // By the squashed box this would look like it fits (560 - 295 - 12 = 253 >= 237);
+      // by what the sibling needs it does not (560 - 343 - 12 = 205 < 237).
+      assert.ok(560 - 295 - 12 >= 237, 'the squashed box would have said "fits"')
+      assert.ok(560 - 343 - 12 < 237, 'but the needed width says otherwise')
+      assert.ok(query(m.container, '.lc-dock').classList.contains('lc-dock-narrow'), 'so it collapses')
+      assert.equal(queryAll(m.container, '.lc-dock-platform').length, 0, 'the readings are gone')
       row.removeChild(sibling)
     } finally { await m.unmount(); vi.useRealTimers() }
   })

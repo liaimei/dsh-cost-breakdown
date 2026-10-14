@@ -21,7 +21,7 @@ import type { ClientCtx, SessionStandardProps } from '../services'
 import type { ViewKit } from '../viewkit'
 import { allDayOffReason, OFFICIAL_MODELS, peakWindowsText } from '../../shared/officialRates'
 import { DOCK_CARD_MIN_HEIGHT, placeDockCard } from '../dockPlacement'
-import { roomForEntry } from '../dockRow'
+import { naturalWidthOf, roomForEntry } from '../dockRow'
 import { officialOverlayOpen } from '../officialOverlays'
 import { isDeepSeekProvider } from '../../shared/providers'
 import type { PlatformBalance } from '../../shared/types'
@@ -157,8 +157,11 @@ export function makeComposerDock(
       const apply = (): void => {
         const need = probe.offsetWidth
         // 「留给本行」= 整行内容宽 − **同行其他条目** − 条目间距（算术在 dockRow.ts 里，
-        // 是个纯函数）。早先这里直接拿整行宽度比，兄弟与间距都没减，于是插件只有在比
-        // **整行**还宽时才会收缩——线上因此从不收缩。
+        // 是个纯函数）。兄弟必须按**需要**的宽度（自然宽度）算，不能按当前占用：
+        // 官方那两个读数胶囊是可压缩的（`min-width:0` + 省略号），而这条读数是
+        // `flex:none`，空间不够时亏空全摊给它们。若减的是被压扁后的占用，就会出现
+        // 「插件越不缩 → 官方越被挤 → 算出的余量越大」这个正反馈——线上官方因此被截成
+        // 「4 ...」而插件仍然是完整读数。
         let room: number | null = null
         if (row !== null) {
           // 一次 `getComputedStyle` 读齐三个值；逐次重读只会多几次样式解析。
@@ -170,7 +173,7 @@ export function makeComposerDock(
             // 同行其他条目：官方用量胶囊与上下文环都住这一行，插件只是其中一个。
             siblingWidths: [...row.children]
               .filter(child => child !== trigger)
-              .map(child => child.getBoundingClientRect().width),
+              .map(child => naturalWidthOf(child)),
             gap: Number.parseFloat(style.columnGap),
           })
         }

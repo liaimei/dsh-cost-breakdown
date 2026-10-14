@@ -227,7 +227,15 @@ promised — the official siblings and the gaps — were never subtracted.
 content box minus the siblings minus one gap per sibling, `null` when the row is
 unmeasurable so a bogus environment keeps the full reading instead of collapsing),
 and `composerDock.tsx` feeds it the row's padding, its non-trigger children and its
-`column-gap`. The measuring probe also gained the row's own box metrics — the 14px
+`column-gap`. The siblings must contribute the width they NEED, not the box they
+currently occupy: the official pills are compressible (`min-width: 0` + ellipsis)
+while this readout is `flex: none`, so a row that is too small squeezes them first.
+Charging only their squashed box inverted the verdict — the more they were squeezed,
+the more room this line believed it had, so it stayed full and kept squeezing them
+(live: the officials read "4 ..." and "46...." while this line was untouched).
+`naturalWidthOf` supplies the needed width (box plus whatever the element and its
+clipping descendants are hiding), which does not move with flex allocation and so
+cannot feed back. The measuring probe also gained the row's own box metrics — the 14px
 glyph, the 6px gap and the `1px 8px` padding — because as a bare text span it
 under-measured the reading by ~36px and left borderline rows one size too long.
 

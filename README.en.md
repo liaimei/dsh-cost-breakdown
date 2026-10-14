@@ -78,10 +78,17 @@ width the full reading needs — not a hardcoded breakpoint against the row's to
 the official usage pill and context ring sit in that same row and take their share first,
 so the row can be wide while what remains for this line is not (live: an ~860px row, ~260px
 taken by the official pair, ~570px left, ~600px needed). The available width is derived
-from the parent's content box minus the sibling entries and the gaps; the needed width
-comes from a measuring probe that is **always rendered at the full sentence but moved out
-of view**, so neither figure depends on which form is currently shown and the row cannot
-oscillate (compact → narrower → "there is room again" → back). The official `StatsPills`
+from the parent's content box minus the **needed** width of the sibling entries and the gaps;
+the needed width comes from a measuring probe that is **always rendered at the full sentence but
+moved out of view**, so neither figure depends on which form is currently shown and the row cannot
+oscillate (compact → narrower → "there is room again" → back).
+Siblings must be charged what they **need**, not what they currently occupy: the official
+pills are compressible (`min-width: 0` + `text-overflow: ellipsis`) while this line is
+`flex: none`, so a row that is too small squeezes them first. Charging their squashed box
+inverts the verdict — the more they are squeezed, the more room this line believes it has,
+so it stays full and keeps squeezing them (live: the officials read `4 ...` while this
+line was untouched). The needed width (box plus hidden content) does not move with flex
+allocation, so there is no loop. The official `StatsPills`
 responds to that same quantity (`min-width: 0` + `text-overflow: ellipsis`, shrinking by
 actual available width). Click to expand a detail card that
 **embeds the two
