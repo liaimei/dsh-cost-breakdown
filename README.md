@@ -115,7 +115,7 @@
 | 未缓存输入 | `inputTokens`（含缓存写入）：按未命中价计费 |
 | 输出 | `outputTokens`：已含思考 token |
 
-### ④ 平台消费汇总（`src/client/components/statsPlatforms.tsx` + `platformSpendDetail.tsx`）
+### ④ 平台消费汇总（`src/client/components/statsPlatforms.tsx`）
 
 一个会话可能同时用到多个平台，而**各平台的账单单位不同**：DeepSeek 官方按人民币
 token 计价（含峰谷），积分制平台按次扣积分，第三方平台按美元。因此：
@@ -132,7 +132,7 @@ token 计价（含峰谷），积分制平台按次扣积分，第三方平台�
 它同样住在费用那一段，不在上下文卡片里。
 
 三处的费率与峰谷判定共用 `client/cost.ts` 的同一个入口
-（`estimateSessionCostByBucket`），所以平台卡、明细表与输入框下方的读数
+（`estimateSessionCostByBucket`），所以平台卡、卡内逐模型明细与输入框下方的读数
 之间**不会互相漂移**。
 
 ## 与上游的关系
@@ -240,7 +240,7 @@ pnpm run typecheck  # tsc --noEmit -p tsconfig.tests.json
 NODE_OPTIONS=--localstorage-file=/tmp/ls.db pnpm exec vitest run --coverage
 ```
 
-- **2070 个测试通过**，**逐文件 100% 覆盖率**是仓库门槛；
+- **2269 个测试通过**，**逐文件 100% 覆盖率**是仓库门槛；
 - 其中 2000+ 个是上游原样的测试；另有 8 个上游 spec 只改了**被新功能有意改变**的断言
   （官方价目表取代 models.dev 价、节假日不再按峰价、槽位从 5 个变 6 个、stateVersion 27→29 / 4→6），
   没有放宽任何断言语义；

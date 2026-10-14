@@ -142,7 +142,7 @@ platform actually bills, all **provider-reported and exact** (never estimated):
 | Uncached input | `inputTokens` (cache writes included), billed at the miss rate |
 | Output | `outputTokens`, reasoning included |
 
-### ④ Platform spend (`src/client/components/statsPlatforms.tsx` + `platformSpendDetail.tsx`)
+### ④ Platform spend (`src/client/components/statsPlatforms.tsx`)
 
 One session can use several platforms at once, and **each bills in its own unit**: DeepSeek
 officially in CNY tokens (peak/off-peak), credit platforms per call, third parties in USD. So:
@@ -284,7 +284,7 @@ A new inlineable dependency must also be added to `onlyBundle`.
 NODE_OPTIONS=--localstorage-file=/tmp/ls.db pnpm exec vitest run --coverage
 ```
 
-- **2070 tests pass** and **100 % per-file coverage** is the repository's gate;
+- **2269 tests pass** and **100 % per-file coverage** is the repository's gate;
 - 2000+ of them are upstream's own tests; 8 upstream spec files only had assertions
   updated for behaviour this fork deliberately changes (the official table superseding
   models.dev pricing, holidays no longer billing at peak, five slots becoming six,
