@@ -41,9 +41,9 @@
     "build": "tsdown",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
-    "typecheck": "tsc --noEmit -p tsconfig.tests.json --incremental",
-    "test": "pnpm run typecheck && vitest run --coverage",
-    "coverage": "vitest run --coverage"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "verify": "pnpm run typecheck && pnpm run build && pnpm test"
   },
   "dsh": {
     "bundle": {

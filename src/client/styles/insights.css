@@ -1,0 +1,119 @@
+/* The Insights page. The page root is an inline-size container, so every card reflows on its own width
+ * rather than the viewport's; that is what lets the same grids work in a narrow window. */
+.cb-ov-page { padding: 20px 24px 40px; container-type: inline-size; display: flex; flex-direction: column; gap: 16px; }
+.cb-ov-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.cb-ov-pagetitle { font-size: 18px; font-weight: 600; margin: 0; }
+.cb-ov-headctl { display: flex; align-items: center; gap: 8px; }
+.cb-ov-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.cb-ov-kpi { border: 1px solid var(--dsw-alias-border-l2); border-radius: 10px; padding: 10px 12px; }
+.cb-ov-kpi-label { font-size: 11px; color: var(--dsw-alias-label-secondary); }
+.cb-ov-kpi-value { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.cb-ov-kpi-sub { font-size: 11px; color: var(--dsw-alias-label-tertiary); }
+.cb-ov-first, .cb-ov-stats, .cb-ov-spend { display: flex; flex-direction: column; gap: 10px; }
+.cb-ov-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+.cb-ov-body { display: grid; grid-template-columns: 3fr 7fr; gap: 16px; }
+@container (max-width: 900px) { .cb-ov-body { grid-template-columns: 1fr; } }
+.cb-ov-left, .cb-ov-right { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.cb-ov-heat-card { margin-bottom: 0; }
+.cb-ov-list-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cb-ov-list-title { font-weight: 600; }
+.cb-ov-list-count { color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; }
+.cb-ov-search {
+  flex: 1;
+  min-width: 120px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 12px;
+  padding: 3px 8px;
+}
+.cb-ov-chip { border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-2); color: inherit; border-radius: 999px; font-size: 11px; padding: 1px 8px; cursor: pointer; }
+.cb-ov-groups { display: flex; gap: 6px; flex-wrap: wrap; }
+.cb-ov-group { border: 1px solid var(--dsw-alias-border-l2); background: transparent; color: var(--dsw-alias-label-secondary); border-radius: 999px; font-size: 11px; padding: 1px 8px; cursor: pointer; }
+.cb-ov-group-on { border-color: var(--dsw-alias-brand-primary, #4d6bfe); color: var(--dsw-alias-label-primary); }
+.cb-ov-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+.cb-ov-pager { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.cb-ov-page-label { font-size: 12px; color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; }
+.cb-ov-spend-head { display: flex; flex-direction: column; gap: 2px; }
+.cb-ov-spend-title { font-weight: 600; }
+
+/* The card frame every insights card uses. */
+.cb-ov-card { border: 1px solid var(--dsw-alias-border-l2); border-radius: 10px; padding: 12px 14px; background: var(--dsw-alias-bg-layer-1); box-sizing: border-box; }
+.cb-ov-card-title { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.cb-ov-card-title-text { font-weight: 600; }
+.cb-ov-card-rate { font-size: 11px; color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; }
+.cb-ov-card-sub { font-size: 11px; color: var(--dsw-alias-label-tertiary); }
+.cb-ov-empty { color: var(--dsw-alias-label-secondary); padding: 12px 0; text-align: center; }
+
+/* Donut + legend. */
+.cb-ov-donut-wrap { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.cb-ov-donut-center { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.cb-ov-slices { list-style: none; margin: 0; padding: 0; flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.cb-ov-slice { display: flex; align-items: baseline; gap: 6px; font-size: 12px; cursor: default; }
+.cb-ov-slice-dot { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+.cb-ov-slice-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cb-ov-slice-value { margin-left: auto; font-variant-numeric: tabular-nums; }
+.cb-ov-slice-share { color: var(--dsw-alias-label-tertiary); font-variant-numeric: tabular-nums; width: 52px; text-align: right; }
+
+/* 7-day usage columns. */
+.cb-ov-bars { display: flex; align-items: flex-end; gap: 6px; height: 110px; }
+.cb-ov-bar { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 4px; height: 100%; }
+.cb-ov-bar-fill { width: 100%; border-radius: 3px 3px 0 0; background: var(--dsw-alias-brand-primary, #4d6bfe); opacity: 0.75; min-height: 2px; }
+.cb-ov-bar-label { font-size: 10px; color: var(--dsw-alias-label-tertiary); }
+.cb-ov-bars-note { font-size: 11px; color: var(--dsw-alias-label-tertiary); }
+
+/* Heatmap. */
+.cb-ov-heat { display: grid; grid-auto-flow: column; gap: 2px; }
+.cb-ov-heat-cell { width: 11px; height: 11px; border-radius: 2px; border: 0; padding: 0; background: color-mix(in oklab, var(--dsw-alias-bg-layer-2) 84%, transparent); cursor: default; }
+.cb-ov-heat-cell[data-level='1'] { background: color-mix(in oklab, #4d6bfe 28%, transparent); }
+.cb-ov-heat-cell[data-level='2'] { background: color-mix(in oklab, #4d6bfe 50%, transparent); }
+.cb-ov-heat-cell[data-level='3'] { background: color-mix(in oklab, #4d6bfe 72%, transparent); }
+.cb-ov-heat-cell[data-level='4'] { background: color-mix(in oklab, #4d6bfe 92%, transparent); }
+.cb-ov-heat-cell[data-on='1'] { outline: 1px solid var(--dsw-alias-brand-primary, #4d6bfe); }
+
+/* Session card. */
+.cb-ov-session { display: flex; flex-direction: column; gap: 4px; cursor: pointer; text-align: left; }
+.cb-ov-session-title { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cb-ov-session-meta { display: flex; gap: 8px; font-size: 11px; color: var(--dsw-alias-label-tertiary); flex-wrap: wrap; }
+.cb-ov-session-cost { font-variant-numeric: tabular-nums; font-weight: 600; }
+
+/* Skills. */
+.cb-ov-skill-list { list-style: none; margin: 0; padding: 0; max-height: 220px; overflow-y: auto; }
+.cb-ov-skill { display: flex; gap: 8px; align-items: baseline; padding: 3px 4px; border-radius: 5px; cursor: pointer; font-size: 12px; }
+.cb-ov-skill:hover { background: var(--dsw-alias-bg-layer-2); }
+.cb-ov-skill-on { background: var(--dsw-alias-bg-layer-2); outline: 1px solid var(--dsw-alias-brand-primary, #4d6bfe); }
+.cb-ov-skill-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cb-ov-skill-loads, .cb-ov-skill-sessions { color: var(--dsw-alias-label-tertiary); font-variant-numeric: tabular-nums; font-size: 11px; }
+
+/* Platform spend cards: one per platform, each in its own unit. */
+.cb-ov-platform-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; }
+.cb-ov-platform { display: flex; flex-direction: column; gap: 6px; }
+.cb-ov-platform-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.cb-ov-platform-name { font-weight: 600; }
+.cb-ov-platform-unit { font-size: 11px; color: var(--dsw-alias-label-tertiary); }
+.cb-ov-platform-total { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.cb-ov-platform-models { display: flex; flex-direction: column; gap: 2px; }
+.cb-ov-platform-model { display: flex; gap: 8px; align-items: baseline; font-size: 12px; }
+.cb-ov-platform-model-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cb-ov-platform-model-value { font-variant-numeric: tabular-nums; }
+.cb-ov-platform-model-unpriced { color: var(--dsw-alias-label-tertiary); }
+.cb-ov-platform-balance { font-size: 11px; color: var(--dsw-alias-label-secondary); }
+
+/* Plugin info + gate. */
+.cb-ov-plugin-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.cb-ov-plugin-name { font-weight: 500; }
+.cb-ov-plugin-version { font-variant-numeric: tabular-nums; color: var(--dsw-alias-label-secondary); }
+.cb-ov-plugin-link { font-size: 12px; }
+
+/* Date range popup. */
+.cb-ov-date { position: relative; }
+.cb-ov-date-trigger { border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); color: inherit; font: inherit; font-size: 12px; padding: 2px 8px; border-radius: 6px; cursor: pointer; }
+.cb-ov-date-pop { position: fixed; z-index: 1100; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l2); border-radius: 10px; box-shadow: var(--dsw-elevation-prominent, 0 12px 32px rgba(0, 0, 0, 0.3)); padding: 10px; }
+.cb-ov-date-grid { display: grid; grid-template-columns: repeat(7, 24px); gap: 2px; }
+.cb-ov-date-cell { width: 24px; height: 24px; border: 0; border-radius: 4px; background: transparent; color: inherit; font: inherit; font-size: 11px; cursor: pointer; }
+.cb-ov-date-cell:hover { background: var(--dsw-alias-bg-layer-1); }
+.cb-ov-date-cell[data-in='0'] { opacity: 0.3; }
+.cb-ov-date-cell[data-edge='1'] { outline: 1px solid var(--dsw-alias-brand-primary, #4d6bfe); }
+.cb-ov-date-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }

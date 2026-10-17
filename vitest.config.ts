@@ -1,6 +1,13 @@
 import { defineConfig } from 'vitest/config'
 
-// Specs import src/ directly, never the built lib/, so the suite needs no build step and coverage reflects what ships.
+/**
+ * The new suite imports `src/` directly, so it needs no build step.
+ *
+ * Two projects instead of the old three: the host side (pure folds, projections, channels, and the shared
+ * domain maths) runs in Node, and the browser side (data layer, formatting, components) in jsdom. The old
+ * per-file 100 % coverage gate was deliberately dropped — it forced test-shaped code and made every
+ * refactor a test rewrite — in favour of behaviour-focused suites per layer.
+ */
 export default defineConfig({
   test: {
     reporters: ['dot'],
@@ -8,12 +15,11 @@ export default defineConfig({
       {
         test: {
           name: 'host',
-          include: ['tests/host/**/*.spec.ts', 'tests/shared/**/*.spec.ts'],
+          include: ['tests/host/**/*.spec.ts', 'tests/core/**/*.spec.ts', 'tests/wire/**/*.spec.ts'],
           environment: 'node',
         },
       },
       {
-        // The inlined primitives dist references a sourcemap it does not ship; vite's warning is noise.
         logLevel: 'error',
         test: {
           name: 'client',
@@ -22,36 +28,21 @@ export default defineConfig({
           setupFiles: ['tests/client/setup.ts'],
           server: {
             deps: {
-              // The primitives dist imports .module.css; inlining lets vite transform it (externalized Node ESM would reject the .css).
+              // The primitives dist imports its own .module.css; inlining lets vite transform it.
               inline: ['@deepseek-ai/dsh-client-ui-primitives'],
             },
           },
         },
       },
       {
-        // Exercises the BUILT plugin and skips cleanly when lib/ is absent. The matrix also needs a dsh checkout (env DSH_REPO), and its first run per baseline installs the tag's vendored cordis into .tmp/compat — hence the timeout.
+        // Exercises the BUILT artifacts: the wrapper protocol, the CSS channel and the slot registrations
+        // are only observable in `lib/`.
         test: {
-          name: 'compat',
-          include: ['tests/compat/**/*.spec.ts'],
+          name: 'bundle',
+          include: ['tests/bundle/**/*.spec.ts'],
           environment: 'node',
-          testTimeout: 120_000,
         },
       },
     ],
-    coverage: {
-      provider: 'v8',
-      include: ['src/**/*.{ts,tsx}'],
-      exclude: [
-        'src/**/*.d.ts',
-        // Pure type declarations: no runtime surface to instrument.
-        'src/shared/types.ts',
-        'src/host/compat.ts',
-      ],
-      thresholds: { perFile: true, statements: 100, branches: 100, functions: 100, lines: 100 },
-      reporter: ['text', 'html'],
-      // The text table lists only files below 100%; an empty table means full coverage.
-      skipFull: true,
-      reportsDirectory: './coverage',
-    },
   },
 })

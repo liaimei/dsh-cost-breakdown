@@ -1,261 +1,59 @@
 dsh-cost-breakdown
 Copyright 2026 liaimei
 
-This product is a fork of dsh-context.
-Copyright the dsh-context contributors.
-Licensed under the Apache License, Version 2.0.
+Provenance
+==========
 
-  Upstream: https://github.com/bowenliang123/dsh-context
-  Forked at: commit 209169d (main, just after v0.66.1)
-  Upstream licence text: LICENSE.apache
+This project began as a fork of dsh-context
+(https://github.com/bowenliang123/dsh-context), Copyright the dsh-context
+contributors, licensed under the Apache License, Version 2.0. The upstream
+licence text is kept unmodified in LICENSE.apache, and upstream's own documents
+are kept for provenance in .upstream-README.md and .upstream-AGENTS.md.
 
-Changes made in this fork, as required by section 4(b) of the Apache License:
+Since then the plugin has been **rewritten from scratch**: the module layout,
+the decomposition and every implementation are new. Upstream served as a
+behavioural reference (what the surfaces must show, which log events exist, how
+the harness seam is used), not as code to carry over. No source file from the
+earlier fork remains in src/.
 
-  * Pricing is extended with this plugin's official CNY price table, explicit
-    peak/off-peak windows, and a Chinese public-holiday calendar
-    (src/shared/officialRates.ts). Upstream prices only from the client's
-    models.dev USD book with a flat `PEAK_FACTOR = 2` and has no holiday table,
-    so its holidays bill at the peak rate. Here the official table takes
-    precedence for the models it lists, the host fold resolves each settlement's
-    period against it, and other models keep pricing from models.dev.
-    `host/config.ts` gains the `holidays` field; `host/foldMetering.ts`,
-    `host/activity.ts`, `host/fold.ts`, `host/timeline.ts`, `host/index.ts` and
-    `client/cost.ts` thread it through. The `contextTimeline` stateVersion is
-    bumped 27 -> 29 and `contextActivity` 4 -> 6 because the folded period
-    classification changed: 28/5 introduced the holiday-aware split, and 29/6
-    keyed that split on the model rather than the provider route, so an official
-    model reached through a third-party proxy bills by the Beijing window instead
-    of being booked peak and left undoubled.
-  * A composer-dock cost readout is added (src/client/components/composerDock.tsx,
-    src/client/dockReading.ts, src/client/styles/composerDock.css): absent
-    upstream. `client/index.ts` registers it on `conversation.composer.dock`, and
-    `client/i18n.ts` gains its dictionary keys. The collapsed trigger copies the box
-    metrics and palette of the official readout pill on the same row (StatsPills'
-    `.pill` — the "48.6M tok · 缓存命中 97%" one; NOT ContextMeter's `.trigger`,
-    which is a different kind of control and genuinely differs): the 12px pill size
-    `calc(var(--dsh-content-font-size-secondary, 13px) - 1px)`, the 20px line box,
-    `padding: 1px 8px`, the 999px full capsule with `corner-shape: round`, the 14×14
-    frozen glyph, `label-tertiary` rest, `label-secondary` hover and the official
-    `separator-primary` separators, none bolded — only peak/off-peak keeps its
-    semantic red/green. The period is computed live from the official table rather
-    than hardcoded: the trigger carries a per-second countdown to the next flip, and
-    the tooltip plus the expanded card spell out the peak windows
-    (`shared/officialRates.ts` gains `peakWindowsText`, `msUntilFlip`,
-    `allDayOffReason` and `countdownParts`; `client/format.ts` gains `fmtCountdown`
-    so the units are localized). Weekends and holidays show the reason instead of a
-    countdown. When the row cannot fit the full reading the sentence
-    degrades to a clock icon
-    (`primitives.ts` gains `IconClock`, resolved from the official icon set) plus
-    `fmtCountdownCompact`. The verdict is meant to compare the space LEFT for this row
-    (the parent's content box minus the official sibling entries, which sit in the same
-    row, and the gaps) against the width the full reading needs, supplied by an
-    always-rendered, visually hidden measuring probe — never a viewport check (a wide
-    window with a narrow column must still degrade) and never the row's own rendered
-    width (which would oscillate). (As shipped, the subtraction was in fact missing and
-    the probe measured text only; both are corrected below — the seam named here never
-    existed in the code.)
-    Its expanded card
-    embeds the two
-    Summary Statistics cards (`statsTokens`/`statsCost`) rather than drawing its own
-    token and period blocks, so the readout and the page share one dataset and one
-    layout; its own bars, tints and balance row were removed with them. The card's
-    look mirrors the official stat dialog (`stat-dialog.module.css`'s `.panel`, the
-    "Token usage" panel the readout pill opens): the `--dsw-specific-menu` surface,
-    `--dsw-radius-lg`, `--dsw-elevation-prominent`, z-index 1100, `padding: 16px`
-    and 12px/18px text, plus the official `.title`/`.titleRule` head (label-primary
-    at 500, ends pinned apart, 8px below, a 0.5px hairline with 10px under it). The
-    card is `createPortal`ed to `document.body` for the same reason the official
-    panels are: the composer sits in `ConversationRoot`'s `.composerSeat`
-    (`position: sticky` with `z-index: 7`), a stacking context in which a
-    z-index-1100 card is only ordered locally. Its width is NOT content-driven:
-    nearly every block inside is percentage-sized (`.lc-dock-cards > .lc-card
-    { width: 100% }`, the tables, the `.lc-sl` auto-fill grid), and percentage
-    children contribute no intrinsic width, so a `max-content` card collapses to its
-    264px floor and crushes the contents. It uses `min(440px, 100vw - 24px)` — the
-    official panel's own cap, and the measured width at which a 7-row legend and the
-    4-column rate table both stop wrapping — with a 264px floor and a 560px ceiling,
-    clamped to the viewport, so a short trigger cannot clip the
-    right-hand figures of those wider cards, and
-    no horizontal scrollbar can appear (`overflow-x: hidden` beside `overflow-y: auto`).
-  * A cost card is added to the session view (src/client/components/statsCost.tsx,
-    src/client/styles/statsCost.css): absent upstream. It sits between the Token
-    and Timing cards and reports the session's spend by billed bucket, the
-    peak/off-peak split, and the account balance. `client/cost.ts` gains
-    `estimateSessionCostByBucket`, which prices the four buckets and the two
-    periods in one pass; `estimateSessionCostByPeriod` now reads its period figures
-    from it, so every cost surface shares one accumulation.
+What the rewrite preserves, deliberately, because these are contracts other
+software and existing user data depend on:
 
-  * The package is named `dsh-cost-breakdown` (upstream's is `dsh-context`), and its
-    icon.svg is this fork's own three-segment "usage meter" gauge rather than
-    upstream's document-sheet emblem. Upstream's source files are otherwise
-    carried over unmodified; the identity strings the runtime depends on (route
-    paths, locale namespace, slot ids) follow the package name.
-  * The loader row id in `cordis.patch.yml` is the short handle `cost-breakdown`,
-    deliberately distinct from the package name. The Host settings namespace is
-    derived from that row id (`dsh-settings` describes each entry with
-    `ns: entry.options.id`), so `client/index.ts` declares it separately as
-    `SETTINGS_NS` while the locale namespace and the `plugins.bundle.config` seat
-    keep the package name; the Plugins page prints the row id and the module name
-    on separate lines, so one string for both printed the same line twice.
-  * Documentation comments were added across the whole `src/` tree (including the
-    CSS sheets): every exported declaration carries a doc block, and non-obvious
-    logic carries explanatory inline comments. The comments are written in Chinese.
-    This touches most files inherited from upstream, so those files are no longer
-    byte-identical to their upstream revisions (see below). Only comments changed —
-    no statement, expression, identifier, string literal, type or formatting of
-    code was altered, which was enforced mechanically by comparing the pre- and
-    post-edit trees token by token. Upstream's behaviour, structure and public
-    surface are therefore unchanged; the divergence is documentation only, and a
-    rebase should treat these edits as comment noise.
+  * the package name `dsh-cost-breakdown`, the loader row id `cost-breakdown`
+    (which is also the host settings namespace), and the locale namespace;
+  * the package entry shape: `main` -> lib/index.js (host, ESM), the
+    `./client` / `./package.json` / `./locale/*.json` export entries, and the
+    `window.__ModuleLoader__.load({ id, factory })` handoff for the browser half;
+  * the three session-projection keys `contextTimeline` / `contextHeaders` /
+    `contextActivity` with their persisted state versions 29 / 1 / 6, and the
+    wire payload shapes the browser half reads;
+  * the five host routes `/api/dsh-cost-breakdown/{detail,backfill,balance,
+    credits,skills}` and their POST / no-store / `{ok,value}` envelopes;
+  * the slot registrations (conversation view, composer dock, assistant actions,
+    input overlay, sidebar tab, Insights panel, plugins config card) and the
+    settings schema field names, so persisted preferences keep working.
 
-Files carried over from upstream are otherwise unmodified unless the change is
-noted above or in the commit history.
+What is new, and differs from the earlier fork by design:
 
-`lib/` is committed, so the shipped artifacts were regenerated after the comment
-pass. The rebuild is code-equivalent to the previous one: the host bundle is
-identical once comments are removed, the declaration file's declarations are
-unchanged, and the client bundle's JavaScript and its Tailwind CSS payload are
-unchanged. The only substantive bundle difference is that SEVEN DEAD utility
-rules (`.collapse`, `.relative`, `.container`, `.border`, `.ring`, `.outline`,
-`.transition`) are no longer emitted. They existed only because the older English
-comments happened to contain those words, which Tailwind's content scanner reads
-as class candidates; nothing in the source used them, and the bundle now has no
-dangling `--tw-*` custom-property references as a result. `lib/index.d.ts` gained
-the doc blocks that reach it from the source.
+  * the architecture: wire / core / host / client layers, with the shared pure
+    maths extracted into `src/core` and the HTTP channels split from the fold;
+  * the fold engine: a draft-based reducer with per-event handlers instead of one
+    monolithic switch, the same reference-discipline and all-or-nothing rules;
+  * the browser half: a new data layer (price book, timeline reconciliation,
+    cross-session aggregation) and new components with `cb-` prefixed styles;
+  * the test suite: the earlier 142 spec files were removed and replaced by a
+    new suite covering the same behaviour through the new modules.
 
-Post-pass fix (own code, not upstream): the composer-dock detail card was
-positioned from a height measured before the card existed, so an open card sat
-at a top computed for a size it never had and could overlap the composer row.
-The card now mounts as soon as the readout opens (hidden until placed), the
-first measurement happens against the real element, and a ResizeObserver
-re-places it when its asynchronous content changes its height. A no-op guard
-keeps an unchanged measurement from re-rendering. Covered by a regression test
-in tests/client/components/composerDock.spec.ts.
+Changes to the product relative to upstream dsh-context are documented in
+README.md ("本仓库叠加的功能" in the earlier fork history). In short: the official
+CNY price table with peak/off-peak windows and a Chinese public-holiday calendar,
+per-platform spend in each platform's own unit, the composer-dock readout, and a
+strict separation between token surfaces and money surfaces.
 
-Follow-up: the composer-dock card's surface token was corrected from
-`--dsw-alias-bg-layer-1` (the primary card layer) to `--dsw-alias-bg-layer-2`,
-which is what DSH's own floating surfaces use (its dialog/float rules pair
-layer-2 with a shadow) and what this plugin's other overlays (`.lc-tip`) already
-used. In the dark theme layer-1 is bluish-875 (#232324) against layer-2's
-bluish-850 (#2c2c2e), so the open card read noticeably darker than the harness's
-own popovers; in the light theme both resolve to pure white, so the change has no
-effect there.
+Licence
+=======
 
-UI label rename (own code, superseded below): the two entry points are named by what
-they show. The account-level page (the left-nav entry and that page's heading) is
-"统计" / "Statistics". The `sidebar.guideTitle` key this briefly introduced was
-retired once the tab and the card agreed, so the name had one source rather than two
-that could drift. Note that a panel keeps the term "上下文" inside itself where it is
-accurate ("当前上下文", "上下文趋势"); that is panel vocabulary, not an entry's name.
-
-Token and cost separated per surface (own code): the three surfaces were doing
-overlapping jobs and the names followed the jobs. The conversation tab — which shows
-context composition, trend, browser, events, file activity, the agent network and the
-token card, and no amount whatsoever — is now "上下文" / "Context". The right-side
-column is "本会话汇总" / "Session Summary": one token section (the same Token card the
-tab and the composer card use, so all three agree) above one spend section. The
-left-nav page stays "统计" / "Statistics" and covers EVERY session, its token and spend
-sections likewise kept apart. This reverses the previous entry in this file, which had
-made all three share "汇总统计" / "Summary Statistics"; that name stopped being true the
-moment each surface began answering a different question. `client/sidebar.ts` and
-`client/icon.tsx` (`makeContextTabTitle` now takes the key) were changed so the sidebar
-can carry its own label. Tokens never appear next to an amount: the agent-network node
-cards report token volume only, and the daily chart is a token-only chart.
-
-Per-platform spend is billed in the platform's own currency (own code): each platform
-gets its own card carrying its own billing currency and remaining balance, and the
-cards are never summed — adding credits to yuan to dollars yields a number that means
-nothing. DeepSeek shows ¥, third parties $, credit platforms credits, whatever the UI
-locale; this deliberately reverses upstream's "convert everything to the display
-currency" behaviour. `formatNativeSpend` in `client/cost.ts` performs the one-way
-conversion, `client/platformSpend.ts` tags each row with its currency and with the
-models it could not price, and `client/platformBalanceState.ts` is the single balance
-poll shared by the statistics page, the session summary and the composer readout.
-Per-model rows live inside each platform card rather than in a second table, which had
-repeated the card's own figures verbatim.
-
-Test harness fix (own code): `tests/client/setup.ts` installs a localStorage shim when
-`globalThis.localStorage` is undefined. Node 26 defines its own `localStorage` accessor
-that resolves to undefined without `--localstorage-file`, and it shadows jsdom's, so
-every spec that seeded or read a remembered balance failed with "Cannot read properties
-of undefined" (82 cases across three files). The shim supplies the platform's storage
-shape; no production code was relying on the broken behaviour.
-
-Header balance pill removed (own code): the Statistics page's heading carried a
-`DeepSeek 余额 ¥36.79` capsule (src/client/components/balanceCapsule.tsx, its
-`.lc-ov-balance*` rules in client/styles/overview.css and
-tests/client/components/balanceCapsule.spec.ts), fed by the same client/balance.ts
-reader. The account balance is already stated by the cost card's own balance row
-(`.lc-sc-balance`, layout `statsCost.tsx`) and by the per-platform cards' remaining
-amounts, so the heading repeated one figure a third time and sat between the page
-title and the date-range controls. The component, its spec, its CSS and its mount
-in `client/components/overviewPanel.tsx` are gone; `client/balance.ts` and
-`host/balance.ts` stay, since the cost card, the platform cards and the composer
-readout still read through them (their doc comments no longer call the consumer a
-"capsule").
-
-Platform card readouts made legible (own code). Two defects on the per-platform
-spend cards:
-
-  * The per-model table's Spend and Calls columns ran together ("198.111.8k",
-    "0109") and carried no column headers. The gap was declared as
-    `.lc-pf-model-spend { padding-left: 10px }` — specificity (0,1,0) — while the
-    shared cell rule `.lc-pf-models td { padding: 3px 0 }` is (0,1,1), so the gap
-    was overridden and never applied. The gap now rides
-    `.lc-pf-models td.lc-pf-model-spend` (0,2,1), and the table gained a header row
-    (Model / Spend / Calls) so two right-aligned figures are told apart by name
-    rather than position. `client/styles/spend.css` and
-    `client/components/statsPlatforms.tsx` carry the change;
-    `client/i18n.ts` gains `costStat.spendLabel` in both dictionaries.
-
-  * A credit platform's remaining balance printed as a bare number ("剩余 5550")
-    while a money balance is self-describing through its currency symbol, so the
-    credit figure read like an amount. `platformBalanceTexts` now formats the
-    credit branch through the `costStat.credits` unit, and the function takes the
-    `Translate` it needed to do so — its four call sites in
-    `client/components/{overviewPanel,contextView,composerDock}.tsx` pass it.
-
-Composer-dock collapse verdict fixed (own code). The readout is meant to degrade to
-its icon when the row cannot fit the full reading, but it never fired: the verdict
-read `parent.clientWidth` — the WHOLE row — and compared the full reading against
-it. The plugin is one entry in that row (the official usage pill and context ring
-sit beside it), so on the live ~860px row with ~260px taken by the official pair,
-600px of reading compared against 860px and always "fit". The two figures the docs
-promised — the official siblings and the gaps — were never subtracted.
-
-`client/dockRow.ts` now holds that arithmetic as a pure function (`roomForEntry`:
-content box minus the siblings minus one gap per sibling, `null` when the row is
-unmeasurable so a bogus environment keeps the full reading instead of collapsing),
-and `composerDock.tsx` feeds it the row's padding, its non-trigger children and its
-`column-gap`. The siblings must contribute the width they NEED, not the box they
-currently occupy: the official pills are compressible (`min-width: 0` + ellipsis)
-while this readout is `flex: none`, so a row that is too small squeezes them first.
-Charging only their squashed box inverted the verdict — the more they were squeezed,
-the more room this line believed it had, so it stayed full and kept squeezing them
-(live: the officials read "4 ..." and "46...." while this line was untouched).
-`naturalWidthOf` supplies the needed width (box plus whatever the element and its
-clipping descendants are hiding), which does not move with flex allocation and so
-cannot feed back. The measuring probe also gained the row's own box metrics — the 14px
-glyph, the 6px gap and the `1px 8px` padding — because as a bare text span it
-under-measured the reading by ~36px and left borderline rows one size too long.
-
-For reference, the official component this row neighbours
-(`ui-chat/src/client/chat/StatsPills.tsx`) does no measurement at all: it has no
-`ResizeObserver`, `offsetWidth`, `getBoundingClientRect`, `clientWidth`,
-`matchMedia` or `useEffect`, and shrinks purely in CSS (`.root`/`.pill`
-`min-width:0;max-width:100%` plus `.label` ellipsis). Degrading to an icon is this
-fork's own, stronger fallback, so the arithmetic it needs is this fork's to own.
-
-The verdict also never RE-RAN at the right moment (own code). Fixing the arithmetic
-was not enough, because the plugin's own data (the timeline) arrives first: its
-effect runs while its row holds only itself, computes "room 495px vs need 237px —
-fits", and the official pills and context ring then mount on their own schedule.
-That does not resize the row (a flex row's width comes from its parent; measured in
-Chrome: 495px before and after), so the `ResizeObserver` on the row never fired
-(callback count 0) and the verdict stayed frozen at "fits" for the life of the
-mount. Only a window resize re-ran it. The observer set therefore gained a
-`MutationObserver` on the row with `childList: true` — the one scope that catches
-sibling entries mounting while ignoring this button's own form toggle, which would
-otherwise feed back. Verified in Chrome with the officials mounting asynchronously
-on a 495px row: the verdict re-runs on the child-list change, the readout collapses,
-and the official pills stop being ellipsised.
+Apache-2.0. The full text is in LICENSE (and LICENSE.apache keeps upstream's
+copy). Attribution to the dsh-context contributors is retained above because the
+project's behaviour and the wire contract it must interoperate with originated
+there.

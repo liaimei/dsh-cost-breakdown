@@ -1,0 +1,13 @@
+/* The per-turn spend pill: a compact readout beside the harness's own token pill on the reply tail. */
+.cb-turn-spend {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 6px;
+  border-radius: 999px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: calc(var(--dsh-content-font-size-secondary, 13px) - 2px);
+  line-height: 18px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.cb-turn-spend:hover { color: var(--dsw-alias-label-secondary); background: var(--dsw-alias-bg-layer-2); }
