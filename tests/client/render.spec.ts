@@ -123,6 +123,30 @@ describe('settings card', () => {
 })
 
 describe('stats page', () => {
+  it('renders the KPI band, token cards and session grid from a session list', () => {
+    // A hook-shaped seat: the page calls it with one identity selector.
+    const useSessions = (selector: (snapshot: unknown) => unknown): unknown => selector({
+      rows: [{
+        id: 's1',
+        title: 'Pricing work',
+        updatedAt: Date.now(),
+        running: false,
+        contextTimeline: snapshot(),
+        contextActivity: { days: { [new Date().toISOString().slice(0, 10)]: { tokens: 12, requests: 1 } } },
+      }],
+    })
+    const markup = renderToStaticMarkup(h(InsightsPage, {
+      t,
+      ctx: clientContext(),
+      preferences: preferences(),
+      sessionId: 's1',
+      useSessions,
+    }))
+    expect(markup).toContain('ov.title')
+    expect(markup).toContain('ov.kpi.tokens')
+    expect(markup).toContain('Pricing work')
+  })
+
   it('renders the unavailable state when the session list is not served', () => {
     const markup = renderToStaticMarkup(h(InsightsPage, {
       t,
