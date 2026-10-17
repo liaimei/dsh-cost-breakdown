@@ -11,7 +11,7 @@
 | 账本键 | `SessionCostUsage[provider][model][period][bucket]`，provider 是 **DSH 请求信封里的路由 id** |
 | 实测键 | 真实会话里出现 `workbuddy` 与 `workbuddy-ai` 两个 provider，各自只有一个模型 `deepseek-v4.1-flash` |
 | 单价来源 | 客户端价目册：官方 `@opencode-ai/models` → models.dev 注册表（3823 个模型） |
-| 官方价目表 | `src/shared/officialRates.ts`，只收录 DeepSeek，含峰谷时段 |
+| 官方价目表 | `src/core/clock.ts`（价目表与峰谷日历同处一个模块），只收录 DeepSeek，含峰谷时段 |
 
 **账本本身已经按「provider × model」记账**，所以「统计到具体模型」这一半是现成的；
 缺的是**给第三方 provider 的模型定出单价**。
@@ -38,7 +38,7 @@
 
 问题在于同名 ≠ 同价。同一个 `glm-5.3` 在注册表里被 31 家标注，
 费率从 `0/0`（免费套餐）到 `1.4/4.4`（zai 官方）不等。现有的
-`resolveCandidates`（`src/client/cost.ts`）只在候选**唯一**时才敢计价，
+`resolveCandidates`（`src/client/data/cost.ts`）只在候选**唯一**时才敢计价，
 否则返回 `null`——这是对的（宁可显示破折号，也不猜错价），
 但结果是**第三方模型的费用基本全都统计不出来**。
 
@@ -110,10 +110,10 @@
 
 | # | 改动 | 文件 |
 |---|---|---|
-| 1 | 第三方费率表的类型与校验（不可信 wire 输入，逐字段重校验） | `src/shared/types.ts`、新增 `src/shared/thirdPartyRates.ts` |
-| 2 | 把费率表接进 `priceFaceOf` 的第 2 步 | `src/client/cost.ts` |
-| 3 | 设置项：按账本实测的 provider 列出可配模型 | `src/client/components/settingsCard.tsx`、`src/client/settings.ts` |
-| 4 | 费用卡按 provider → model 展开 | `src/client/components/statsCost.tsx` |
+| 1 | 第三方费率表的类型与校验（不可信 wire 输入，逐字段重校验） | `src/wire/model.ts` + `src/client/data/thirdPartyRates.ts` |
+| 2 | 把费率表接进 `priceFaceOf` 的第 2 步 | `src/client/data/cost.ts` |
+| 3 | 设置项：按账本实测的 provider 列出可配模型 | `src/client/ui/settings.tsx`、`src/client/shell/preferences.ts` |
+| 4 | 费用卡按 provider → model 展开 | `src/client/ui/dock/blocks.tsx` + `src/client/ui/insights/spend.tsx` |
 | 5 | 测试：同名不同价必须不猜；配置命中；`credits` 不参与计算；`free: true` 计 ¥0 | `tests/` |
 
 ## 5. 不做的事
