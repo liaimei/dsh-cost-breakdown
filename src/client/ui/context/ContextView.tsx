@@ -9,15 +9,15 @@
  * not ripple through the others.
  */
 
-import { createElement as h, useMemo, useRef, useState } from 'react'
+import { createElement as h, useRef, useState } from 'react'
 import type { ReactElement } from 'react'
 import type { ClientContext, ContextSeatProps } from '../../shell/contracts'
 import { headerEpochsOf } from '../../shell/contracts'
 import type { Translate } from '../../i18n/dict'
 import type { PreferencesStore } from '../../shell/preferences'
 import { useTimelineSource } from '../../data/timeline'
-import { formatCount, formatDuration, formatShare, formatClock } from '../../i18n/format'
-import { STAGES, headlineOf, officialParts, partsOf, stageLabel } from './derive'
+import { formatClock, formatCount, formatDuration, formatShare } from '../../i18n/format'
+import { headlineOf, stageLabel } from './derive'
 import { takeContextFocus } from './jump'
 import { BrowserCard } from './Browser'
 import type { RequestRow, Snapshot } from '../../../wire/model'

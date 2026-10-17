@@ -354,6 +354,9 @@ export function useTimelineSource({ sessionId, useProjection }: { sessionId?: st
   const snapshot = useSyncExternalStore(
     ledger !== null ? ledger.subscribe : NO_SUBSCRIBE,
     ledger !== null ? ledger.getSnapshot : IDLE_SNAPSHOT,
+    // The server snapshot matches the client's idle read: the plugin has no server-side renderer, but the
+    // third argument keeps the hook valid under any renderer that asks for one.
+    ledger !== null ? ledger.getSnapshot : IDLE_SNAPSHOT,
   )
   useEffect(() => {
     // A pushed head revision drives the trailing re-read; a cold start asks for rev 0.

@@ -14,15 +14,12 @@
  * Everything is derived from each row's projections; no session log is opened.
  */
 
-import type {
-  CostLedger, CreditRateTable, Snapshot, TimingTotals,
-} from '../../wire/model'
+import type { CostLedger, CreditRateTable, Snapshot, TimingTotals } from '../../wire/model'
 import type { Translate } from '../i18n/dict'
 import { dayKeyOf, shiftDayKey, startOfDay, endOfDay } from '../../core/day'
-import { billedTokensOf } from '../../core/ledger'
 import type { OverviewRow } from './overview'
 import {
-  billedTokens, estimateByBucket, estimateByPeriod, estimateSessionCost, mergeCalls, mergeLedgers, moneyOnly,
+  billedTokens, estimateByBucket, estimateSessionCost, mergeCalls, mergeLedgers, moneyOnly,
   type Currency, type PriceBook,
 } from './cost'
 import { platformSpendsOf, type PlatformSpend } from './platformSpend'

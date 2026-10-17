@@ -24,7 +24,8 @@ const listeners = new Set<() => void>()
 /** Record `seq` as the jump target for `sessionId` and wake every mounted view. */
 export function requestContextFocus(sessionId: string, seq: number): void {
   pendingFocus.set(sessionId, seq)
-  for (const listener of [...listeners]) listener()
+  // Set iteration is safe under removal; no copy is needed to notify the current listeners.
+  for (const listener of listeners) listener()
 }
 
 /** Every record wakes all views; a listener takes only its own session's entry, so another session's

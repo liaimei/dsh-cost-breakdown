@@ -143,9 +143,10 @@ export function bookSettlement(state: TimelineState, context: SettlementContext,
  * what makes it impossible for the two to price one settlement differently.
  */
 function bookInto(ledger: TimelineState['cost'], provider: string, model: string, period: Period, buckets: BucketTotals) {
-  const next = { ...(ledger ?? {}) }
-  const providerRow = { ...(next[provider] ?? {}) }
-  const modelRow = { ...(providerRow[model] ?? {}) }
+  // Spreading `undefined` adds nothing, so no fallback is needed here.
+  const next = { ...ledger }
+  const providerRow = { ...next[provider] }
+  const modelRow = { ...providerRow[model] }
   const current = period === 'peak' ? modelRow.peak : modelRow.off
   const merged = current === undefined ? { ...buckets } : addBuckets(current, buckets)
   if (period === 'peak') modelRow.peak = merged
@@ -165,17 +166,17 @@ function appendTurnUsage(
 ): void {
   const previous = state.turnCost?.[turnKey]
   const usage = bookInto(previous?.usage, provider, model, period, buckets)
-  const requests = { ...(previous?.requests ?? {}) }
-  const models = { ...(requests[provider] ?? {}) }
+  const requests = { ...previous?.requests }
+  const models = { ...requests[provider] }
   models[model] = (models[model] ?? 0) + 1
   requests[provider] = models
-  state.turnCost = { ...(state.turnCost ?? {}), [turnKey]: { usage, requests } }
+  state.turnCost = { ...state.turnCost, [turnKey]: { usage, requests } }
 }
 
 /** Count one request against its (provider, model). Written at the same point as `cost`. */
 function bumpCalls(state: TimelineState, provider: string, model: string): void {
-  const calls = { ...(state.calls ?? {}) }
-  const row = { ...(calls[provider] ?? {}) }
+  const calls = { ...state.calls }
+  const row = { ...calls[provider] }
   row[model] = (row[model] ?? 0) + 1
   calls[provider] = row
   state.calls = calls

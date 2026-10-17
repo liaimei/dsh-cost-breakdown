@@ -175,7 +175,7 @@ export function briefOf(nodes: readonly SurfaceEntry[], requests: readonly Reque
 /** Every boundary event (compaction/prune) attaches to the first request recorded after it. Shared by
  * the chart's scissors markers and the detail panel, so both name the same event. */
 export function attachMarkers(requests: readonly RequestRow[], events: Snapshot['events']): Array<Snapshot['events'][number] | undefined> {
-  const markers = new Array<Snapshot['events'][number] | undefined>(requests.length)
+  const markers: Array<Snapshot['events'][number] | undefined> = Array.from({ length: requests.length })
   for (const event of events) {
     if (event.kind !== 'compaction' && event.kind !== 'prune') continue
     for (let r = 0; r < requests.length; r++) {

@@ -46,7 +46,8 @@ export function modalStoreOf(sessionId: string): ModalStore {
       // click in the same tick), and `useSyncExternalStore` would re-render for each notification.
       if (next === open) return
       open = next
-      for (const listener of [...listeners]) listener()
+      // Set iteration is safe under removal; no copy is needed to notify the current listeners.
+      for (const listener of listeners) listener()
     },
   }
   stores.set(sessionId, store)

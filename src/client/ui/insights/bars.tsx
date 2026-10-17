@@ -38,7 +38,8 @@ function heightOf(tokens: number, peak: number): string {
 export function UsageBars(props: UsageBarsProps): ReactElement {
   const { t } = props
   const days = props.days
-  const empty = days.length === 0 || days.every(day => day.tokens <= 0)
+  // `every` is true for an empty array, which is exactly the "nothing to draw" case.
+  const empty = days.every(day => day.tokens <= 0)
   let peak = 0
   for (const day of days) if (day.tokens > peak) peak = day.tokens
   return (

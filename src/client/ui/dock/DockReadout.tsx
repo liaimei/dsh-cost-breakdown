@@ -16,7 +16,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { ReactElement } from 'react'
 import type { DockSeatProps } from '../../shell/contracts'
-import { useSnapshot, readingOf, usePeriod, useWallet, countdownPartsOf, balanceTextOf } from './reading'
+import { balanceTextOf, readingOf, usePeriod, useSnapshot, useWallet } from './reading'
 import type { DockReading, PeriodView } from './reading'
 import { usePriceBook } from '../insights/priceBook'
 import { moneyRates } from '../../shell/rateTables'
@@ -225,7 +225,7 @@ function Readout(props: {
           : null}
         <span ref={probe} className="cb-dock-probe" aria-hidden="true">
           <GlyphInsights size={14} />
-          <span>{probeText(t, reading, period, currency, balanceTextOf)}</span>
+          <span>{probeText(t, reading, period)}</span>
         </span>
       </button>
       {open
@@ -252,7 +252,7 @@ function Readout(props: {
 }
 
 /** The probe's text: what the full readout would say. */
-function probeText(t: Translate, reading: DockReading, period: PeriodView, currency: Currency, _balance: unknown): string {
+function probeText(t: Translate, reading: DockReading, period: PeriodView): string {
   const parts: string[] = []
   for (const row of reading.shown) {
     parts.push(row.unit === 'credits'
@@ -360,14 +360,10 @@ function DockCard(props: {
         <StatsTokenBlock t={t} reading={reading} />
         {reading.usage !== null
           ? (
-            <StatsCostBlock
-              t={t}
-              reading={reading}
-              currency={currency}
-            />
+            <StatsCostBlock t={t} reading={reading} />
           )
           : null}
-        <StatsPlatformBlock t={t} reading={reading} wallet={wallet} currency={currency} />
+        <StatsPlatformBlock t={t} reading={reading} wallet={wallet} />
       </div>
       {reading.onOfficialRates
         ? (

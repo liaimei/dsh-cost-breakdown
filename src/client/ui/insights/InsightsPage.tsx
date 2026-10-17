@@ -15,13 +15,13 @@ import type { ReactElement } from 'react'
 import type { ClientContext, SessionSeatProps } from '../../shell/contracts'
 import { serviceOf, openSessionWith } from '../../shell/contracts'
 import type { Translate } from '../../i18n/dict'
-import { formatCount, formatDuration, formatPercent } from '../../i18n/format'
+import { formatCount, formatDuration } from '../../i18n/format'
 import { usePriceBook } from './priceBook'
 import type { PreferencesStore } from '../../shell/preferences'
 import {
-  OVERVIEW_PAGE_SIZE, OVERVIEW_RANGES, aggregateDays, billedTotalsOf, dayKeyRange, daysOfWindow, filterRows,
-  groupCountsOf, kpisOf, mergeCreditRatesAll, pageOf, rangeWindowOf, relativeTime, requestActivityBackfill,
-  sessionGroupsOf, skillLoadsOf, sortRows, windowOfDayRange, type OverviewRange, type OverviewSort, type SkillSort,
+  OVERVIEW_RANGES, aggregateDays, billedTotalsOf, dayKeyRange, filterRows,
+  groupCountsOf, inGroup, kpisOf, mergeCreditRatesAll, pageOf, rangeWindowOf, requestActivityBackfill,
+  skillLoadsOf, sortRows, windowOfDayRange, type OverviewRange, type OverviewSort, type SkillSort,
 } from '../../data/aggregate'
 import { rowsOfSnapshot, type OverviewRow } from '../../data/overview'
 import { snapshotOf, activityOf } from '../../shell/washers'
@@ -48,7 +48,7 @@ export interface InsightsProps extends SessionSeatProps {
 
 /** The page. */
 export function InsightsPage(props: InsightsProps): ReactElement {
-  const { t, ctx, preferences } = props
+  const { t, ctx } = props
   const sessions = useSnapshotSeat(props.useSessions)
   const workspaces = useSnapshotSeat(props.useWorkspaces)
   const rows = useMemo(
@@ -63,6 +63,7 @@ export function InsightsPage(props: InsightsProps): ReactElement {
   const [skill, setSkill] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState<OverviewSort>('recent')
+  const [group, setGroup] = useState<string | null>(null)
   const [page, setPage] = useState(0)
   const currency: Currency = 'usd'
 
@@ -75,21 +76,26 @@ export function InsightsPage(props: InsightsProps): ReactElement {
   }, [ctx])
 
   // Any filter change resets the pager: a page index that no longer exists would render an empty grid.
-  useEffect(() => { setPage(0) }, [range, custom, day, skill, query, sort])
+  useEffect(() => { setPage(0) }, [range, custom, day, skill, query, sort, group])
 
   const window = custom !== null ? windowOfDayRange(custom) ?? rangeWindowOf(range, now) : rangeWindowOf(range, now)
   const credits = mergeCreditRatesAll(rows)
   const money = moneyRates()
   const ranged = useMemo(() => filterRows(rows, { window, day: null, query: '' }), [rows, window])
-  const scoped = useMemo(() => filterRows(ranged, { window, day, query, skill }), [ranged, window, day, query, skill])
+  const scopedAll = useMemo(() => filterRows(ranged, { window, day, query, skill }), [ranged, window, day, query, skill])
+  // A workspace chip narrows the list further; the chips themselves are counted over the unpinned scope so a
+  // pinned group keeps its own chip visible (and one click away from being released).
+  const scoped = useMemo(
+    () => (group === null ? scopedAll : scopedAll.filter(row => inGroup(row, group, workspaces))),
+    [scopedAll, group, workspaces],
+  )
   const kpis = useMemo(() => kpisOf(ranged, rows.length, book, credits, money, currency), [ranged, rows.length, book, credits, money])
   const days = useMemo(() => aggregateDays(ranged, book, credits, money, currency, now, 7), [ranged, book, credits, money, now])
   const sorted = useMemo(() => sortRows(scoped, sort), [scoped, sort])
   const paged = pageOf(sorted, page)
-  const chips = groupCountsOf(scoped, workspaces)
+  const chips = groupCountsOf(scopedAll, workspaces)
   const skills = useMemo(() => skillLoadsOf(ranged, { window, day, sort: 'loads' as SkillSort }), [ranged, window, day])
   const dayMap = useMemo(() => new Map(days.map(entry => [entry.day, entry])), [days])
-  const groups = useMemo(() => sessionGroupsOf(scoped, workspaces), [scoped, workspaces])
   const today = todayKey(now)
   const span = custom ?? dayKeyRange(window)
 
@@ -171,7 +177,10 @@ export function InsightsPage(props: InsightsProps): ReactElement {
           ? h('div', { className: 'cb-ov-groups' }, chips.map(chip => h('button', {
             key: chip.key,
             type: 'button',
-            className: `cb-ov-group${chip.key === day ? ' cb-ov-group-on' : ''}`,
+            className: `cb-ov-group${chip.key === group ? ' cb-ov-group-on' : ''}`,
+            'aria-pressed': chip.key === group,
+            title: t('ov.group.label'),
+            onClick: () => { setGroup(chip.key === group ? null : chip.key) },
           }, `${chip.key === '__ungrouped__' ? t('ov.group.ungrouped') : chip.key} ${chip.count}`)))
           : null,
         h('div', { className: 'cb-ov-grid' },
@@ -252,4 +261,4 @@ function useSnapshotSeat(seat: unknown): unknown {
   }
 }
 
-export { formatPercent, relativeTime, sessionGroupsOf, platformDisplayName, OVERVIEW_PAGE_SIZE }
+export { platformDisplayName }

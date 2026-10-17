@@ -15,7 +15,7 @@
 
 import { useEffect, useState } from 'react'
 import type { CreditRateTable, Snapshot } from '../../../wire/model'
-import { DEFAULT_HOLIDAYS, countdownOf, msUntilFlip, offDayReason, periodAt, type Period } from '../../../core/clock'
+import { countdownOf, msUntilFlip, offDayReason, periodAt, type Period } from '../../../core/clock'
 import { isDeepSeekRoute } from '../../../core/providers'
 import { billedTokens, mergeLedgers, type Currency, type PriceBook } from '../../data/cost'
 import type { PlatformSpend } from '../../data/platformSpend'

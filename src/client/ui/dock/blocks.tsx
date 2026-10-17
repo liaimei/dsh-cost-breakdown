@@ -10,7 +10,6 @@
 import type { ReactElement } from 'react'
 import type { Translate } from '../../i18n/dict'
 import { formatCount, cacheHitPercent } from '../../i18n/format'
-import type { Currency } from '../../data/cost'
 import { formatCost, formatCredits, formatNativeSpend, officialRows } from '../../data/cost'
 import { STAGE_ORDER } from '../../data/aggregate'
 import type { DockReading } from './reading'
@@ -45,8 +44,8 @@ export function StatsTokenBlock(props: { t: Translate; reading: DockReading }): 
 }
 
 /** The cost block: the billed bucket split and the peak/off split for the current provider. */
-export function StatsCostBlock(props: { t: Translate; reading: DockReading; currency: Currency }): ReactElement {
-  const { t, reading, currency } = props
+export function StatsCostBlock(props: { t: Translate; reading: DockReading }): ReactElement {
+  const { t, reading } = props
   const usage = reading.usage
   // The cost card prices the current route only, and only when that route is on the official table.
   const provider = reading.active?.provider ?? null
@@ -94,9 +93,8 @@ export function StatsCostBlock(props: { t: Translate; reading: DockReading; curr
 }
 
 /** The platform block: one line per platform, each in its own currency, never summed. */
-export function StatsPlatformBlock(props: { t: Translate; reading: DockReading; wallet: WalletState; currency: Currency }): ReactElement {
-  const { t, reading, wallet, currency } = props
-  void currency
+export function StatsPlatformBlock(props: { t: Translate; reading: DockReading; wallet: WalletState }): ReactElement {
+  const { t, reading, wallet } = props
   const rows = reading.platforms
   return (
     <div className="cb-dock-card-block">

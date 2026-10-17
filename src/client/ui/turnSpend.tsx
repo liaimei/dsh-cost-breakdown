@@ -40,9 +40,8 @@ export function TurnSpend(props: TurnSpendProps): ReactElement | null {
   const entry = snapshot.turnCost?.[String(turn)]
   if (entry === undefined) return null
   const credits = snapshot.creditRates ?? null
-  const locale = props.locale?.() ?? 'en'
-  const currency: Currency = locale === 'zh' ? 'cny' : 'usd'
-  const amount = amountOf(entry, snapshot, credits, book, currency)
+  const currency: Currency = (props.locale?.() ?? 'en') === 'zh' ? 'cny' : 'usd'
+  const amount = amountOf(entry, snapshot, credits, book)
   if (amount === null) return null
   return h('span', {
     className: 'cb-turn-spend',
@@ -67,7 +66,6 @@ function amountOf(
   snapshot: Snapshot,
   credits: CreditRateTable | null,
   book: ReturnType<typeof usePriceBook>,
-  currency: Currency,
 ): { value: number; credits: boolean } | null {
   // A credit-billed turn reports credits: relative consumption, because the platform documents its
   // multiplier as display-only.

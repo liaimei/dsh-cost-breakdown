@@ -14,7 +14,7 @@ import type { HeaderTimeline, Snapshot, SurfaceEntry } from '../../../wire/model
 import type { Translate } from '../../i18n/dict'
 import { formatCount } from '../../i18n/format'
 import { assemble, byCatOf, countOf } from './assemble'
-import { STAGES, stageLabel } from './derive'
+import { STAGES } from './derive'
 
 /** The browser's inputs. `selectedSeq` is the `null`-for-live cut. */
 export interface BrowserProps {
@@ -76,7 +76,7 @@ function rowsOf(
     systemTokens: number
   },
 ): ReactElement[] {
-  const { assembled, byCat, t, headerTools, systemTokens } = ctx
+  const { byCat, t, headerTools, systemTokens } = ctx
   if (category === 'system') {
     return [h('div', { key: 'system', className: 'cb-browser-item' },
       h('span', { className: 'cb-browser-item-name' }, t('cat.system')),

@@ -145,7 +145,7 @@ export function mergeDay(into: LedgerDay, from: LedgerDay): LedgerDay {
     merged.cost = target
   }
   if (from.skills !== undefined) {
-    const skills = { ...(into.skills ?? {}) }
+    const skills = { ...into.skills }
     for (const [name, tally] of Object.entries(from.skills)) {
       const current = skills[name]
       skills[name] = current === undefined
@@ -160,7 +160,7 @@ export function mergeDay(into: LedgerDay, from: LedgerDay): LedgerDay {
 /** Merge two per-session activity ledgers (the Insights page sums every listed session). */
 export function mergeActivity(left: ActivityLedger | null, right: ActivityLedger | null): ActivityLedger | null {
   if (left === null && right === null) return null
-  const days: Record<string, LedgerDay> = { ...(left?.days ?? {}) }
+  const days: Record<string, LedgerDay> = { ...left?.days }
   for (const [key, day] of Object.entries(right?.days ?? {})) {
     days[key] = days[key] === undefined ? day : mergeDay(days[key], day)
   }

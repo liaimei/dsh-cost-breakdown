@@ -16,7 +16,7 @@
  */
 
 import type {
-  BucketTotals, CallLedger, CostLedger, FileOp, LedgerEvent, RequestRow, SurfaceEntry,
+  CallLedger, CostLedger, FileOp, LedgerEvent, RequestRow, SurfaceEntry,
   SystemNode, TimingSegment, TimingTotals, TurnLedger, Stage,
 } from '../../wire/model'
 import type { FoldBounds } from '../settings'
