@@ -363,3 +363,49 @@
   overflow: auto;
 }
 .cb-browser-schema-desc { color: var(--dsw-alias-label-secondary); margin-bottom: 4px; }
+
+/* --- file activity card ------------------------------------------------ */
+.cb-files-floor { font-size: 11px; color: var(--dsw-alias-label-tertiary); margin-bottom: 4px; }
+.cb-file-row-wrap { border-top: 1px solid var(--dsw-alias-border-l1); }
+.cb-file-row-wrap:first-child { border-top: 0; }
+.cb-file-row { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.cb-file-main {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  padding: 4px 2px;
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: left;
+}
+.cb-file-main:hover { background: var(--dsw-alias-bg-layer-2); }
+.cb-file-main svg { opacity: 0.4; flex: none; }
+.cb-file-row-open .cb-file-main svg { transform: rotate(180deg); opacity: 0.8; }
+.cb-file-glyph { flex: none; width: 18px; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; }
+.cb-file-lang { font-size: 8px; font-weight: 700; padding: 1px 3px; border-radius: 3px; line-height: 1.2; }
+.cb-file-path { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--ds-font-family-code, ui-monospace, monospace); }
+.cb-file-delta { font-variant-numeric: tabular-nums; color: var(--dsw-alias-label-secondary); font-size: 11px; flex: none; }
+.cb-file-err { color: var(--dsw-alias-state-error-primary); flex: none; font-weight: 600; }
+.cb-file-act {
+  border: 0;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 0 3px;
+  flex: none;
+  border-radius: 4px;
+}
+.cb-file-act:hover { color: var(--dsw-alias-label-primary); background: var(--dsw-alias-bg-layer-2); }
+.cb-file-ops { padding: 2px 0 8px 24px; display: flex; flex-direction: column; gap: 3px; }
+.cb-file-op { display: flex; gap: 8px; align-items: baseline; font-size: 11px; color: var(--dsw-alias-label-secondary); flex-wrap: wrap; }
+.cb-file-kind { font-size: 9px; text-transform: uppercase; letter-spacing: 0.02em; color: var(--dsw-alias-label-tertiary); flex: none; }
+.cb-file-op-tool { font-family: var(--ds-font-family-code, ui-monospace, monospace); }
+.cb-file-op-read, .cb-file-op-hits, .cb-file-op-program { font-variant-numeric: tabular-nums; color: var(--dsw-alias-label-tertiary); }
+.cb-file-op-detail { color: var(--dsw-alias-label-tertiary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 40ch; }

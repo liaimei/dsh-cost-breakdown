@@ -26,7 +26,11 @@ import { takeContextFocus } from './jump'
 import { makeErrorBoundary } from './ErrorBoundary'
 import { BrowserCard } from './Browser'
 import { AgentNetwork } from './AgentNetwork'
-import { openSessionWith, serviceOf, type SessionsFace } from '../../shell/contracts'
+import { FilesCard } from './Files'
+import {
+  canOpenPaths, openPathWith, openSessionWith, resourceOpenerOf, serviceOf, workspaceOf,
+  type SessionsFace,
+} from '../../shell/contracts'
 import type { HeaderTimeline, RequestRow, Snapshot } from '../../../wire/model'
 
 /** The view's props: the seat plus the closures the entry supplies. */
@@ -93,6 +97,31 @@ function ContextBody(props: ContextViewProps): ReactElement {
   const root = useRef<HTMLDivElement | null>(null)
   const sidebar = host === 'sidebar'
   const head = timeline.data
+  const workspace = workspaceOf(props.ctx, props.sessionId)
+  const [opener, setOpener] = useState<((path: string) => void) | undefined>(undefined)
+  const [previewer, setPreviewer] = useState<((path: string) => boolean) | undefined>(undefined)
+
+  // The two file actions depend on the deployment, not on the data: opening needs a loopback session whose
+  // controller claims the verb, previewing needs the resource tab. Probing once is enough.
+  useEffect(() => {
+    let live = true
+    void canOpenPaths(props.ctx).then((allowed) => {
+      if (!live) return
+      setOpener(allowed ? openPathWith(props.ctx) : undefined)
+      const resource = resourceOpenerOf(props.ctx)
+      if (resource === undefined) return
+      // The preview address is session-scoped; the harness's own encoder builds it, so a path it rejects simply
+      // is not previewable.
+      setPreviewer(() => (path: string) => {
+        try {
+          return resource(`dsh-resource://file/${encodeURIComponent(path)}`)
+        } catch {
+          return false
+        }
+      })
+    })
+    return () => { live = false }
+  }, [props.ctx])
 
   // The chat→context jump consumes its pending seq only once the detail collections have landed: a
   // scroll target that is not rendered yet would scroll to nothing.
@@ -155,7 +184,20 @@ function ContextBody(props: ContextViewProps): ReactElement {
     }),
     h(BrowserCard, { t, data: head, headers, selectedSeq: activeRow?.seq ?? null, sessionId }),
     h(EventsSection, { t, snapshot: head }),
-    h(FilesSection, { t, snapshot: head }),
+    h(FilesCard, {
+      t,
+      fileOps: head.fileOps,
+      ...(head.fileOpsFloor !== undefined ? { floor: head.fileOpsFloor } : {}),
+      // The file scope is the active step: the op log is cut at the next request's seq, so this card and the
+      // browser always describe the same moment.
+      before: activeRow === null || activeIndex === displayed.length - 1
+        ? null
+        : head.requests.find(row => row.seq > (activeRow.seq))?.seq ?? null,
+      ...(workspace !== undefined ? { workspace } : {}),
+      onPreview: (path: string) => previewer?.(path) ?? false,
+      ...(opener !== undefined ? { onOpen: opener } : {}),
+      onLocate: () => { /* the browser has no path filter; locating keeps the card's own row in view */ },
+    }),
     h(AgentNetworkBridge, { t, ctx: props.ctx, sessionId, snapshot: head, now: Date.now() }),
     h(TimingSection, { t, snapshot: head }),
   )
@@ -365,24 +407,6 @@ function eventDetail(event: Snapshot['events'][number], t: Translate): string {
   if (event.kind === 'mode') return event.name === 'plan.on' ? t('ev.mode.plan.on') : t('ev.mode.plan.off')
   if (event.kind === 'inject') return event.sub === 'skill' ? `${t('ev.skill')}: ${event.name ?? ''}` : (event.name ?? t('ev.compaction'))
   return event.kind === 'prune' ? t('ev.prune') : t('ev.compaction')
-}
-
-/** The file-activity list. */
-function FilesSection(props: { t: Translate; snapshot: Snapshot }): ReactElement {
-  const { t, snapshot } = props
-  const ops = snapshot.fileOps ?? []
-  return h('div', { className: 'cb-card' },
-    h('div', { className: 'cb-card-title' }, h('span', { className: 'cb-card-title-text' }, t('files.title'))),
-    ops.length === 0
-      ? h('div', { className: 'cb-empty' }, t('files.empty'))
-      : h('ul', { className: 'cb-files' }, [...ops].reverse().slice(0, 40).map(op => h('li', { key: `${op.seq}-${op.path}`, className: 'cb-file-row' },
-        h('span', { className: `cb-file-kind cb-file-${op.kind}` }, t(`files.kind.${op.kind}`)),
-        h('span', { className: 'cb-file-path', title: op.path }, op.pattern === true ? op.path : op.path),
-        h('span', { className: 'cb-file-tool' }, op.tool),
-        op.added > 0 || op.removed > 0
-          ? h('span', { className: 'cb-file-delta' }, `+${op.added} −${op.removed}`)
-          : null,
-        op.err ? h('span', { className: 'cb-file-err' }, '!') : null))))
 }
 
 /**
