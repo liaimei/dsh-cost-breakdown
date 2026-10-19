@@ -20,7 +20,7 @@
 .cb-card-title > .cb-card-title-text { flex: 0 0 auto; }
 .cb-card-title-text { flex: none; white-space: nowrap; }
 /* A regular-weight subtitle pinned to the right of a 600-weight title; the native `title` explains it. */
-.cb-card-sub { flex: none; margin-left: auto; font-weight: 400; color: var(--dsw-alias-label-secondary); font-size: 12px; }
+.cb-card-sub { flex: 0 1 auto; min-width: 0; margin-left: auto; font-weight: 400; color: var(--dsw-alias-label-secondary); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* Segmented controls (step/turn, total/delta, sorts, event kinds). */
 .cb-gran, .cb-kinds { margin-left: auto; display: flex; gap: 2px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l2); border-radius: 6px; padding: 1px; }

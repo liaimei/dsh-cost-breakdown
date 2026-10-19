@@ -71,8 +71,8 @@
  * 14px bar + 2px gap column grid. Change one and the grid lines drift off the bars. */
 
 /* The plot row: a fixed-height bar row beside the numeric axis rail. */
-.cb-chartrow { display: flex; gap: 6px; align-items: stretch; }
-.cb-axis { position: relative; width: 40px; height: 150px; padding-top: 18px; box-sizing: border-box; color: var(--dsw-alias-label-secondary); font-size: 11px; }
+.cb-chartrow { display: flex; gap: 6px; align-items: stretch; min-width: 0; max-width: 100%; }
+.cb-axis { position: relative; flex: none; width: 40px; height: 150px; padding-top: 18px; box-sizing: border-box; color: var(--dsw-alias-label-secondary); font-size: 11px; }
 .cb-axis span { position: absolute; right: 0; line-height: 1; }
 /* Mirrors Q3_TOP / Q1_TOP in the component, used by the delta-mode overlap check. */
 .cb-axis-top { top: 13px; }
@@ -83,7 +83,7 @@
 
 /* Holds the scroll container and the hover tip: an absolutely positioned child of the scroll container would
  * join its scrollable overflow and slide away with the content. */
-.cb-chart-wrap { position: relative; flex: 1; min-width: 0; }
+.cb-chart-wrap { position: relative; flex: 1 1 0; min-width: 0; max-width: 100%; overflow: hidden; }
 /* Do not set `scrollbar-width` / `scrollbar-color`: either makes Chromium/Safari drop every
  * `::-webkit-scrollbar*` rule, including the harness's global 8px skin. `overscroll-behavior-x: contain` stops
  * an edge swipe from chaining into browser history navigation. */
@@ -183,7 +183,9 @@
 .cb-agent-chip { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; }
 .cb-agent-chip-on { color: var(--dsw-alias-state-success-primary); border-color: color-mix(in srgb, var(--dsw-alias-state-success-primary) 40%, transparent); }
 /* Paired with the overscroll handling: a swipe past the stage edge must not chain into browser history. */
-.cb-agent-stage { position: relative; overflow-x: auto; overscroll-behavior-x: contain; margin: 0 -4px; padding: 0 4px; max-width: 100%; }
+.cb-agent-stage { position: relative; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; margin: 0 -4px; padding: 0 4px; max-width: 100%; box-sizing: border-box; }
+/* The canvas is the positioned box the nodes and the link layer share; the stage scrolls around it. */
+.cb-agent-canvas { position: relative; margin: 0 auto; }
 .cb-agent-edges { position: absolute; inset: 0; pointer-events: none; }
 .cb-agent-edge { stroke-opacity: 0.45; transition: stroke-opacity var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 .cb-agent-edge-live { stroke-opacity: 0.85; }
@@ -555,3 +557,44 @@
 /* Both lists scroll inside their card, so the pair reads as one band whatever the session's size. */
 .cb-files { display: flex; flex-direction: column; gap: 0; height: 320px; overflow-y: auto; margin: 0; padding: 0; list-style: none; }
 .cb-files-card { min-width: 0; }
+
+/* --- responsive behaviour -----------------------------------------------
+ * The bands are flex-wrap rows with per-card minimum widths, which is what makes them fold. These rules cover the
+ * cases a min-width alone cannot: a card that must take the full row, and the inner grids that must reflow
+ * rather than overflow once the card is narrow. Breakpoints are measured against the card, not the window, so a
+ * narrow sidebar seat and a narrow window behave the same way. */
+@media (max-width: 900px) {
+  .cb-head > .cb-overview-card,
+  .cb-head > .cb-plugin-card,
+  .cb-head > .cb-tokens-card,
+  .cb-head > .cb-timing-card { flex-basis: 100%; }
+  .cb-col { flex-basis: 100%; }
+  .cb-cols-main > .cb-col { flex-basis: 100%; }
+}
+/* Per-card reflow: the grids inside a card are what overflow once the card narrows. */
+@container cb-card (max-width: 420px) {
+  .cb-overview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cb-kv-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cb-comp-legend { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cb-trend-legend { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .cb-trend-dna-legend { grid-template-columns: minmax(0, 1fr); }
+  .cb-donut-row { flex-wrap: wrap; justify-content: center; }
+  .cb-agent-inspector-parts { gap: 4px 8px; }
+}
+@container cb-card (max-width: 300px) {
+  .cb-overview-grid { grid-template-columns: minmax(0, 1fr); }
+  .cb-kv-grid { grid-template-columns: minmax(0, 1fr); }
+  .cb-comp-legend { grid-template-columns: minmax(0, 1fr); }
+  .cb-trend-legend { grid-template-columns: minmax(0, 1fr); }
+  .cb-chart-axis-label { display: none; }
+}
+/* The trend toolbar carries five toggles plus two segmented groups; in a narrow card it wraps under the title
+ * instead of overflowing the header row. */
+@container cb-card (max-width: 520px) {
+  .cb-trend-ctl { margin-left: 0; width: 100%; flex-wrap: wrap; }
+}
+/* A narrow card cannot hold the browser's two-column bucket rows; the counts drop below the names. */
+@container cb-card (max-width: 360px) {
+  .cb-browser-cat-row { flex-wrap: wrap; }
+  .cb-browser-cat-count { margin-left: auto; }
+}

@@ -97,8 +97,8 @@ export const AGENT_CARD_HEIGHT = 104
 export const AGENT_SLOT_MAX = 276
 export const AGENT_SLOT_MIN = 150
 const CARD_GUTTER = 12
-/** One grid column's width. Fixed, so a card is the same size on every level. */
-const AGENT_SLOT_W = 190
+/** The most columns a level ever uses: beyond four a tree reads as a matrix. */
+const AGENT_SLOT_MAX_COLUMNS = 4
 /** Vertical step between levels: the card plus the 40px lane reserved for edges below it. */
 const LEVEL_HEIGHT = AGENT_CARD_HEIGHT + 40
 const PAD_Y = 48
@@ -354,9 +354,24 @@ export function layoutForest(forest: AgentForest, stageWidth: number): AgentLayo
   // A level wraps into as many rows as the card needs. A real family is one root with a couple of children and
   // then two dozen grandchildren, so a single row per level overflowed the card by 2,200px. Each level therefore
   // gets its own block of rows, and the level's rows are centred within it.
-  const slot = AGENT_SLOT_W
-  const perRow = Math.max(1, Math.floor(Math.max(stageWidth, AGENT_SLOT_MIN) / slot))
-  const width = Math.max(stageWidth, slot * Math.min(perRow, maxLevelSize(levels)))
+  //
+  // The slot narrows with the card: a fixed 190px column meant a 700px card could only fit three, and a 420px
+  // card only two, so the graph grew into a tall single-file column. The floor is `AGENT_SLOT_MIN` (a card wide
+  // enough for its figures), and the ceiling is `AGENT_SLOT_MAX`.
+  // The columns are whatever actually fits: a hard minimum count (the old code forced two columns even when only
+  // one fit, which is why a 760px card cut every third node off) would overflow a narrow card. The slot never
+  // drops below `AGENT_SLOT_MIN`, so a card too narrow for one readable column scrolls instead of shrinking the
+  // cards into illegibility.
+  const available = Math.max(0, stageWidth)
+  // Fit as many whole slots as the card can hold; never fewer than one, never more than four.
+  const fits = Math.floor(available / AGENT_SLOT_MIN)
+  const columns = Math.max(1, Math.min(AGENT_SLOT_MAX_COLUMNS, fits))
+  // The slot grows into the space the columns leave, up to the cap; it never falls below the minimum.
+  const slot = Math.max(AGENT_SLOT_MIN, Math.min(AGENT_SLOT_MAX, Math.floor(available / columns)))
+  const perRow = Math.max(1, Math.min(columns, Math.floor(available / slot)))
+  // The grid is bounded by the card: a wrapped level is centred inside that width, so no card can cross the
+  // card's right edge and every node stays reachable without scrolling.
+  const width = available > 0 ? available : slot * Math.min(perRow, maxLevelSize(levels))
 
   const placed: PlacedNode[] = []
   /** The y where the next level's first row starts; each level advances by its own row count. */

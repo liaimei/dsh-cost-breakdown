@@ -274,3 +274,39 @@ describe('layoutForest geometry', () => {
     expect(widths.size).toBe(1)
   })
 })
+
+describe('layoutForest responsiveness', () => {
+  /** One root with a level of grandchildren wide enough to wrap. */
+  function wideFamily(): never {
+    const rows: Record<string, Record<string, unknown>> = { root: row('root') }
+    for (let index = 0; index < 12; index++) rows[`k${index}`] = row(`k${index}`, { parentId: 'root' })
+    return agentForestOf(snapshot(rows), 'root') as never
+  }
+
+  it('never lays out wider than the card it was given, at any width', () => {
+    // The graph used to size itself from the widest level and overflow the card; this is the invariant that
+    // makes the surface responsive rather than merely scrollable.
+    for (const width of [480, 600, 760, 900, 1024, 1440]) {
+      const layout = layoutForest(wideFamily(), width)
+      expect(layout.width, `width ${width}`).toBeLessThanOrEqual(width + 1)
+      for (const entry of layout.placed) {
+        expect(entry.left + entry.width, `node at ${width}px`).toBeLessThanOrEqual(width + 1)
+      }
+    }
+  })
+
+  it('uses fewer columns as the card narrows', () => {
+    const columnsAt = (width: number): number => {
+      const layout = layoutForest(wideFamily(), width)
+      const firstRow = layout.placed.filter(entry => entry.column >= 0 && entry.node.depth === 1)
+      const tops = [...new Set(firstRow.map(entry => entry.top))]
+      return firstRow.filter(entry => entry.top === tops[0]).length
+    }
+    expect(columnsAt(1440)).toBeGreaterThan(columnsAt(480))
+  })
+
+  it('keeps a readable card width even in the narrowest card', () => {
+    const layout = layoutForest(wideFamily(), 420)
+    for (const entry of layout.placed) expect(entry.width).toBeGreaterThanOrEqual(100)
+  })
+})

@@ -13,7 +13,7 @@
  * family drops the edge layer entirely rather than drawing an empty stage.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createElement as h } from 'react'
 import type { ReactElement } from 'react'
 import type { Snapshot } from '../../../wire/model'
@@ -77,6 +77,8 @@ export interface AgentNetworkProps {
 export function AgentNetwork(props: AgentNetworkProps): ReactElement {
   const { t, sessionId, snapshot, sessions, onOpen } = props
   const stage = useRef<HTMLDivElement | null>(null)
+  /** The card frame, which is the width the graph must fit inside. */
+  const card = useRef<HTMLDivElement | null>(null)
   /** The card's content width — the stage's own width comes from the layout, so measuring the stage would be
    * circular and would feed the first frame's fallback back into the next layout. */
   const [stageWidth, setStageWidth] = useState(0)
@@ -107,12 +109,18 @@ export function AgentNetwork(props: AgentNetworkProps): ReactElement {
 
   // Measure the stage so the grid can spread across the card's real width; a measurless environment (jsdom,
   // the first frame) falls back to the widest layout rather than cramming every card into one slot.
-  useEffect(() => {
-    // The card that wraps the stage is the width reference: it is in the layout flow and its width does not
-    // depend on this component's output.
-    const element = stage.current?.parentElement ?? null
+  // The card frame is the width reference: it is in the layout flow and its width never depends on this
+  // component's own output. Measuring the stage instead was circular, and reading `stage.current` before the
+  // ref attached left the measurement at the fallback forever.
+  useLayoutEffect(() => {
+    const element = card.current
     if (element === null) return
-    const measure = (): void => { setStageWidth(element.clientWidth) }
+    const measure = (): void => {
+      // The card's content box, minus its own padding: that is the room the graph may use.
+      const style = getComputedStyle(element)
+      const inner = element.clientWidth - parseFloat(style.paddingLeft || '0') - parseFloat(style.paddingRight || '0')
+      setStageWidth(inner > 0 ? inner : element.clientWidth)
+    }
     measure()
     const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(measure) : null
     observer?.observe(element)
@@ -121,7 +129,7 @@ export function AgentNetwork(props: AgentNetworkProps): ReactElement {
       observer?.disconnect()
       window.removeEventListener('resize', measure)
     }
-  }, [])
+  }, [forest === null])
 
   // Every relative without a timeline in its row is a fetch target. Firing them after the first layout keeps the
   // card's own render free of network work.
@@ -167,6 +175,7 @@ export function AgentNetwork(props: AgentNetworkProps): ReactElement {
   const running = forest.nodes.filter(node => node.running).length
 
   return h(Card, {
+    frame: card,
     t,
     team,
     count: team.count,
@@ -177,9 +186,13 @@ export function AgentNetwork(props: AgentNetworkProps): ReactElement {
     h('div', {
       ref: stage,
       className: `cb-agent-stage${hoverId !== null ? ' cb-agent-focus' : ''}`,
-      style: { height: `${layout.height}px`, width: `${layout.width}px`, maxWidth: '100%' },
+      style: { height: `${layout.height}px` },
       onMouseLeave: () => { setHoverId(null) },
     },
+      h('div', {
+        className: 'cb-agent-canvas',
+        style: { width: `${layout.width}px`, height: `${layout.height}px` },
+      },
       // Edges first: they must sit under the cards.
       forest.solo
         ? null
@@ -211,7 +224,7 @@ export function AgentNetwork(props: AgentNetworkProps): ReactElement {
       })),
       forest.overflow > 0
         ? h('div', { className: 'cb-agent-overflow' }, t('agents.more', { n: formatCount(forest.overflow) }))
-        : null),
+        : null)),
     forest.solo ? h('div', { className: 'cb-agent-solo-note' }, t('agents.solo')) : null,
     // The inspector mirrors whichever node the pointer is on: its occupancy, its slices, and the verb that
     // opens it. With nothing hovered it explains the card instead of leaving a hole.
@@ -223,6 +236,8 @@ export function AgentNetwork(props: AgentNetworkProps): ReactElement {
 
 /** The card frame and its header facts. */
 function Card(props: {
+  /** The card frame, measured by the graph to size its grid. */
+  frame?: { current: HTMLDivElement | null }
   t: Translate
   team: { ledger: unknown; count: number }
   count: number
@@ -233,7 +248,7 @@ function Card(props: {
   children?: ReactElement | ReactElement[] | null
 }): ReactElement {
   const { t, count } = props
-  return h('div', { className: 'cb-card cb-agent-card' },
+  return h('div', { className: 'cb-card cb-agent-card', ref: props.frame },
     h('div', { className: 'cb-card-title' },
       h('span', { className: 'cb-card-title-text' }, t('agents.title')),
       h('span', { className: 'cb-card-sub' }, t('agents.sub')),
