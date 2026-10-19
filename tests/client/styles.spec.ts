@@ -50,7 +50,13 @@ function usedClasses(): Set<string> {
 describe('the style sheets cover what the components render', () => {
   it('defines every cb- class a surface uses', () => {
     const css = sheets()
-    const missing = [...usedClasses()].filter(name => !css.includes(`.${name}`)).sort()
+    // The palette tokens are consumed as `var(--cb-ctx-*)` and never as class names; they are checked by the
+    // token test below instead.
+    const tokens = /^cb-(ctx|ov)-(indigo|blue|teal|green|amber|orange|purple|pink|violet|slate)$/
+    const missing = [...usedClasses()]
+      .filter(name => !tokens.test(name))
+      .filter(name => !css.includes(`.${name}`))
+      .sort()
     expect(missing).toEqual([])
   })
 
@@ -69,6 +75,24 @@ describe('the style sheets cover what the components render', () => {
     const entry = readFileSync(join(root, 'src', 'client', 'index.ts'), 'utf8')
     for (const file of readdirSync(styleDir).filter(name => name.endsWith('.css'))) {
       expect(entry, `${file} is never imported`).toContain(file)
+    }
+  })
+})
+
+describe('classes assembled at runtime', () => {
+  it('defines every heatmap level class the component can emit', () => {
+    // The component builds `cb-ov-heat-<level>` from a number, so no static scan can see the names. They were
+    // missing once and every active day rendered as the idle grey.
+    const css = sheets()
+    for (const level of [0, 1, 2, 3, 4]) {
+      expect(css, `heat level ${level}`).toContain(`.cb-ov-heat-${level} `)
+    }
+  })
+
+  it('defines the event kind classes the chips and rows overwrite', () => {
+    const css = sheets()
+    for (const kind of ['inject', 'compaction', 'prune', 'model', 'mode']) {
+      expect(css, `kind ${kind}`).toContain(`.cb-kind-${kind}`)
     }
   })
 })

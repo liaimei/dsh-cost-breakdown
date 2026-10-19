@@ -32,7 +32,8 @@ import { moneyRates } from '../../shell/rateTables'
 import { formatCost, moneyOnly, type Currency } from '../../data/cost'
 import { BilledCard, StageCard, TimingCard, cacheHitOf } from './cards'
 import { UsageBars } from './bars'
-import { Heatmap } from './heatmap'
+import { Heatmap, HEATMAP_DAYS } from './heatmap'
+import { daySpanOf } from '../../../core/day'
 import { DateRange } from './dateRange'
 import { PlatformCards, platformDisplayName } from './spend'
 import { SessionCard } from './sessionCard'
@@ -95,7 +96,17 @@ export function InsightsPage(props: InsightsProps): ReactElement {
     [scopedAll, group, workspaces],
   )
   const kpis = useMemo(() => kpisOf(ranged, rows.length, book, credits, money, currency), [ranged, rows.length, book, credits, money])
-  const days = useMemo(() => aggregateDays(ranged, book, credits, money, currency, now, 7), [ranged, book, credits, money, now])
+  // The bar chart's column count follows the picked range; an explicit custom span uses its own length. It is
+  // declared first because the aggregate below consumes it.
+  const usageSpan = custom !== null
+    ? Math.max(1, Math.min(84, daySpanOf(custom)))
+    : range === '30d' ? 30 : range === 'all' ? HEATMAP_DAYS : 7
+  // Two different spans, because the two charts answer different questions: the heatmap is a calendar and wants
+  // its eight Sunday-first columns filled, while the usage columns sit under a date control and must show exactly
+  // the range the reader picked. Sharing one span made the bar chart draw 56 columns on a seven-day selection,
+  // which crushed the day rail into an unreadable smear.
+  const heatDays = useMemo(() => aggregateDays(ranged, book, credits, money, currency, now, HEATMAP_DAYS), [ranged, book, credits, money, now])
+  const usageDays = useMemo(() => aggregateDays(ranged, book, credits, money, currency, now, usageSpan), [ranged, book, credits, money, now, usageSpan])
   const sorted = useMemo(() => sortRows(scoped, sort), [scoped, sort])
   const paged = pageOf(sorted, page)
   const chips = groupCountsOf(scopedAll, workspaces)
@@ -114,7 +125,7 @@ export function InsightsPage(props: InsightsProps): ReactElement {
     })
     return () => { live = false }
   }, [currentCwd, currentId])
-  const dayMap = useMemo(() => new Map(days.map(entry => [entry.day, entry])), [days])
+  const dayMap = useMemo(() => new Map(heatDays.map(entry => [entry.day, entry])), [heatDays])
   const today = todayKey(now)
   const span = custom ?? dayKeyRange(window)
 
@@ -152,7 +163,7 @@ export function InsightsPage(props: InsightsProps): ReactElement {
       kpi(t('timing.total'), formatDuration(kpis.wallMs), t('ov.kpi.wallSub', { n: formatCount(kpis.calls) })),
       kpi(t('ov.kpi.modelCalls'), formatCount(kpis.calls), t('ov.kpi.pricedSub', { n: kpis.costSessions, total: kpis.sessions }))),
     h('div', { className: 'cb-ov-first' },
-      h(UsageBars, { days, today, t })),
+      h(UsageBars, { days: usageDays, today, t })),
     h('div', { className: 'cb-ov-stats' },
       h(BilledCard, { billed: kpis.billed, t }),
       h(StageCard, { parts: kpis.tokenParts, t }),

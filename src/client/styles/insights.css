@@ -78,17 +78,85 @@
 .cb-ov-bars-note { font-size: 11px; color: var(--dsw-alias-label-tertiary); }
 
 /* Heatmap. */
-.cb-ov-heat { display: grid; grid-auto-flow: column; gap: 2px; }
-.cb-ov-heat-cell { width: 11px; height: 11px; border-radius: 2px; border: 0; padding: 0; background: color-mix(in oklab, var(--dsw-alias-bg-layer-2) 84%, transparent); cursor: default; }
-.cb-ov-heat-cell[data-level='1'] { background: color-mix(in oklab, #4d6bfe 28%, transparent); }
-.cb-ov-heat-cell[data-level='2'] { background: color-mix(in oklab, #4d6bfe 50%, transparent); }
-.cb-ov-heat-cell[data-level='3'] { background: color-mix(in oklab, #4d6bfe 72%, transparent); }
-.cb-ov-heat-cell[data-level='4'] { background: color-mix(in oklab, #4d6bfe 92%, transparent); }
-.cb-ov-heat-cell[data-on='1'] { outline: 1px solid var(--dsw-alias-brand-primary, #4d6bfe); }
+/* --- activity heatmap (values ported from the shipped stylesheet) --------
+ * Fixed 20px cells centred in the card: the card's height follows the seven rows instead of the cells
+ * stretching to the card's width. */
+.cb-ov-heat-wrap { display: flex; flex-direction: column; flex: 1; }
+.cb-ov-heat { display: flex; gap: 8px; flex: 1; align-items: center; justify-content: center; }
+/* The weekday rail and every column reserve the same 18px row for the month caption, so the cell rows stay
+ * aligned across them. */
+.cb-ov-heat-wds, .cb-ov-heat-col { padding-top: 18px; }
+.cb-ov-heat-wds { display: flex; flex-direction: column; gap: 3px; }
+/* The rail sizes itself to the widest weekday label, which under the zh locale is the widest of all. */
+.cb-ov-heat-wd { flex: none; height: 20px; display: flex; align-items: center; justify-content: center; font-size: 9px; color: var(--dsw-alias-label-secondary); text-align: center; white-space: nowrap; }
+.cb-ov-heat-cols { display: flex; gap: 3px; }
+/* Absolute positioning keeps the caption's width out of the 20px column, so it cannot skew the grid. */
+.cb-ov-heat-col { position: relative; display: flex; flex-direction: column; gap: 3px; }
+.cb-ov-heat-mon { position: absolute; top: 0; left: 0; font-size: 9px; line-height: 18px; color: var(--dsw-alias-label-secondary); white-space: nowrap; }
+/* `layer-2` is the card's own white in the light theme, so an idle day needs a visible grey of its own. */
+.cb-ov-heat-cell { width: 20px; height: 20px; box-sizing: border-box; border: 0; border-radius: 20%; padding: 0; background: color-mix(in srgb, var(--dsw-alias-label-secondary) 16%, transparent); cursor: default; }
+button.cb-ov-heat-cell { cursor: pointer; }
+button.cb-ov-heat-cell:hover { box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--color-blue-500) 70%, transparent); }
+.cb-ov-heat-future { background: transparent; }
+/* The component emits the level as a *class* (`cb-ov-heat-<n>`); attribute selectors here would match nothing
+ * and leave every active day at the idle grey. */
+.cb-ov-heat-0 { background: color-mix(in srgb, var(--dsw-alias-label-secondary) 16%, transparent); }
+.cb-ov-heat-1 { background: color-mix(in srgb, var(--color-blue-500) 28%, transparent); }
+.cb-ov-heat-2 { background: color-mix(in srgb, var(--color-blue-500) 50%, transparent); }
+.cb-ov-heat-3 { background: color-mix(in srgb, var(--color-blue-500) 72%, transparent); }
+.cb-ov-heat-4 { background: color-mix(in srgb, var(--color-blue-500) 92%, transparent); }
+/* The pinned day is the grid's filter source. */
+.cb-ov-heat-cell[data-on='1'] { outline: 1.5px solid var(--color-blue-500); }
+/* The legend swatches are half the cell size: at cell size the key reads as a second row of the grid. */
+.cb-ov-heat-legend { display: flex; align-items: center; justify-content: flex-end; gap: 2px; padding-top: 6px; }
+.cb-ov-heat-legend .cb-ov-heat-cell { width: 10px; height: 10px; }
+.cb-ov-heat-key { font-size: 9px; color: var(--dsw-alias-label-secondary); margin: 0 2px; }
 
 /* Session card. */
-.cb-ov-session { display: flex; flex-direction: column; gap: 4px; cursor: pointer; text-align: left; }
-.cb-ov-session-title { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* --- session card (values ported from the shipped stylesheet) -----------
+ * The grid stretches every row to the tallest card in it, so the card is a column whose preview is pinned to the
+ * bottom with `margin-top: auto` rather than one whose blocks float mid-card. */
+.cb-ov-session {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+  background: var(--dsw-alias-bg-layer-1);
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 10px;
+  padding: 10px 12px;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  transition: border-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out), background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out);
+}
+.cb-ov-session:hover { border-color: var(--dsw-alias-label-secondary); background: var(--dsw-alias-bg-layer-2); }
+.cb-ov-session-current { border-color: color-mix(in srgb, var(--color-blue-500) 65%, transparent); }
+.cb-ov-session-head { display: flex; align-items: flex-start; gap: 6px; min-width: 0; }
+.cb-ov-running { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--color-green-500); }
+/* Two-line clamp keeps a long title from growing the whole row; the full text stays on the tooltip. */
+.cb-ov-session-title { flex: 1 1 auto; min-width: 0; font-weight: 600; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere; }
+.cb-ov-current { flex: none; font-size: 10px; line-height: 1.5; color: var(--color-blue-500); border: 1px solid color-mix(in srgb, var(--color-blue-500) 45%, transparent); border-radius: 4px; padding: 0 4px; }
+.cb-ov-session-times { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 1px; }
+.cb-ov-session-time { color: var(--dsw-alias-label-secondary); font-size: 11px; white-space: nowrap; }
+.cb-ov-session-created { color: var(--dsw-alias-label-secondary); font-size: 10px; line-height: 1.4; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.cb-ov-session-crumb { display: flex; align-items: center; gap: 5px; min-width: 0; font-size: 11px; color: var(--dsw-alias-label-secondary); white-space: nowrap; overflow: hidden; }
+.cb-ov-crumb-group { flex: none; max-width: 55%; overflow: hidden; text-overflow: ellipsis; }
+.cb-ov-crumb-sep { flex: none; opacity: 0.55; }
+/* Mixed from the label tone rather than layer-2: in the light theme layer-2 is the card's own white, which
+ * would make the pill invisible. */
+.cb-ov-crumb-project { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-family: var(--ds-font-family-code, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 10px; line-height: 1.6; color: var(--dsw-alias-label-primary); background: color-mix(in srgb, var(--dsw-alias-label-secondary) 16%, transparent); border-radius: 999px; padding: 0 8px; }
+.cb-ov-session-body { display: flex; gap: 14px; align-items: center; min-width: 0; }
+.cb-ov-mini-stats { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+/* Label and value pull to opposite edges, echoing the head's right-aligned times. */
+.cb-ov-mini-stat { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 11px; }
+.cb-ov-mini-label { flex: none; color: var(--dsw-alias-label-secondary); white-space: nowrap; }
+.cb-ov-mini-value { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cb-ov-session-empty { color: var(--dsw-alias-label-secondary); font-size: 11px; line-height: 1.5; padding: 6px 0; }
+/* When a taller sibling stretches the row, `margin-top: auto` pins the preview to the bottom edge. */
+.cb-ov-session-preview { display: flex; align-items: baseline; gap: 6px; margin-top: auto; padding-top: 6px; border-top: 1px solid color-mix(in srgb, var(--dsw-alias-border-l2) 60%, transparent); min-width: 0; }
+.cb-ov-session-preview-label { flex: none; color: var(--dsw-alias-label-secondary); font-size: 10px; }
+.cb-ov-session-preview-text { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dsw-alias-label-primary); font-size: 11px; line-height: 1.5; }
 .cb-ov-session-meta { display: flex; gap: 8px; font-size: 11px; color: var(--dsw-alias-label-tertiary); flex-wrap: wrap; }
 .cb-ov-session-cost { font-variant-numeric: tabular-nums; font-weight: 600; }
 
@@ -289,8 +357,9 @@
 .cb-ov-usage-bar { flex: none; width: 10px; border-radius: 3px 3px 0 0; background: color-mix(in srgb, var(--color-blue-500) 72%, transparent); }
 .cb-ov-usage-tokens { background: color-mix(in srgb, var(--color-blue-500) 72%, transparent); }
 .cb-ov-usage-cost { background: color-mix(in srgb, var(--color-green-500) 72%, transparent); }
-.cb-ov-usage-days { grid-area: 2 / 2; display: flex; gap: 6px; margin: 0; }
-.cb-ov-usage-day { flex: 1 1 0; min-width: 0; text-align: center; font-size: 9px; line-height: 1.2; color: var(--dsw-alias-label-secondary); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.cb-ov-usage-days { grid-area: 2 / 2; display: flex; gap: 6px; margin: 0; min-width: 0; overflow: hidden; }
+.cb-ov-usage-day { flex: 1 1 0; min-width: 0; text-align: center; font-size: 9px; line-height: 1.2; color: var(--dsw-alias-label-secondary); white-space: nowrap; font-variant-numeric: tabular-nums; overflow: hidden; }
+/* A bar's column and its day label must share the same track, or the rail drifts away from the bars. */
 .cb-ov-usage-key { flex: none; display: flex; align-items: center; justify-content: flex-end; gap: 5px; padding-top: 5px; }
 .cb-ov-usage-swatch { flex: none; width: 10px; height: 8px; border-radius: 2px; }
 .cb-ov-usage-key-label { font-size: 9px; color: var(--dsw-alias-label-secondary); }
@@ -328,3 +397,57 @@
 .cb-ov-pf-models td.cb-ov-pf-model-calls { color: var(--dsw-alias-label-secondary); }
 .cb-ov-pf-models tr.cb-ov-pf-model-unpriced .cb-ov-pf-model-name { color: var(--dsw-alias-label-tertiary); }
 .cb-ov-pf-models tr.cb-ov-pf-model-unpriced .cb-ov-pf-model-spend { color: var(--dsw-alias-label-tertiary); font-weight: 400; }
+
+/* --- the date-range picker (values ported from the shipped stylesheet) ---
+ * A capsule trigger showing both ends of the range, and a fixed-positioned calendar panel. The panel is
+ * `position: fixed` because the header clips its own overflow, and its placement is measured by the component.
+ */
+.cb-ov-dp { position: relative; flex: none; }
+.cb-ov-dp-trigger { display: inline-flex; align-items: center; gap: 6px; box-sizing: border-box; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-2); border-radius: 999px; padding: 3px 12px; font: inherit; font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-secondary); white-space: nowrap; cursor: pointer; transition: border-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out), color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+.cb-ov-dp-trigger:hover { border-color: var(--dsw-alias-label-secondary); color: var(--dsw-alias-label-primary); }
+.cb-ov-dp-trigger-on { border-color: color-mix(in srgb, var(--dsw-alias-brand-primary) 45%, transparent); color: var(--dsw-alias-brand-primary); }
+.cb-ov-dp-half { flex: none; text-align: center; font-variant-numeric: tabular-nums; }
+.cb-ov-dp-half-empty { color: var(--dsw-alias-label-tertiary); font-variant-numeric: normal; }
+.cb-ov-dp-sep { flex: none; color: var(--dsw-alias-label-tertiary); }
+.cb-ov-dp-panel { position: fixed; z-index: 300; left: 0; top: 0; width: max-content; max-width: calc(100vw - 16px); padding: 8px; pointer-events: auto; opacity: 1; }
+.cb-ov-dp-nav { display: flex; align-items: center; gap: 4px; margin-bottom: 4px; }
+.cb-ov-dp-month { flex: 1 1 auto; text-align: center; font-size: 12px; line-height: 20px; font-weight: 500; white-space: nowrap; }
+.cb-ov-dp-navbtn { flex: none; width: 22px; height: 22px; border: 0; border-radius: 5px; background: transparent; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 14px; line-height: 1; cursor: pointer; }
+.cb-ov-dp-navbtn:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
+.cb-ov-dp-navbtn:disabled { opacity: 0.35; cursor: not-allowed; }
+.cb-ov-dp-navbtn:disabled:hover { background: transparent; color: var(--dsw-alias-label-secondary); }
+.cb-ov-dp-wds, .cb-ov-dp-week { display: flex; }
+.cb-ov-dp-wd { flex: 0 0 28px; text-align: center; font-size: 10px; line-height: 18px; color: var(--dsw-alias-label-tertiary); }
+.cb-ov-dp-grid { display: flex; flex-direction: column; outline: none; }
+.cb-ov-dp-grid:focus-visible { outline: 1px solid var(--dsw-alias-brand-primary); border-radius: 6px; }
+.cb-ov-dp-cell { flex: 0 0 28px; height: 26px; display: flex; align-items: center; justify-content: center; box-sizing: border-box; border-radius: 5px; font-size: 11px; line-height: 1; color: var(--dsw-alias-label-primary); font-variant-numeric: tabular-nums; user-select: none; cursor: pointer; }
+.cb-ov-dp-cell:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.cb-ov-dp-in { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 16%, transparent); border-radius: 0; }
+.cb-ov-dp-in:hover { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 24%, transparent); }
+.cb-ov-dp-edge { background: var(--dsw-alias-button-primary-fill); color: var(--dsw-alias-label-primary-foreground); border-radius: 5px; font-weight: 500; }
+.cb-ov-dp-edge:hover { background: var(--dsw-alias-button-primary-fill); }
+.cb-ov-dp-cursor { box-shadow: inset 0 0 0 1px var(--dsw-alias-label-secondary); }
+.cb-ov-dp-today { font-weight: 600; }
+.cb-ov-dp-future { color: var(--dsw-alias-label-tertiary); opacity: 0.4; cursor: not-allowed; }
+.cb-ov-dp-future:hover { background: transparent; }
+.cb-ov-dp-blank { cursor: default; }
+.cb-ov-dp-blank:hover { background: transparent; }
+.cb-ov-dp-foot { display: flex; align-items: center; gap: 8px; margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--dsw-alias-border-l2); }
+.cb-ov-dp-hint { flex: 1 1 auto; min-width: 0; font-size: 11px; line-height: 18px; color: var(--dsw-alias-label-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cb-ov-dp-clear { flex: none; border: 0; background: transparent; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 11px; line-height: 18px; cursor: pointer; }
+.cb-ov-dp-clear:hover { color: var(--dsw-alias-label-primary); text-decoration: underline; }
+
+/* --- cost card bits (values ported from the shipped stylesheet) ---------- */
+/* The period breakdown under the cost ring: one entry per bucket, with its swatch and both figures. */
+.cb-ov-sc-periods { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--dsw-alias-border-l1); font-size: 12px; color: var(--dsw-alias-label-secondary); }
+.cb-ov-sc-period { display: inline-flex; align-items: center; gap: 5px; min-width: 0; }
+.cb-ov-sc-period i { flex: none; width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+.cb-ov-sc-period-label { white-space: nowrap; }
+.cb-ov-sc-period b { color: var(--dsw-alias-label-primary); font-variant-numeric: tabular-nums; }
+.cb-ov-sc-period em { font-style: normal; color: var(--dsw-alias-label-tertiary); font-variant-numeric: tabular-nums; }
+.cb-ov-sc-period-dim { opacity: 0.55; }
+/* The ring card inside a platform card: it stacks its ring above its table. */
+.cb-ov-card-donut { display: flex; flex-direction: column; }
+.cb-ov-card-donut .cb-donut-row { flex: 1; }
+/* A calendar cell that belongs to the visible month but carries no selection. */
+.cb-ov-dp-day { color: var(--dsw-alias-label-primary); }

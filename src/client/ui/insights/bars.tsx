@@ -40,6 +40,8 @@ export function UsageBars(props: UsageBarsProps): ReactElement {
   const days = props.days
   // `every` is true for an empty array, which is exactly the "nothing to draw" case.
   const empty = days.every(day => day.tokens <= 0)
+  // Roughly one label per week, so a 56-day window stays legible.
+  const labelEvery = Math.max(1, Math.ceil(days.length / 8))
   let peak = 0
   for (const day of days) if (day.tokens > peak) peak = day.tokens
   return (
@@ -84,9 +86,14 @@ export function UsageBars(props: UsageBarsProps): ReactElement {
                   ))}
                 </div>
               </div>
+              {/* The window can be eight weeks wide; labelling every column produced a cramped, unreadable rail.
+                  Only a sample is labelled — the first, the last, and enough in between that a reader can count
+                  the spacing — and each label keeps a slot so it stays under its own column. */}
               <div className="cb-ov-usage-days" aria-hidden="true">
-                {days.map(day => (
-                  <span key={day.day} className="cb-ov-usage-day">{day.day.slice(5)}</span>
+                {days.map((day, index) => (
+                  <span key={day.day} className="cb-ov-usage-day">
+                    {index % labelEvery === 0 || index === days.length - 1 ? day.day.slice(5) : ''}
+                  </span>
                 ))}
               </div>
             </div>

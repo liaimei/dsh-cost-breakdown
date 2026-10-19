@@ -135,7 +135,7 @@ export function SkillsCard(props: SkillsCardProps): ReactElement {
           className: `cb-gran-btn${sort === key ? ' cb-gran-on' : ''}`,
           'aria-pressed': sort === key,
           onClick: () => { onSort(key) },
-        }, t(key === 'name' ? 'ov.skills.k.path' : `ov.skills.sort.${key}`))))),
+        }, t(key === 'name' ? 'ov.skills.sort.path' : `ov.skills.sort.${key}`))))),
     stats.length === 0
       ? h('div', { className: 'cb-empty' }, t('ov.skills.empty'))
       : h(Fragment, null,

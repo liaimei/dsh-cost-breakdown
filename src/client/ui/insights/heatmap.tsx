@@ -21,6 +21,8 @@ export type HeatMetric = 'sessions' | 'steps'
 
 /** Default window: eight Sunday-first columns (about two months). */
 const DEFAULT_WEEKS = 8
+/** The same window in days, exported so the daily aggregate can cover exactly what this grid draws. */
+export const HEATMAP_DAYS = DEFAULT_WEEKS * 7
 
 export interface HeatmapProps {
   /** Merged daily ledger, keyed by `YYYY-MM-DD`. */

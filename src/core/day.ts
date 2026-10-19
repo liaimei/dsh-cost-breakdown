@@ -166,3 +166,15 @@ export function mergeActivity(left: ActivityLedger | null, right: ActivityLedger
   }
   return { days }
 }
+
+/**
+ * The number of days a `{ from, to }` range covers, endpoints included. Used to size a chart's columns to the
+ * range the reader picked; a malformed or reversed range yields 1 rather than a negative count.
+ */
+export function daySpanOf(range: { from: string; to: string }): number {
+  const start = startOfDay(range.from)
+  const end = startOfDay(range.to)
+  if (start === null || end === null) return 1
+  const days = Math.round((end - start) / 86_400_000) + 1
+  return days > 0 ? days : 1
+}
