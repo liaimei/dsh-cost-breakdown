@@ -9,7 +9,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   AGENT_TREE_LIMIT, agentForestOf, agentIdentityOf, agentDurationOf, agentRowOf,
-  catalogOrderOf, layoutForest, subagentCostOf,
+  barSegmentsOf, catalogOrderOf, formatDurationCompact, layoutForest, lineageOf,
+  pressureColorOf, subagentCostOf,
 } from '../../src/client/ui/context/agents'
 
 /** A session-list snapshot from `{ id: row }` pairs. */
@@ -166,5 +167,68 @@ describe('subagentCostOf', () => {
     }), 'root')
     expect(fold.count).toBe(1)
     expect(fold.ledger?.p.m.peak?.uncached).toBe(10)
+  })
+})
+
+describe('lineageOf', () => {
+  it('lights the ancestor chain and the whole subtree, and nothing else', () => {
+    const forest = agentForestOf(snapshot({
+      root: row('root'),
+      a: row('a', { parentId: 'root' }),
+      a1: row('a1', { parentId: 'a' }),
+      b: row('b', { parentId: 'root' }),
+      other: row('other'),
+    }), 'root')
+    const lit = lineageOf(forest as never, 'a')
+    expect([...lit].sort()).toEqual(['a', 'a1', 'root'])
+    // A sibling subtree is not in the lineage.
+    expect(lit.has('b')).toBe(false)
+  })
+
+  it('survives a cycle in the parent chain', () => {
+    const forest = agentForestOf(snapshot({
+      a: row('a', { parentId: 'b' }),
+      b: row('b', { parentId: 'a' }),
+    }), 'a')
+    expect(leafCount(lineageOf(forest as never, 'a'))).toBeLessThanOrEqual(2)
+  })
+
+  /** Cycle guard: the walk must terminate, so this many ids at most. */
+  function leafCount(set: Set<string>): number { return set.size }
+})
+
+describe('pressureColorOf', () => {
+  it('moves from green through amber and orange to pink', () => {
+    expect(pressureColorOf(null)).toContain('slate')
+    expect(pressureColorOf(10)).toContain('green')
+    expect(pressureColorOf(60)).toContain('amber')
+    expect(pressureColorOf(80)).toContain('orange')
+    expect(pressureColorOf(95)).toContain('pink')
+  })
+})
+
+describe('barSegmentsOf', () => {
+  it('splits the composition and leaves the idle window as the remainder', () => {
+    const node = {
+      head: {
+        tokens: 40, window: 100, pct: 40,
+        parts: [{ key: 'system', value: 20 }, { key: 'user', value: 20 }],
+      },
+    } as never
+    const segments = barSegmentsOf(node, { system: 'red', user: 'blue' })
+    expect(segments.map(segment => segment.key)).toEqual(['system', 'user', 'free'])
+    expect(segments.at(-1)?.share).toBe(60)
+  })
+
+  it('reports no segments without a headline', () => {
+    expect(barSegmentsOf({ head: null } as never, {})).toEqual([])
+  })
+})
+
+describe('formatDurationCompact', () => {
+  it('picks the unit by magnitude', () => {
+    expect(formatDurationCompact(12_000)).toBe('12s')
+    expect(formatDurationCompact(200_000)).toBe('3m 20s')
+    expect(formatDurationCompact(3_840_000)).toBe('1h 04m')
   })
 })

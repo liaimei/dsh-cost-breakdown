@@ -16,7 +16,7 @@ import { headerEpochsOf } from '../../shell/contracts'
 import type { Translate } from '../../i18n/dict'
 import type { PreferencesStore } from '../../shell/preferences'
 import { useTimelineSource } from '../../data/timeline'
-import { formatClock, formatCount, formatShare } from '../../i18n/format'
+import { formatCount, formatShare } from '../../i18n/format'
 import { headlineOf, STAGES, stageLabel, STAGE_COLOR } from './derive'
 import { TrendChart } from './TrendChart'
 import { attachMarkers, assemble } from './assemble'
@@ -32,6 +32,7 @@ import { makeErrorBoundary } from './ErrorBoundary'
 import { BrowserCard } from './Browser'
 import { AgentNetwork } from './AgentNetwork'
 import { OverviewCard, PluginCard, TimingCard, TokensCard } from './HeaderCards'
+import { EventsCard } from './Events'
 import { buildInfo } from './buildInfo'
 import { FilesCard } from './Files'
 import {
@@ -342,7 +343,12 @@ function ContextBody(props: ContextViewProps): ReactElement {
         }))),
     // Band 4: the persistent events and the file activity, side by side.
     h('div', { className: 'cb-cols' },
-      h(EventsSection, { t, snapshot: head }),
+      h(EventsCard, {
+        t,
+        snapshot: head,
+        state: timeline.detailState,
+        onRetry: timeline.retryDetail,
+      }),
       h(FilesCard, {
         t,
         fileOps: head.fileOps,
@@ -520,43 +526,6 @@ function segment(t: Translate, label: string, on: boolean, onClick: () => void):
   }, label)
 }
 
-/** The persistent-event list, with one toggle per kind. */
-function EventsSection(props: { t: Translate; snapshot: Snapshot }): ReactElement {
-  const { t, snapshot } = props
-  const kinds = ['inject', 'compaction', 'prune', 'model', 'mode'] as const
-  const [picked, setPicked] = useState<readonly string[]>(kinds)
-  const toggle = (kind: string): void => {
-    setPicked((current) => {
-      if (current.length === kinds.length) return [kind]
-      if (!current.includes(kind)) return [...current, kind]
-      if (current.length === 1) return [...kinds]
-      return current.filter(entry => entry !== kind)
-    })
-  }
-  const events = picked.length === kinds.length
-    ? snapshot.events
-    : snapshot.events.filter(event => picked.includes(event.kind))
-  return h('div', { className: 'cb-card' },
-    h('div', { className: 'cb-card-title' },
-      h('span', { className: 'cb-card-title-text' }, t('events.title')),
-      h('span', { className: 'cb-gran', role: 'group' },
-        kinds.map(kind => segment(t, t(`kind.${kind}`), picked.includes(kind), () => { toggle(kind) })))),
-    events.length === 0
-      ? h('div', { className: 'cb-empty' }, t('events.empty'))
-      : h('ul', { className: 'cb-events' }, [...events].reverse().map(event => h('li', { key: event.seq, className: 'cb-event-row' },
-        h('span', { className: 'cb-event-kind' }, t(`kind.${event.kind}`)),
-        h('span', { className: 'cb-event-time' }, formatClock(event.time)),
-        h('span', { className: 'cb-event-detail' }, eventDetail(event, t)),
-        h('span', { className: 'cb-event-tokens' }, event.tokens !== undefined ? formatCount(event.tokens) : '')))))
-}
-
-function eventDetail(event: Snapshot['events'][number], t: Translate): string {
-  if (event.kind === 'model') return `${event.from ?? '?'} → ${event.to ?? '?'}`
-  if (event.kind === 'mode') return event.name === 'plan.on' ? t('ev.mode.plan.on') : t('ev.mode.plan.off')
-  if (event.kind === 'inject') return event.sub === 'skill' ? `${t('ev.skill')}: ${event.name ?? ''}` : (event.name ?? t('ev.compaction'))
-  return event.kind === 'prune' ? t('ev.prune') : t('ev.compaction')
-}
-
 /**
  * The agent network, wired to the session-list snapshot.
  *
@@ -572,41 +541,15 @@ function AgentNetworkBridge(props: {
   now: number
 }): ReactElement {
   const { t, ctx, sessionId, snapshot, now } = props
-  const [sessions, setSessions] = useState<unknown>(undefined)
-  const [expanded, setExpanded] = useState(false)
+  const sessions = useSessionsSnapshot(ctx)
 
+  // Opening a sub-agent that has not materialised yet is this card's job: refreshing the baseline once per
+  // session is what makes a relative appear without a manual reload.
   useEffect(() => {
     const face = serviceOf<SessionsFace>(ctx, 'sessions')
-    const list = face?.list
-    if (list === undefined) return
-    const update = (): void => {
-      try {
-        setSessions(list.getSnapshot())
-      } catch {
-        // A hostile list degrades the card to its single-node form rather than failing the surface.
-        setSessions(undefined)
-      }
-    }
-    update()
-    const unsubscribe = list.subscribe?.(update)
-    // Opening a sub-agent that has not materialised yet is the card's job: refreshing the baseline once on
-    // mount is what makes a relative appear without a manual reload.
     void face?.refresh?.().catch(() => {})
-    return unsubscribe
-  }, [ctx])
+  }, [ctx, sessionId])
 
-  // The card is expensive to lay out, so it only mounts once the reader asks for it.
-  if (!expanded) {
-    return h('div', { className: 'cb-card cb-agent-card' },
-      h('div', { className: 'cb-card-title' },
-        h('span', { className: 'cb-card-title-text' }, t('agents.title')),
-        h('span', { className: 'cb-card-sub' }, t('agents.sub'))),
-      h('button', {
-        type: 'button',
-        className: 'cb-agent-expand',
-        onClick: () => { setExpanded(true) },
-      }, t('agents.self')))
-  }
   return h(AgentNetwork, {
     t,
     sessionId,

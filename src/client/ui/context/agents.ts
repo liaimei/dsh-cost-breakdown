@@ -428,3 +428,71 @@ export function subagentCostOf(snapshot: unknown, currentId: string | undefined)
 
 /** Re-exported so the card can render a node's occupancy without a second import site. */
 export type { Headline }
+
+/** The lineage of one node: its ancestor chain plus its whole subtree, as a set of ids. Hovering a card lights
+ * exactly these, and dims every other link — which is what makes a wide family readable.
+ *
+ * Cycle-safe: the row graph is untrusted, and both walks carry their own `seen` set.
+ */
+export function lineageOf(forest: AgentForest, id: string): Set<string> {
+  const lit = new Set<string>()
+  const byId = new Map(forest.nodes.map(node => [node.id, node]))
+  // Ancestors, walking up the single `parentId` field.
+  let cursor: string | undefined = id
+  while (cursor !== undefined && !lit.has(cursor)) {
+    lit.add(cursor)
+    cursor = byId.get(cursor)?.parentId
+  }
+  // Descendants, walking down the edge list breadth-first.
+  const childrenOf = new Map<string, string[]>()
+  for (const edge of forest.edges) {
+    const list = childrenOf.get(edge.from) ?? []
+    list.push(edge.to)
+    childrenOf.set(edge.from, list)
+  }
+  const queue = [id]
+  const seen = new Set<string>([id])
+  for (let index = 0; index < queue.length; index++) {
+    for (const child of childrenOf.get(queue[index]) ?? []) {
+      if (seen.has(child)) continue
+      seen.add(child)
+      lit.add(child)
+      queue.push(child)
+    }
+  }
+  return lit
+}
+
+/** The occupancy colour of a node, from its percentage: green while there is room, amber as it fills, red when
+ * the next turn will not fit. `null` (no occupancy reported) is the neutral slate. */
+export function pressureColorOf(pct: number | null): string {
+  if (pct === null) return 'var(--cb-ctx-slate)'
+  if (pct >= 90) return 'var(--cb-ctx-pink)'
+  if (pct >= 75) return 'var(--cb-ctx-orange)'
+  if (pct >= 50) return 'var(--cb-ctx-amber)'
+  return 'var(--cb-ctx-green)'
+}
+
+/** A node's bar segments: the context composition, with the idle window as the remainder. */
+export function barSegmentsOf(node: AgentNode, colors: Readonly<Record<string, string>>): Array<{ key: string; share: number; color: string }> {
+  const head = node.head
+  if (head === null || head.tokens <= 0) return []
+  const total = head.window !== undefined && head.window > 0 ? Math.max(head.window, head.tokens) : head.tokens
+  const segments: Array<{ key: string; share: number; color: string }> = []
+  for (const part of head.parts) {
+    if (part.value <= 0) continue
+    segments.push({ key: part.key, share: (part.value / total) * 100, color: colors[part.key] ?? 'var(--cb-ctx-slate)' })
+  }
+  const used = segments.reduce((sum, segment) => sum + segment.share, 0)
+  if (used < 100) segments.push({ key: 'free', share: 100 - used, color: 'transparent' })
+  return segments
+}
+
+/** A compact duration: `1h 04m`, `3m 20s`, `12s`. */
+export function formatDurationCompact(ms: number): string {
+  const total = Math.max(0, Math.round(ms / 1000))
+  if (total < 60) return `${total}s`
+  const minutes = Math.floor(total / 60)
+  if (minutes < 60) return `${minutes}m ${String(total % 60).padStart(2, '0')}s`
+  return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, '0')}m`
+}

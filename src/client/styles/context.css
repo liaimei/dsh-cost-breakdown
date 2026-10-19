@@ -513,3 +513,23 @@
 /* Card-level hooks kept for targeting: these two cards are the tall ones in the middle band. */
 .cb-browser-card { min-height: 0; }
 .cb-files-card { align-self: flex-start; width: 100%; }
+
+/* --- agent lineage focus and inspector (values from the shipped graph) ----- */
+/* Hovering a card lights its ancestor chain and subtree; every other link and card fades back. */
+.cb-agent-focus .cb-agent-edge { stroke-opacity: 0.12; }
+.cb-agent-focus .cb-agent-edge-on { stroke-opacity: 1; }
+.cb-agent-node-dim { opacity: 0.4; }
+.cb-agent-node-dim:hover { opacity: 1; }
+/* The bar's stage segments: same colours as the composition card, so the two bars describe the same thing. */
+.cb-agent-node-seg { display: block; height: 100%; transform-origin: 0 50%; }
+.cb-agent-node-seg:last-of-type { border-radius: 0 4px 4px 0; }
+/* The inspector mirrors the hovered node: name, state badges, occupancy, the named slices, then the verb. */
+.cb-agent-inspector { margin-top: 10px; padding: 7px 10px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; background: var(--dsw-alias-bg-layer-2); font-size: 12px; }
+.cb-agent-inspector-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; min-width: 0; }
+.cb-agent-inspector-name { color: var(--dsw-alias-label-primary); overflow-wrap: anywhere; }
+.cb-agent-inspector-stats { color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cb-agent-inspector-open { margin-left: auto; flex: none; border: 0; background: transparent; padding: 0; color: var(--dsw-alias-brand-primary, var(--color-blue-500)); font: inherit; font-size: 12px; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.cb-agent-inspector-parts { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--dsw-alias-border-l2); font-size: 11px; color: var(--dsw-alias-label-secondary); }
+.cb-agent-part { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.cb-agent-part i { width: 7px; height: 7px; border-radius: 2px; display: inline-block; }
+.cb-agent-part em { font-style: normal; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); font-variant-numeric: tabular-nums; }
