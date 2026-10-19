@@ -19,16 +19,18 @@
 .cb-ov-list-title { font-weight: 600; }
 .cb-ov-list-count { color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; }
 .cb-ov-search {
-  flex: 1;
-  min-width: 120px;
+  flex: 1 1 150px;
+  min-width: 110px;
   border: 1px solid var(--dsw-alias-border-l2);
   border-radius: 6px;
-  background: var(--dsw-alias-bg-layer-1);
+  background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-primary);
   font: inherit;
   font-size: 12px;
-  padding: 3px 8px;
+  padding: 4px 10px;
 }
+.cb-ov-search:focus { border-color: var(--dsw-alias-label-secondary); }
+.cb-ov-search::placeholder { color: var(--dsw-alias-label-secondary); }
 .cb-ov-chip { border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-2); color: inherit; border-radius: 999px; font-size: 11px; padding: 1px 8px; cursor: pointer; }
 .cb-ov-groups { display: flex; gap: 6px; flex-wrap: wrap; }
 .cb-ov-group { border: 1px solid var(--dsw-alias-border-l2); background: transparent; color: var(--dsw-alias-label-secondary); border-radius: 999px; font-size: 11px; padding: 1px 8px; cursor: pointer; }
@@ -194,3 +196,56 @@
 .cb-ov-skills { margin-bottom: 0; }
 .cb-ov-range { margin-left: 0; }
 .cb-ov-heat-on { outline: 1px solid var(--cb-ctx-indigo); }
+
+/* --- rings and their legend (values ported from the shipped stylesheet) ---
+ * The ring, its legend and the statistic cells use the shipped metrics: an 8px legend dot, a 6px vertical
+ * rhythm, the legend's `padding: 1px 6px` pulled back out to the card's edge with a matching negative margin,
+ * and the two-line cell (name over absolute) rather than one wrapped line. */
+.cb-ov-donut { position: relative; flex: none; }
+.cb-ov-donut svg { display: block; }
+.cb-ov-donut-track { stroke: color-mix(in srgb, var(--color-neutral-500) 18%, transparent); }
+.cb-ov-donut-seg { transition: opacity var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+.cb-ov-donut-dim .cb-ov-donut-seg { opacity: 0.35; }
+.cb-ov-donut-dim .cb-ov-donut-seg-on { opacity: 1; }
+.cb-ov-donut-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; pointer-events: none; text-align: center; padding: 0 7px; box-sizing: border-box; }
+.cb-ov-donut-center b { line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.cb-ov-donut-center span { color: var(--dsw-alias-label-secondary); white-space: nowrap; }
+
+/* Two levels per row: the main line is dot + name + share, the sub line puts the absolute figure below the name.
+ * `auto-fill` keeps the share column readable as the container narrows. */
+.cb-ov-sl { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(150px, 100%), 1fr)); gap: 4px 8px; min-width: 0; overflow: hidden; }
+/* The pill background reaches 6px past the text (via a negative margin) without disturbing the columns. */
+.cb-ov-sl-row { display: flex; flex-direction: column; gap: 1px; font-size: 12px; min-width: 0; border-radius: 6px; padding: 1px 6px; margin: 0 -6px; transition: background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+.cb-ov-sl-row-on { background: var(--dsw-alias-interactive-bg-hover); }
+.cb-ov-sl-row-dim { opacity: 0.55; }
+.cb-ov-sl-main { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.cb-ov-sl-dot { flex: none; width: 8px; height: 8px; border-radius: 2px; }
+.cb-ov-sl-label { flex: 1 1 auto; min-width: 0; line-height: 1.25; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cb-ov-sl-pct { flex: none; min-width: 30px; text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+.cb-ov-sl-sub { margin-left: 14px; color: var(--dsw-alias-label-secondary); font-size: 11px; line-height: 1.3; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* The statistic cell: label / value / sub, every line ellipsised rather than wrapped, because a wrapped value
+ * would change the card's height as the number grows. */
+.cb-stat { background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; padding: 6px 6px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.cb-stat-label { color: var(--dsw-alias-label-secondary); font-size: 11px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cb-stat-value { color: var(--dsw-alias-label-primary); font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; }
+.cb-stat-sub { color: var(--dsw-alias-label-secondary); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* A DOM bubble rather than `title`: a native tooltip cannot hold a multi-line breakdown. Hovering anywhere in
+ * the cell shows it. */
+.cb-stat-tipped { position: relative; }
+.cb-stat-q { display: inline-block; margin-left: 4px; width: 11px; height: 11px; line-height: 11px; border-radius: 50%; text-align: center; font-size: 9px; font-weight: 700; font-style: normal; color: var(--dsw-alias-label-secondary); background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l2); cursor: help; transition: color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out), border-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+.cb-stat-tip { top: calc(100% + 6px); left: 0; max-width: 280px; line-height: 1.5; font-weight: 400; }
+.cb-stat-tip-head { display: block; font-weight: 600; }
+.cb-stat-tip-row { display: block; margin-top: 2px; }
+.cb-stat-tip-prices { display: block; margin-top: 5px; border-top: 1px dashed var(--dsw-alias-border-l1); padding-top: 5px; }
+.cb-stat-tip-band { display: flex; justify-content: space-between; gap: 2rem; }
+.cb-stat-tip-band i { font-style: normal; }
+.cb-stat-tip-by { display: block; margin-top: 3px; color: var(--dsw-alias-label-secondary); }
+/* The percentage claim beside its window, one decimal wider than the integer it replaced so the line wraps
+ * rather than overflowing the card edge. */
+.cb-overview-num { display: flex; align-items: baseline; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.cb-overview-num > b { font-size: 20px; }
+.cb-overview-num span { color: var(--dsw-alias-label-secondary); }
+.cb-overview-pct { margin-left: auto; font-size: 11px; }
+.cb-overview-pct b { font-size: 20px; color: var(--dsw-alias-label-primary); margin-right: 4px; }
+
