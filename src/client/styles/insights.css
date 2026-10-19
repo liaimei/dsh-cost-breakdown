@@ -161,3 +161,36 @@
 .cb-ov-skill-tip-desc { color: var(--dsw-alias-label-secondary); margin-bottom: 6px; line-height: 1.45; }
 .cb-ov-skill-tip-path { font-family: var(--ds-font-family-code, ui-monospace, monospace); font-size: 11px; color: var(--dsw-alias-label-tertiary); overflow-wrap: anywhere; margin-bottom: 6px; }
 .cb-ov-skill-tip-facts { display: flex; gap: 10px; color: var(--dsw-alias-label-tertiary); font-size: 11px; font-variant-numeric: tabular-nums; }
+
+/* Ring + legend, used by the token and timing cards on the context surface and by the statistics
+ * cards. The ring is an SVG whose arcs are stroke-dasharray segments; dimming is a group-level opacity. */
+.cb-ov-donut { flex: none; position: relative; }
+.cb-ov-donut-dim .cb-ov-donut-seg:not(.cb-ov-donut-seg-on) { opacity: 0.35; }
+.cb-ov-donut-track { fill: none; stroke: var(--dsw-alias-bg-layer-2); stroke-width: 5; }
+.cb-ov-donut-seg { fill: none; stroke-width: 5; transition: opacity 0.12s ease; }
+.cb-ov-donut-seg-on { stroke-width: 6; }
+.cb-ov-donut-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The legend rows: label, share on one line; the second line carries the count. */
+.cb-ov-sl { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; }
+.cb-ov-sl-row { display: flex; flex-direction: column; gap: 0; border-radius: 4px; padding: 1px 3px; cursor: default; }
+.cb-ov-sl-row-on { background: var(--dsw-alias-bg-layer-2); }
+.cb-ov-sl-main { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.cb-ov-sl-dot { width: 8px; height: 8px; border-radius: 2px; flex: none; align-self: center; }
+.cb-ov-sl-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cb-ov-sl-pct { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--dsw-alias-label-secondary); flex: none; }
+.cb-ov-sl-sub { padding-left: 14px; font-size: 11px; color: var(--dsw-alias-label-tertiary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+/* Card frames the insights components name directly. */
+.cb-ov-skills { margin-bottom: 0; }
+.cb-ov-range { margin-left: 0; }
+.cb-ov-heat-on { outline: 1px solid var(--cb-ctx-indigo); }

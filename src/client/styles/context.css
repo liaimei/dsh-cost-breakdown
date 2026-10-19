@@ -487,3 +487,18 @@
 .cb-sidebar-platform-name { font-weight: 500; }
 .cb-sidebar-platform b { margin-left: auto; font-variant-numeric: tabular-nums; }
 .cb-sidebar-note { font-size: 11px; color: var(--dsw-alias-label-tertiary); margin-top: 4px; }
+
+/* Small missing pieces: a card subtitle used by several headers, the composition legend's label cell, and
+ * the two column wrappers the five-band layout names. */
+.cb-card-sub { font-size: 11px; color: var(--dsw-alias-label-tertiary); }
+.cb-comp-legend-label { color: var(--dsw-alias-label-secondary); }
+.cb-col-left { flex: 1 1 0; }
+.cb-overview-pill-label { color: inherit; }
+.cb-browser-cat-name { flex: 1; }
+.cb-browser-block-raw { font-family: var(--ds-font-family-code, ui-monospace, monospace); white-space: pre-wrap; overflow-wrap: anywhere; }
+.cb-modal-composition { margin-bottom: 12px; }
+.cb-sidebar-summary { display: flex; flex-direction: column; gap: 12px; }
+
+/* Card-level hooks kept for targeting: these two cards are the tall ones in the middle band. */
+.cb-browser-card { min-height: 0; }
+.cb-files-card { align-self: flex-start; width: 100%; }
