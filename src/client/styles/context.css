@@ -168,3 +168,75 @@
 .cb-gate-body { font-size: 12px; color: var(--dsw-alias-label-secondary); margin-bottom: 8px; }
 .cb-gate-actions { display: flex; justify-content: flex-end; }
 .cb-root-footnote { height: 4px; }
+
+/* --- trend chart (stacked / DNA / delta + duration overlay) --------------- */
+.cb-trend-wrap { display: flex; flex-direction: column; gap: 6px; }
+.cb-trend-ctl { margin-left: auto; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.cb-trend-ctl .cb-gran { margin-left: 0; }
+
+.cb-trend {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 132px;
+  padding-top: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  cursor: pointer;
+}
+.cb-trend-delta { align-items: center; }
+.cb-trend-bar {
+  position: relative;
+  flex: 1;
+  min-width: 2px;
+  max-width: 28px;
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: stretch;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  border-radius: 2px 2px 0 0;
+  transition: transform 0.12s ease;
+}
+.cb-trend-bar:hover { transform: scaleY(1.02); }
+.cb-trend-bar-on { outline: 1px solid var(--cb-ctx-indigo); outline-offset: 1px; border-radius: 3px; }
+/* Newest bars animate in; older ones are static so the card never layers while expanding. */
+.cb-trend-bar-rise { animation: cb-bar-rise 0.24s ease-out both; }
+@keyframes cb-bar-rise { from { transform: scaleY(0.2); opacity: 0.4; } to { transform: scaleY(1); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .cb-trend-bar-rise { animation: none; } }
+
+.cb-trend-band { width: 100%; border-radius: 1px; transition: opacity 0.12s ease; }
+.cb-trend-band-on { outline: 1px solid var(--dsw-alias-label-primary); outline-offset: -1px; }
+.cb-trend-zero { position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: var(--dsw-alias-border-l2); }
+.cb-trend-marker {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 0;
+  height: 0;
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-top: 5px solid var(--cb-ctx-amber);
+}
+.cb-trend-turnline { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--dsw-alias-border-l1); opacity: 0.5; pointer-events: none; }
+.cb-trend-duration { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.cb-trend-axis { display: flex; justify-content: space-between; font-size: 10px; color: var(--dsw-alias-label-tertiary); font-variant-numeric: tabular-nums; }
+
+.cb-trend-detail { border-top: 1px solid var(--dsw-alias-border-l2); margin-top: 8px; padding-top: 8px; }
+.cb-trend-detail-row { display: flex; justify-content: space-between; align-items: baseline; }
+.cb-trend-detail-total { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.cb-trend-dna-legend { display: flex; flex-wrap: wrap; gap: 4px 10px; margin: 6px 0; }
+.cb-trend-dna-item { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--dsw-alias-label-secondary); padding: 0 4px; border-radius: 4px; }
+.cb-trend-dna-item-on { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); }
+.cb-trend-dna-dot { width: 7px; height: 7px; border-radius: 2px; flex: none; }
+.cb-trend-dna-label { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cb-trend-dna-tokens { font-variant-numeric: tabular-nums; color: var(--dsw-alias-label-tertiary); }
+
+.cb-trend-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 8px; }
+.cb-trend-legend-item { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--dsw-alias-label-secondary); cursor: default; }
+.cb-trend-legend-on { color: var(--dsw-alias-label-primary); }
+.cb-trend-legend-dot { width: 8px; height: 8px; border-radius: 2px; flex: none; }

@@ -9,7 +9,7 @@
  * not ripple through the others.
  */
 
-import { createElement as h, useRef, useState } from 'react'
+import { createElement as h, useMemo, useRef, useState } from 'react'
 import type { ReactElement } from 'react'
 import type { ClientContext, ContextSeatProps } from '../../shell/contracts'
 import { headerEpochsOf } from '../../shell/contracts'
@@ -17,11 +17,15 @@ import type { Translate } from '../../i18n/dict'
 import type { PreferencesStore } from '../../shell/preferences'
 import { useTimelineSource } from '../../data/timeline'
 import { formatClock, formatCount, formatDuration, formatShare } from '../../i18n/format'
-import { headlineOf, stageLabel } from './derive'
+import { headlineOf, STAGES, stageLabel, STAGE_COLOR } from './derive'
+import { TrendChart } from './TrendChart'
+import { attachMarkers, assemble } from './assemble'
+import { trendBandsOf } from './dna'
+import type { TrendBand } from './dna'
 import { takeContextFocus } from './jump'
 import { makeErrorBoundary } from './ErrorBoundary'
 import { BrowserCard } from './Browser'
-import type { RequestRow, Snapshot } from '../../../wire/model'
+import type { HeaderTimeline, RequestRow, Snapshot } from '../../../wire/model'
 
 /** The view's props: the seat plus the closures the entry supplies. */
 export interface ContextViewProps extends ContextSeatProps {
@@ -78,6 +82,12 @@ function ContextBody(props: ContextViewProps): ReactElement {
   const [mode, setMode] = useState<'total' | 'delta'>(preferences.get().defaultTrendMode === 'delta' ? 'delta' : 'total')
   const [selectedSeq, setSelectedSeq] = useState<number | null>(null)
   const [hoverSeq, setHoverSeq] = useState<number | null>(null)
+  // In-chart toggles stay mount-local: they change how this reader looks at the data, not a persisted
+  // preference, and writing them back would surprise the next session.
+  const [dna, setDna] = useState(false)
+  const [adaptive, setAdaptive] = useState(true)
+  const [durationCurve, setDurationCurve] = useState(preferences.get().defaultDurationCurve !== 'hide')
+  const [hoverBand, setHoverBand] = useState<string | null>(null)
   const root = useRef<HTMLDivElement | null>(null)
   const sidebar = host === 'sidebar'
   const head = timeline.data
@@ -121,15 +131,25 @@ function ContextBody(props: ContextViewProps): ReactElement {
       t,
       snapshot: head,
       rows: displayed,
-      activeIndex,
       granularity,
       onGranularity: setGranularity,
       mode,
       onMode: setMode,
+      dna,
+      onDna: setDna,
+      adaptive,
+      onAdaptive: setAdaptive,
+      durationCurve,
+      onDurationCurve: setDurationCurve,
+      selectedSeq,
+      hoverSeq,
+      hoverBand,
+      onBandHover: setHoverBand,
       onSelect: setSelectedSeq,
       onHover: setHoverSeq,
       ready,
       retry: timeline.retryDetail,
+      headers,
     }),
     h(BrowserCard, { t, data: head, headers, selectedSeq: activeRow?.seq ?? null }),
     h(EventsSection, { t, snapshot: head }),
@@ -175,81 +195,133 @@ function CompositionSection(props: { t: Translate; headline: ReturnType<typeof h
   )
 }
 
-/** The trend bars: one bar per step or turn, total or delta, with the selected bar's detail. */
+/**
+ * The trend card: the chart plus its toolbar.
+ *
+ * Three independent toggles, matching the three questions a reader can ask of the same history:
+ *   - **DNA** — decompose each bar into its items instead of its stages, so a specific message or tool schema
+ *     can be followed across steps;
+ *   - **adaptive** — narrow the window around the active bar once the history outgrows a readable column;
+ *   - **duration** — overlay each step's active time, which answers "where did the wall clock go" rather than
+ *     "what filled the context".
+ *
+ * The granularity and mode groups sit beside them; all five are mount-local, so nothing here writes a
+ * preference.
+ */
 function TrendSection(props: {
   t: Translate
   snapshot: Snapshot
   rows: readonly RequestRow[]
-  activeIndex: number
   granularity: 'step' | 'turn'
   onGranularity: (value: 'step' | 'turn') => void
   mode: 'total' | 'delta'
   onMode: (value: 'total' | 'delta') => void
+  dna: boolean
+  onDna: (value: boolean) => void
+  adaptive: boolean
+  onAdaptive: (value: boolean) => void
+  durationCurve: boolean
+  onDurationCurve: (value: boolean) => void
+  selectedSeq: number | null
+  hoverSeq: number | null
+  hoverBand: string | null
+  onBandHover: (key: string | null) => void
   onSelect: (seq: number | null) => void
   onHover: (seq: number | null) => void
   ready: boolean
   retry: () => void
+  headers: HeaderTimeline | null
 }): ReactElement {
-  const { t, rows, activeIndex, granularity, onGranularity, mode, onMode, onSelect, onHover } = props
-  const active = activeIndex >= 0 ? rows[activeIndex] : null
-  const values = mode === 'delta' ? deltasOf(rows) : rows.map(row => row.total)
-  const peak = Math.max(1, ...values)
+  const { t, snapshot, rows, granularity, mode, dna, adaptive, durationCurve } = props
+  const [legend, setLegend] = useState<string | null>(null)
+
+  // Markers attach to the first request recorded after each boundary event, so the chart and the detail
+  // panel name the same event.
+  const markers = useMemo(() => attachMarkers(snapshot.requests, snapshot.events), [snapshot.requests, snapshot.events])
+
+  // DNA bands, one list per bar: rebuild the context as it stood at that dispatch and decompose it in read
+  // order. Only computed when the mode is on — it is the expensive path.
+  const dnaBands = useMemo<readonly TrendBand[][] | null>(() => {
+    if (!dna || granularity !== 'step') return null
+    const colorOf = (cat: string): string => (STAGE_COLOR as Record<string, string>)[cat] ?? 'var(--cb-ctx-slate)'
+    return snapshot.requests.map(row => trendBandsOf(assemble(snapshot, props.headers, row.seq), colorOf))
+  }, [dna, granularity, snapshot, props.headers])
+
   if (rows.length === 0) {
     return h('div', { className: 'cb-card' },
       h('div', { className: 'cb-card-title' }, h('span', { className: 'cb-card-title-text' }, t('trend.title'))),
       h('div', { className: 'cb-empty' }, props.ready ? t('trend.empty') : t('loading')))
   }
+
   return h('div', { className: 'cb-card' },
     h('div', { className: 'cb-card-title' },
       h('span', { className: 'cb-card-title-text' }, t('trend.title')),
-      h('span', { className: 'cb-gran', role: 'group', 'aria-label': t('gran.modeHint') },
-        granButton(t('gran.step'), granularity === 'step', () => { onGranularity('step') }),
-        granButton(t('gran.turn'), granularity === 'turn', () => { onGranularity('turn') }),
-        granButton(t('gran.total'), mode === 'total', () => { onMode('total') }),
-        granButton(t('gran.delta'), mode === 'delta', () => { onMode('delta') }))),
-    h('div', { className: 'cb-trend' },
-      rows.map((row, index) => {
-        const height = Math.max(2, Math.round((values[index] / peak) * 100))
-        const hovered = index === activeIndex
-        return h('button', {
-          key: `${row.seq}-${index}`,
-          type: 'button',
-          className: `cb-trend-bar${hovered ? ' cb-trend-bar-on' : ''}${props.snapshot.requests[0] !== undefined && row.seq === props.snapshot.requests[0].seq ? ' cb-trend-bar-first' : ''}`,
-          style: { height: `${height}%` },
-          title: `${row.turn !== undefined ? `T${row.turn}` : ''}${row.step !== undefined ? ` · S${row.step}` : ''} · ${formatCount(row.total)}`,
-          onMouseEnter: () => { onHover(row.seq) },
-          onMouseLeave: () => { onHover(null) },
-          onClick: () => { onSelect(active?.seq === row.seq ? null : row.seq) },
-        })
-      })),
-    active !== null
-      ? h('div', { className: 'cb-trend-detail' },
-        h('div', { className: 'cb-trend-detail-row' },
-          h('span', { className: 'cb-card-sub' }, granularity === 'turn' ? t('detail.turn', { t: active.turn ?? 0, n: active.stepCount ?? 1 }) : t('detail.step', { t: active.turn ?? 0, s: active.step ?? 0, n: 0 })),
-          h('span', { className: 'cb-trend-detail-total' }, formatCount(active.total))),
-        h('div', { className: 'cb-kv-grid' },
-          kv(t('cat.system'), formatCount(active.system)),
-          kv(t('cat.tools'), formatCount(active.tools)),
-          kv(t('cat.user'), formatCount(active.user)),
-          kv(t('cat.inject'), formatCount(active.inject)),
-          kv(t('cat.skill'), formatCount(active.skill ?? 0)),
-          kv(t('cat.assistant'), formatCount(active.assistant)),
-          kv(t('cat.tool'), formatCount(active.tool)),
-          kv(t('stats.cacheHit'), active.cacheRead !== undefined && active.prompt !== undefined && active.prompt > 0 ? `${Math.round((active.cacheRead / active.prompt) * 100)}%` : '—'),
-          kv(t('tokens.output'), active.output !== undefined ? formatCount(active.output) : '—'),
-          kv(t('timing.total'), active.activeMs !== undefined ? formatDuration(active.activeMs) : '—')))
-      : null)
+      h('div', { className: 'cb-trend-ctl' },
+        h('div', { className: 'cb-gran', role: 'group' },
+          toggle(t, t('trend.dna'), t('trend.dnaTip'), dna, () => { props.onDna(!dna) }),
+          toggle(t, t('trend.adaptive'), t('trend.adaptiveHint'), adaptive, () => { props.onAdaptive(!adaptive) }),
+          toggle(t, t('trend.duration'), t('trend.durationTip'), durationCurve, () => { props.onDurationCurve(!durationCurve) })),
+        h('div', { className: 'cb-gran', role: 'group', 'aria-label': t('gran.modeHint') },
+          segment(t, t('gran.step'), granularity === 'step', () => { props.onGranularity('step') }),
+          segment(t, t('gran.turn'), granularity === 'turn', () => { props.onGranularity('turn') }),
+          segment(t, t('gran.total'), mode === 'total', () => { props.onMode('total') }),
+          segment(t, t('gran.delta'), mode === 'delta', () => { props.onMode('delta') })))),
+    h(TrendChart, {
+      t,
+      rows,
+      markers,
+      granularity,
+      mode,
+      selectedSeq: props.selectedSeq,
+      hoveredSeq: props.hoverSeq,
+      focusTurn: null,
+      dna: dnaBands,
+      hoverBand: props.hoverBand,
+      onSelect: props.onSelect,
+      onHover: props.onHover,
+      onHoverBand: props.onBandHover,
+      durationCurve,
+      adaptive,
+      spans: snapshot.spans,
+    }),
+    // The stage legend doubles as a hover filter for the stacked bars: pointing at a stage highlights that
+    // band in every drawn bar, which is how a reader follows one series across the window.
+    dna
+      ? null
+      : h('div', { className: 'cb-trend-legend' }, STAGES.map(stage => h('span', {
+        key: stage,
+        className: `cb-trend-legend-item${legend === stage ? ' cb-trend-legend-on' : ''}`,
+        onMouseEnter: () => { setLegend(stage); props.onBandHover(stage) },
+        onMouseLeave: () => { setLegend(null); props.onBandHover(null) },
+      },
+        h('span', { className: 'cb-trend-legend-dot', style: { background: STAGE_COLOR[stage] } }),
+        h('span', null, stageLabel(t, stage))))),
+  )
 }
 
-/** A single delta-mode bar value: the signed change against the previous bar. */
-function deltasOf(rows: readonly RequestRow[]): number[] {
-  return rows.map((row, index) => (index === 0 ? row.total : row.total - rows[index - 1].total))
+/** A toolbar toggle with its tooltip. */
+function toggle(t: Translate, label: string, tip: string, on: boolean, onClick: () => void): ReactElement {
+  return h('button', {
+    type: 'button',
+    className: `cb-gran-btn${on ? ' cb-gran-on' : ''}`,
+    'aria-pressed': on,
+    title: tip,
+    onClick,
+  }, label)
 }
 
-function granButton(label: string, on: boolean, onClick: () => void): ReactElement {
-  return h('button', { type: 'button', className: `cb-gran-btn${on ? ' cb-gran-on' : ''}`, 'aria-pressed': on, onClick }, label)
+/** A segmented-control button. */
+function segment(t: Translate, label: string, on: boolean, onClick: () => void): ReactElement {
+  void t
+  return h('button', {
+    type: 'button',
+    className: `cb-gran-btn${on ? ' cb-gran-on' : ''}`,
+    'aria-pressed': on,
+    onClick,
+  }, label)
 }
 
+/** One key/value cell, shared by the request detail and the timing totals. */
 function kv(key: string, value: string): ReactElement {
   return h('div', { key, className: 'cb-kv' },
     h('span', { className: 'cb-kv-key' }, key),
@@ -276,7 +348,7 @@ function EventsSection(props: { t: Translate; snapshot: Snapshot }): ReactElemen
     h('div', { className: 'cb-card-title' },
       h('span', { className: 'cb-card-title-text' }, t('events.title')),
       h('span', { className: 'cb-gran', role: 'group' },
-        kinds.map(kind => granButton(t(`kind.${kind}`), picked.includes(kind), () => { toggle(kind) })))),
+        kinds.map(kind => segment(t, t(`kind.${kind}`), picked.includes(kind), () => { toggle(kind) })))),
     events.length === 0
       ? h('div', { className: 'cb-empty' }, t('events.empty'))
       : h('ul', { className: 'cb-events' }, [...events].reverse().map(event => h('li', { key: event.seq, className: 'cb-event-row' },
