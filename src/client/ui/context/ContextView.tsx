@@ -9,7 +9,7 @@
  * not ripple through the others.
  */
 
-import { createElement as h, useMemo, useRef, useState } from 'react'
+import { createElement as h, useEffect, useMemo, useRef, useState } from 'react'
 import type { ReactElement } from 'react'
 import type { ClientContext, ContextSeatProps } from '../../shell/contracts'
 import { headerEpochsOf } from '../../shell/contracts'
@@ -25,6 +25,8 @@ import type { TrendBand } from './dna'
 import { takeContextFocus } from './jump'
 import { makeErrorBoundary } from './ErrorBoundary'
 import { BrowserCard } from './Browser'
+import { AgentNetwork } from './AgentNetwork'
+import { openSessionWith, serviceOf, type SessionsFace } from '../../shell/contracts'
 import type { HeaderTimeline, RequestRow, Snapshot } from '../../../wire/model'
 
 /** The view's props: the seat plus the closures the entry supplies. */
@@ -154,7 +156,7 @@ function ContextBody(props: ContextViewProps): ReactElement {
     h(BrowserCard, { t, data: head, headers, selectedSeq: activeRow?.seq ?? null }),
     h(EventsSection, { t, snapshot: head }),
     h(FilesSection, { t, snapshot: head }),
-    h(AgentSection, { t, sessionId, snapshot: head }),
+    h(AgentNetworkBridge, { t, ctx: props.ctx, sessionId, snapshot: head, now: Date.now() }),
     h(TimingSection, { t, snapshot: head }),
   )
 }
@@ -383,30 +385,64 @@ function FilesSection(props: { t: Translate; snapshot: Snapshot }): ReactElement
         op.err ? h('span', { className: 'cb-file-err' }, '!') : null))))
 }
 
-/** The agent network: this session and its relatives, with billed tokens per node. */
-function AgentSection(props: { t: Translate; sessionId: string; snapshot: Snapshot }): ReactElement {
-  const { t, sessionId, snapshot } = props
-  const billed = snapshot.cost !== undefined ? tokenTotalOf(snapshot) : null
-  return h('div', { className: 'cb-card cb-agent-card' },
-    h('div', { className: 'cb-card-title' }, h('span', { className: 'cb-card-title-text' }, t('agents.title'))),
-    h('div', { className: 'cb-agent-self' },
-      h('span', { className: 'cb-agent-node cb-agent-current' },
-        h('span', { className: 'cb-agent-name' }, t('stats.currentAgent')),
-        h('span', { className: 'cb-agent-tokens' }, billed !== null ? formatCount(billed) : '—'),
-        h('span', { className: 'cb-agent-sub' }, formatCount(snapshot.requests.length)))),
-    h('div', { className: 'cb-agent-note' }, sessionId))
-}
+/**
+ * The agent network, wired to the session-list snapshot.
+ *
+ * The card itself is pure; this bridge supplies the two things it cannot derive: the session-list snapshot
+ * (which carries the relatives) and the verb that opens one. Reading the list is the one place this view
+ * touches a service, so it is isolated here rather than threaded through the card.
+ */
+function AgentNetworkBridge(props: {
+  t: Translate
+  ctx: ClientContext
+  sessionId: string
+  snapshot: Snapshot
+  now: number
+}): ReactElement {
+  const { t, ctx, sessionId, snapshot, now } = props
+  const [sessions, setSessions] = useState<unknown>(undefined)
+  const [expanded, setExpanded] = useState(false)
 
-/** Total billed tokens of a snapshot's own ledger. */
-function tokenTotalOf(snapshot: Snapshot): number {
-  let total = 0
-  for (const models of Object.values(snapshot.cost ?? {})) {
-    for (const entry of Object.values(models)) {
-      if (entry.peak !== undefined) total += entry.peak.uncached + entry.peak.cacheRead + entry.peak.cacheWrite + entry.peak.output
-      if (entry.off !== undefined) total += entry.off.uncached + entry.off.cacheRead + entry.off.cacheWrite + entry.off.output
+  useEffect(() => {
+    const face = serviceOf<SessionsFace>(ctx, 'sessions')
+    const list = face?.list
+    if (list === undefined) return
+    const update = (): void => {
+      try {
+        setSessions(list.getSnapshot())
+      } catch {
+        // A hostile list degrades the card to its single-node form rather than failing the surface.
+        setSessions(undefined)
+      }
     }
+    update()
+    const unsubscribe = list.subscribe?.(update)
+    // Opening a sub-agent that has not materialised yet is the card's job: refreshing the baseline once on
+    // mount is what makes a relative appear without a manual reload.
+    void face?.refresh?.().catch(() => {})
+    return unsubscribe
+  }, [ctx])
+
+  // The card is expensive to lay out, so it only mounts once the reader asks for it.
+  if (!expanded) {
+    return h('div', { className: 'cb-card cb-agent-card' },
+      h('div', { className: 'cb-card-title' },
+        h('span', { className: 'cb-card-title-text' }, t('agents.title')),
+        h('span', { className: 'cb-card-sub' }, t('agents.sub'))),
+      h('button', {
+        type: 'button',
+        className: 'cb-agent-expand',
+        onClick: () => { setExpanded(true) },
+      }, t('agents.self')))
   }
-  return total
+  return h(AgentNetwork, {
+    t,
+    sessionId,
+    snapshot,
+    sessions,
+    now,
+    onOpen: (id: string) => { openSessionWith(ctx, id) },
+  })
 }
 
 /** The session timing strip and totals. */

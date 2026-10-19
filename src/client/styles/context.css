@@ -240,3 +240,68 @@
 .cb-trend-legend-item { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--dsw-alias-label-secondary); cursor: default; }
 .cb-trend-legend-on { color: var(--dsw-alias-label-primary); }
 .cb-trend-legend-dot { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+
+/* --- agent network ------------------------------------------------------ */
+.cb-agent-card { overflow: hidden; }
+.cb-agent-chips { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; }
+.cb-agent-chip {
+  font-size: 11px;
+  color: var(--dsw-alias-label-secondary);
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 999px;
+  padding: 0 8px;
+  font-variant-numeric: tabular-nums;
+}
+/* The stage is the positioned canvas the cards and edges share. */
+.cb-agent-stage { position: relative; margin-top: 8px; }
+.cb-agent-edges { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+
+.cb-agent-node {
+  position: absolute;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 7px 9px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 9px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color 0.12s ease;
+}
+.cb-agent-node:hover { border-color: var(--dsw-alias-label-secondary); }
+.cb-agent-node-current { border-color: var(--cb-ctx-indigo); }
+.cb-agent-node-running { box-shadow: 0 0 0 1px var(--cb-ctx-green) inset; }
+.cb-agent-node-head { display: flex; align-items: baseline; gap: 5px; min-width: 0; }
+.cb-agent-node-name { font-weight: 600; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.cb-agent-badge { font-size: 9px; border-radius: 999px; padding: 0 5px; flex: none; }
+.cb-agent-badge-current { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-secondary); }
+.cb-agent-badge-running { background: var(--cb-ctx-green); color: #fff; }
+.cb-agent-node-figures { display: flex; align-items: baseline; gap: 6px; font-variant-numeric: tabular-nums; }
+.cb-agent-node-tokens { font-size: 13px; font-weight: 600; }
+.cb-agent-node-pct { font-size: 11px; color: var(--dsw-alias-label-secondary); }
+.cb-agent-node-steps { margin-left: auto; font-size: 10px; color: var(--dsw-alias-label-tertiary); }
+.cb-agent-node-bar { height: 3px; border-radius: 2px; background: var(--dsw-alias-bg-layer-2); overflow: hidden; }
+.cb-agent-node-fill { display: block; height: 100%; background: var(--cb-ctx-indigo); border-radius: 2px; }
+.cb-agent-node-foot { display: flex; gap: 6px; align-items: baseline; font-size: 10px; color: var(--dsw-alias-label-tertiary); margin-top: auto; }
+.cb-agent-node-mode { border: 1px solid var(--dsw-alias-border-l2); border-radius: 999px; padding: 0 5px; }
+.cb-agent-node-time { font-variant-numeric: tabular-nums; }
+.cb-agent-node-done { margin-left: auto; color: var(--cb-ctx-green); }
+.cb-agent-overflow { position: absolute; right: 0; bottom: -4px; font-size: 11px; color: var(--dsw-alias-label-tertiary); }
+.cb-agent-solo-note { font-size: 11px; color: var(--dsw-alias-label-tertiary); margin-top: 6px; }
+.cb-agent-expand {
+  border: 1px dashed var(--dsw-alias-border-l2);
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 12px;
+  border-radius: 8px;
+  padding: 10px;
+  width: 100%;
+  cursor: pointer;
+}
+.cb-agent-expand:hover { border-color: var(--dsw-alias-label-secondary); color: var(--dsw-alias-label-primary); }
