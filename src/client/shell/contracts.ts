@@ -393,3 +393,15 @@ export function serviceOf<T>(ctx: ClientContext, name: string): T | undefined {
     return undefined
   }
 }
+
+/** The gateway's history paging verb (`remote.session.page`): `throughSeq` is an inclusive log cut that must
+ * name a real event, `beforeSeq` an exclusive upper bound. Rows are `SessionHistoryRecord`s — `{type:'event',
+ * event}` plus the packed chunk rows the browser's mapper skips. */
+export interface SessionPageFace {
+  page(request: {
+    address: { kind: 'session'; sessionId: string }
+    throughSeq: number
+    beforeSeq?: number
+    maxMessages?: number
+  }, signal?: AbortSignal): Promise<unknown>
+}

@@ -153,7 +153,7 @@ function ContextBody(props: ContextViewProps): ReactElement {
       retry: timeline.retryDetail,
       headers,
     }),
-    h(BrowserCard, { t, data: head, headers, selectedSeq: activeRow?.seq ?? null }),
+    h(BrowserCard, { t, data: head, headers, selectedSeq: activeRow?.seq ?? null, sessionId }),
     h(EventsSection, { t, snapshot: head }),
     h(FilesSection, { t, snapshot: head }),
     h(AgentNetworkBridge, { t, ctx: props.ctx, sessionId, snapshot: head, now: Date.now() }),

@@ -131,7 +131,7 @@ export function ContextModal(props: ModalProps): ReactElement | null {
                 style: { flexGrow: String(Math.max(part.value, 0.0001)), background: part.color },
                 title: `${stageLabel(t, part.key)}: ${formatCount(part.value)}`,
               }, part.value / Math.max(1, head.current.total) >= 0.1 ? stageLabel(t, part.key) : '')))),
-          h(BrowserCard, { t, data: head, headers: null, selectedSeq: null }))))
+          h(BrowserCard, { t, data: head, headers: null, selectedSeq: null, sessionId: props.sessionId }))))
 }
 
 /** The nearest ancestor with an inline grid template: its left offset, trailing bound and centre floor. */

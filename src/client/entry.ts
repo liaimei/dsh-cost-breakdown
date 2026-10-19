@@ -26,6 +26,7 @@ import { watchPlacement } from './shell/placement'
 import { watchSidebarTab } from './shell/sidebar'
 import type { ClientContext, ContextSeatProps } from './shell/contracts'
 import { setRateTables } from './shell/rateTables'
+import { watchHistoryFaces } from './data/history'
 import { ContextView } from './ui/context/ContextView'
 import { registerContextCommand } from './ui/context/command'
 import { ContextModal } from './ui/context/Modal'
@@ -70,6 +71,10 @@ function apply(ctx: ClientContext): void {
 
   // (b) The settings handle; schema defaults hold until the host scope attaches.
   const preferences = createPreferencesStore()
+
+  // (b2) The gateway's history paging face, through a declarative inject: the context browser reads a
+  // message's full content from the durable log, anchored at one seq, which the detail window does not ship.
+  watchHistoryFaces(ctx)
 
   // (c) User rate tables plus the settings binding, through one deferred inject: a deployment without
   // `configForms` keeps the schema defaults and the registry fallback rates.
