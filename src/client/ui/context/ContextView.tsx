@@ -19,6 +19,7 @@ import { useTimelineSource } from '../../data/timeline'
 import { formatClock, formatCount, formatDuration, formatShare } from '../../i18n/format'
 import { headlineOf, stageLabel } from './derive'
 import { takeContextFocus } from './jump'
+import { makeErrorBoundary } from './ErrorBoundary'
 import { BrowserCard } from './Browser'
 import type { RequestRow, Snapshot } from '../../../wire/model'
 
@@ -29,9 +30,11 @@ export interface ContextViewProps extends ContextSeatProps {
   preferences: PreferencesStore
 }
 
-/** The component the entry mounts. */
+/** The component the entry mounts: the body behind a boundary, so one throwing card degrades to a
+ * readable, retryable error instead of a blank conversation view. */
 export function ContextView(props: ContextViewProps): ReactElement {
-  return h(ContextBody, props)
+  const Boundary = makeErrorBoundary(props.t)
+  return h(Boundary, null, h(ContextBody, props))
 }
 
 /** Fold consecutive same-turn rows into one bar (turn granularity). */

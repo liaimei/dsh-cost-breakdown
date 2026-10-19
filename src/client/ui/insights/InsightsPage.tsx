@@ -24,6 +24,9 @@ import {
   skillLoadsOf, sortRows, windowOfDayRange, type OverviewRange, type OverviewSort, type SkillSort,
 } from '../../data/aggregate'
 import { rowsOfSnapshot, type OverviewRow } from '../../data/overview'
+import { readCatalogue } from '../../data/skills'
+import { SkillsCard } from './skills'
+import type { SkillEntry } from '../../../wire/model'
 import { snapshotOf, activityOf } from '../../shell/washers'
 import { moneyRates } from '../../shell/rateTables'
 import { formatCost, moneyOnly, type Currency } from '../../data/cost'
@@ -64,6 +67,8 @@ export function InsightsPage(props: InsightsProps): ReactElement {
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState<OverviewSort>('recent')
   const [group, setGroup] = useState<string | null>(null)
+  const [skillSort, setSkillSort] = useState<SkillSort>('loads')
+  const [catalog, setCatalog] = useState<ReadonlyMap<string, SkillEntry> | null>(null)
   const [page, setPage] = useState(0)
   const currency: Currency = 'usd'
 
@@ -76,7 +81,7 @@ export function InsightsPage(props: InsightsProps): ReactElement {
   }, [ctx])
 
   // Any filter change resets the pager: a page index that no longer exists would render an empty grid.
-  useEffect(() => { setPage(0) }, [range, custom, day, skill, query, sort, group])
+  useEffect(() => { setPage(0) }, [range, custom, day, skill, query, sort, group, skillSort])
 
   const window = custom !== null ? windowOfDayRange(custom) ?? rangeWindowOf(range, now) : rangeWindowOf(range, now)
   const credits = mergeCreditRatesAll(rows)
@@ -94,7 +99,21 @@ export function InsightsPage(props: InsightsProps): ReactElement {
   const sorted = useMemo(() => sortRows(scoped, sort), [scoped, sort])
   const paged = pageOf(sorted, page)
   const chips = groupCountsOf(scopedAll, workspaces)
-  const skills = useMemo(() => skillLoadsOf(ranged, { window, day, sort: 'loads' as SkillSort }), [ranged, window, day])
+  const skills = useMemo(() => skillLoadsOf(ranged, { window, day, sort: skillSort }), [ranged, window, day, skillSort])
+
+  // The catalogue is fetched per (session, workspace): discovery hangs off the agent preset, so the session
+  // id is what resolves the full layer set. A stale catalogue for another session is worse than none, so the
+  // read clears the old one first.
+  const currentId = props.sessionId ?? ''
+  const currentCwd = rows.find(row => row.id === currentId)?.cwd
+  useEffect(() => {
+    setCatalog(null)
+    let live = true
+    void readCatalogue(currentCwd, currentId === '' ? undefined : currentId).then((next) => {
+      if (live) setCatalog(next)
+    })
+    return () => { live = false }
+  }, [currentCwd, currentId])
   const dayMap = useMemo(() => new Map(days.map(entry => [entry.day, entry])), [days])
   const today = todayKey(now)
   const span = custom ?? dayKeyRange(window)
@@ -150,7 +169,16 @@ export function InsightsPage(props: InsightsProps): ReactElement {
             h('span', { className: 'cb-card-title-text' }, t('ov.heat.title')),
             h('span', { className: 'cb-card-sub' }, t('ov.heat.sub'))),
           h(Heatmap, { days: dayMap, today, selected: day, onSelect: setDay, t })),
-        skillCard(t, skills, skill, setSkill)),
+        h(SkillsCard, {
+          t,
+          stats: skills,
+          catalog,
+          selected: skill,
+          onSelect: setSkill,
+          sort: skillSort,
+          onSort: setSkillSort,
+          now,
+        })),
       h('div', { className: 'cb-ov-right' },
         h('div', { className: 'cb-ov-list-head' },
           h('span', { className: 'cb-ov-list-title' }, t('ov.list.title')),
@@ -211,26 +239,6 @@ function kpi(label: string, value: string, sub: string): ReactElement {
     h('div', { className: 'cb-ov-kpi-label' }, label),
     h('div', { className: 'cb-ov-kpi-value' }, value),
     h('div', { className: 'cb-ov-kpi-sub' }, sub))
-}
-
-/** The skills card: loads, sessions, last load; a click pins the filter. */
-function skillCard(t: Translate, skills: ReturnType<typeof skillLoadsOf>, selected: string | null, onSelect: (value: string | null) => void): ReactElement {
-  return h('div', { className: 'cb-card cb-ov-skills' },
-    h('div', { className: 'cb-card-title' },
-      h('span', { className: 'cb-card-title-text' }, t('ov.skills.summary')),
-      h('span', { className: 'cb-card-sub' }, t('ov.skills.k.usage'))),
-    skills.length === 0
-      ? h('div', { className: 'cb-empty' }, t('ov.skills.empty'))
-      : h('ul', { className: 'cb-ov-skill-list' }, skills.slice(0, 20).map(entry => h('li', {
-        key: entry.name,
-        className: `cb-ov-skill${entry.name === selected ? ' cb-ov-skill-on' : ''}`,
-        onClick: () => { onSelect(entry.name === selected ? null : entry.name) },
-        role: 'button',
-        tabIndex: 0,
-      },
-        h('span', { className: 'cb-ov-skill-name' }, entry.name),
-        h('span', { className: 'cb-ov-skill-loads' }, `${t('ov.skills.loads')} ${formatCount(entry.loads)}`),
-        h('span', { className: 'cb-ov-skill-sessions' }, `${t('ov.skills.sessions')} ${formatCount(entry.sessions)}`)))))
 }
 
 /** The session card's cost label: a dash when the family cannot be priced, never a zero. */

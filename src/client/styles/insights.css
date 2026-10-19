@@ -117,3 +117,47 @@
 .cb-ov-date-cell[data-in='0'] { opacity: 0.3; }
 .cb-ov-date-cell[data-edge='1'] { outline: 1px solid var(--dsw-alias-brand-primary, #4d6bfe); }
 .cb-ov-date-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+
+/* --- skills card (catalogue-backed) -------------------------------------- */
+.cb-ov-skill-search {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 6px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 12px;
+  padding: 3px 8px;
+  margin-bottom: 6px;
+}
+.cb-ov-skill-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.cb-ov-skill-source { font-size: 10px; color: var(--dsw-alias-label-tertiary); border: 1px solid var(--dsw-alias-border-l2); border-radius: 999px; padding: 0 6px; }
+.cb-ov-skill-bar { flex: 1; min-width: 40px; height: 4px; border-radius: 2px; background: var(--dsw-alias-bg-layer-2); overflow: hidden; }
+.cb-ov-skill-bar-fill { display: block; height: 100%; border-radius: 2px; opacity: 0.75; }
+.cb-ov-skill-last { color: var(--dsw-alias-label-tertiary); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cb-ov-skill-copy { border: 0; background: transparent; color: var(--dsw-alias-label-tertiary); cursor: pointer; padding: 0 2px; display: inline-flex; }
+.cb-ov-skill-copy:hover { color: var(--dsw-alias-label-primary); }
+.cb-ov-skill-more { font-size: 11px; color: var(--dsw-alias-label-tertiary); padding-top: 4px; }
+.cb-ov-skill-pinned { padding-top: 6px; }
+
+/* The hover card is portalled to `body`, so it is fixed-positioned and clamped by the component. */
+.cb-ov-skill-tip {
+  position: fixed;
+  z-index: 1100;
+  width: 300px;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-2);
+  box-shadow: var(--dsw-elevation-prominent, 0 12px 32px rgba(0, 0, 0, 0.3));
+  font-size: 12px;
+  color: var(--dsw-alias-label-primary);
+  pointer-events: none;
+}
+.cb-ov-skill-tip-head { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.cb-ov-skill-tip-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cb-ov-skill-tip-desc { color: var(--dsw-alias-label-secondary); margin-bottom: 6px; line-height: 1.45; }
+.cb-ov-skill-tip-path { font-family: var(--ds-font-family-code, ui-monospace, monospace); font-size: 11px; color: var(--dsw-alias-label-tertiary); overflow-wrap: anywhere; margin-bottom: 6px; }
+.cb-ov-skill-tip-facts { display: flex; gap: 10px; color: var(--dsw-alias-label-tertiary); font-size: 11px; font-variant-numeric: tabular-nums; }
