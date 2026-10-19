@@ -97,6 +97,8 @@ export const AGENT_CARD_HEIGHT = 104
 export const AGENT_SLOT_MAX = 276
 export const AGENT_SLOT_MIN = 150
 const CARD_GUTTER = 12
+/** One grid column's width. Fixed, so a card is the same size on every level. */
+const AGENT_SLOT_W = 190
 /** Vertical step between levels: the card plus the 40px lane reserved for edges below it. */
 const LEVEL_HEIGHT = AGENT_CARD_HEIGHT + 40
 const PAD_Y = 48
@@ -348,26 +350,36 @@ export function layoutForest(forest: AgentForest, stageWidth: number): AgentLayo
     list.push(node)
     levels.set(node.depth, list)
   }
-  const widest = Math.max(1, ...[...levels.values()].map(list => list.length))
-  const usable = Math.max(AGENT_SLOT_MIN, stageWidth - CARD_GUTTER)
-  const slot = Math.min(AGENT_SLOT_MAX, Math.max(AGENT_SLOT_MIN, Math.floor(usable / widest)))
-  const width = Math.max(stageWidth, slot * widest + CARD_GUTTER)
+
+  // A level wraps into as many rows as the card needs. A real family is one root with a couple of children and
+  // then two dozen grandchildren, so a single row per level overflowed the card by 2,200px. Each level therefore
+  // gets its own block of rows, and the level's rows are centred within it.
+  const slot = AGENT_SLOT_W
+  const perRow = Math.max(1, Math.floor(Math.max(stageWidth, AGENT_SLOT_MIN) / slot))
+  const width = Math.max(stageWidth, slot * Math.min(perRow, maxLevelSize(levels)))
 
   const placed: PlacedNode[] = []
-  for (const [depth, list] of levels) {
-    list.forEach((node, column) => {
-      // Centre each level's row: a shallower level with one card sits under the middle of the stage.
-      const rowWidth = list.length * slot
-      const left = Math.round((width - rowWidth) / 2) + column * slot + CARD_GUTTER / 2
+  /** The y where the next level's first row starts; each level advances by its own row count. */
+  let cursorY = PAD_Y
+  const depthOrder = [...levels.keys()].sort((a, b) => a - b)
+  for (const depth of depthOrder) {
+    const list = levels.get(depth) as AgentNode[]
+    const rows = Math.ceil(list.length / perRow)
+    list.forEach((node, index) => {
+      const row = Math.floor(index / perRow)
+      const column = index % perRow
+      const inRow = Math.min(perRow, list.length - row * perRow)
+      const rowWidth = inRow * slot
       placed.push({
         node,
         column,
-        columns: list.length,
-        left,
-        top: PAD_Y + depth * LEVEL_HEIGHT,
+        columns: inRow,
+        left: Math.round((width - rowWidth) / 2) + column * slot + CARD_GUTTER / 2,
+        top: cursorY + row * LEVEL_HEIGHT,
         width: slot - CARD_GUTTER,
       })
     })
+    cursorY += rows * LEVEL_HEIGHT
   }
 
   const byId = new Map(placed.map(entry => [entry.node.id, entry]))
@@ -376,8 +388,9 @@ export function layoutForest(forest: AgentForest, stageWidth: number): AgentLayo
     const from = byId.get(edge.from)
     const to = byId.get(edge.to)
     if (from === undefined || to === undefined) continue
-    // A cubic curve from the parent's bottom edge to the child's top edge: it reads as one connection and
-    // never crosses a card.
+    // A cubic curve from the parent's bottom edge to the child's top edge. The 40px reserved below every card
+    // is the curve's lane: with a wrapped level the curve can start below the parent and land above the child
+    // without crossing any card, because a level only begins after the previous one's lanes have ended.
     const x1 = from.left + from.width / 2
     const y1 = from.top + AGENT_CARD_HEIGHT
     const x2 = to.left + to.width / 2
@@ -386,10 +399,15 @@ export function layoutForest(forest: AgentForest, stageWidth: number): AgentLayo
     edges.push({ from: edge.from, to: edge.to, path: `M${x1},${y1} C${x1},${midY} ${x2},${midY} ${x2},${y2}` })
   }
 
-  // A one-level family still needs its own row plus the padding above and below.
-  const levels_ = levels.size === 0 ? 0 : Math.max(...levels.keys()) + 1
-  const height = PAD_Y * 2 + levels_ * LEVEL_HEIGHT
+  const height = cursorY + PAD_Y
   return { placed, edges, width, height, slot }
+}
+
+/** The largest number of nodes on any one level. */
+function maxLevelSize(levels: ReadonlyMap<number, readonly AgentNode[]>): number {
+  let widest = 1
+  for (const list of levels.values()) if (list.length > widest) widest = list.length
+  return widest
 }
 
 /** Fold the current session's sub-agent subtree cost (the team figure on the summary panel). The current

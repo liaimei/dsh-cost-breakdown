@@ -77,6 +77,8 @@ export interface AgentNetworkProps {
 export function AgentNetwork(props: AgentNetworkProps): ReactElement {
   const { t, sessionId, snapshot, sessions, onOpen } = props
   const stage = useRef<HTMLDivElement | null>(null)
+  /** The card's content width — the stage's own width comes from the layout, so measuring the stage would be
+   * circular and would feed the first frame's fallback back into the next layout. */
   const [stageWidth, setStageWidth] = useState(0)
   /** The hovered node; its lineage is the only part of the graph left lit. */
   const [hoverId, setHoverId] = useState<string | null>(null)
@@ -106,7 +108,9 @@ export function AgentNetwork(props: AgentNetworkProps): ReactElement {
   // Measure the stage so the grid can spread across the card's real width; a measurless environment (jsdom,
   // the first frame) falls back to the widest layout rather than cramming every card into one slot.
   useEffect(() => {
-    const element = stage.current
+    // The card that wraps the stage is the width reference: it is in the layout flow and its width does not
+    // depend on this component's output.
+    const element = stage.current?.parentElement ?? null
     if (element === null) return
     const measure = (): void => { setStageWidth(element.clientWidth) }
     measure()
@@ -150,7 +154,9 @@ export function AgentNetwork(props: AgentNetworkProps): ReactElement {
       h('div', { className: 'cb-empty' }, t('agents.solo')))
   }
 
-  const layout = layoutForest(forest, Math.max(stageWidth, 240))
+  // Until the first measurement lands (and in a layout-less environment such as jsdom), assume a wide card:
+  // the previous 240px floor made a 25-node family stack one card per row, 3,700px tall.
+  const layout = layoutForest(forest, stageWidth > 0 ? stageWidth : 900)
   // Hovering a card lights its ancestor chain and its whole subtree; every other link fades to background.
   const lit = hoverId === null ? null : lineageOf(forest, hoverId)
   const litEdges = lit === null ? null : new Set(forest.edges
@@ -171,7 +177,7 @@ export function AgentNetwork(props: AgentNetworkProps): ReactElement {
     h('div', {
       ref: stage,
       className: `cb-agent-stage${hoverId !== null ? ' cb-agent-focus' : ''}`,
-      style: { height: `${layout.height}px`, width: forest.solo ? '100%' : `${layout.width}px` },
+      style: { height: `${layout.height}px`, width: `${layout.width}px`, maxWidth: '100%' },
       onMouseLeave: () => { setHoverId(null) },
     },
       // Edges first: they must sit under the cards.

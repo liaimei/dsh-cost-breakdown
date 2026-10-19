@@ -15,13 +15,19 @@
  * resets below, and the cards' `min-w-[min(360px,100%)]` floor depends on `box-sizing: border-box`. */
 .cb-root .cb-card { box-sizing: border-box; padding: 7px 8px; margin-bottom: 7px; container: cb-card / inline-size; }
 .cb-root .cb-cols { gap: 7px; margin-bottom: 7px; }
-.cb-card-title { font-weight: 600; margin-bottom: 10px; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.cb-card-title { font-weight: 600; margin-bottom: 10px; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; min-width: 0; }
+/* The title never shrinks below its own text; the controls wrap around it instead. */
+.cb-card-title > .cb-card-title-text { flex: 0 0 auto; }
 .cb-card-title-text { flex: none; white-space: nowrap; }
 /* A regular-weight subtitle pinned to the right of a 600-weight title; the native `title` explains it. */
 .cb-card-sub { flex: none; margin-left: auto; font-weight: 400; color: var(--dsw-alias-label-secondary); font-size: 12px; }
 
 /* Segmented controls (step/turn, total/delta, sorts, event kinds). */
 .cb-gran, .cb-kinds { margin-left: auto; display: flex; gap: 2px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l2); border-radius: 6px; padding: 1px; }
+/* The kind filter carries five labels plus counts; in a half-width card it wraps onto its own line instead of
+ * squeezing the card title to nothing. */
+.cb-card-title > .cb-kinds { flex-wrap: wrap; max-width: 100%; }
+.cb-card-title > .cb-kinds .cb-gran-btn { white-space: nowrap; }
 /* A title carrying two control groups wraps them, so the row keeps one auto-margin push. */
 .cb-trend-ctl, .cb-heat-ctl { margin-left: auto; display: flex; gap: 6px; align-items: center; }
 .cb-trend-ctl .cb-gran, .cb-heat-ctl .cb-gran { margin-left: 0; }

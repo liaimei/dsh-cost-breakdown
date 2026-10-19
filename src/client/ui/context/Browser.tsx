@@ -62,10 +62,14 @@ export function BrowserCard(props: BrowserProps): ReactElement {
     return { content: makeContentFetcher(sessionId), header: makeHeaderFetcher(sessionId) }
   }, [sessionId, face])
 
+  // The subtitle names the step being read: a recorded step keeps its turn and step numbers. Printing the raw
+  // seq here (`T6972 S—`) was wrong — a seq is not a turn — so a cut that has no request row falls back to the
+  // step-less label instead of inventing one.
+  const selectedRow = selectedSeq === null ? undefined : data.requests.find(row => row.seq === selectedSeq)
   const stem = assembled.live
     ? t('browser.live')
-    : selectedSeq !== null && byCat.user?.[0] !== undefined
-      ? t('browser.stepAt', { t: String(selectedSeq), s: '—' })
+    : selectedRow !== undefined
+      ? t('browser.stepAt', { t: selectedRow.turn ?? 0, s: selectedRow.step ?? 0 })
       : t('browser.liveNow')
 
   return h('div', { className: 'cb-card cb-browser-card' },

@@ -369,8 +369,12 @@ export function TrendChart(props: TrendChartProps): ReactElement {
                 : null))))
             : null)),
     ),
-    // The turn band: one cell per turn run, mirroring the column grid.
-    h('div', { className: 'cb-turns' }, turns.map(band => h('div', {
+    // The turn band: one cell per turn run, mirroring the column grid. It sits under the plot but outside the
+    // scroll area, so it is indented by the axis rail (`40px` + the row's `6px` gap) to line up with the bars,
+    // and carries a lead-in so the strip cannot be mistaken for a scrollbar.
+    h('div', { className: 'cb-turns-wrap' },
+      h('span', { className: 'cb-turns-lead' }, t('trend.turns')),
+      h('div', { className: 'cb-turns' }, turns.map(band => h('div', {
       key: band.turn,
       className: `cb-turn${hoverTurn === band.turn ? ' cb-turn-on' : ''}`,
       style: {
@@ -380,7 +384,7 @@ export function TrendChart(props: TrendChartProps): ReactElement {
       title: t('detail.turn', { t: band.turn, n: band.span }),
       onMouseEnter: () => { setHoverTurn(band.turn) },
       onMouseLeave: () => { setHoverTurn(null) },
-    }, h('span', { className: 'cb-turn-label' }, formatCount(band.turn))))),
+    }, h('span', { className: 'cb-turn-label' }, formatCount(band.turn)))))),
     // The active bar's composition, below the plot.
     activeRow !== null
       ? h('div', { className: 'cb-trend-detail' },

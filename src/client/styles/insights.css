@@ -1,16 +1,22 @@
 /* The Insights page. The page root is an inline-size container, so every card reflows on its own width
  * rather than the viewport's; that is what lets the same grids work in a narrow window. */
-.cb-ov-page { padding: 20px 24px 40px; container-type: inline-size; display: flex; flex-direction: column; gap: 16px; }
-.cb-ov-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-.cb-ov-pagetitle { font-size: 18px; font-weight: 600; margin: 0; }
-.cb-ov-headctl { display: flex; align-items: center; gap: 8px; }
+/* The page is the query container; the scroll is its own child, so a long page scrolls instead of being
+ * clipped by the panel's fixed height. */
+.cb-ov-page { display: flex; flex-direction: column; width: 100%; height: 100%; min-width: 0; min-height: 0; overflow: hidden; box-sizing: border-box; container: cb-ov / inline-size; }
+.cb-ov-pagescroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; }
+.cb-ov-pagecontent { padding: 0 clamp(24px, 4vw, 48px) 48px; display: flex; flex-direction: column; gap: 10px; }
+.cb-ov-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding-top: 28px; margin-bottom: 24px; }
+/* The macOS inset titlebar needs its clearance so the head aligns with the frame's own title row. */
+[data-platform='darwin'] .cb-ov-head { padding-top: calc(28px + var(--dsh-frame-top-clearance, 0px)); }
+.cb-ov-pagetitle { flex: 0 1 auto; min-width: 0; margin: 0; font-size: 20px; line-height: 28px; font-weight: 500; }
+.cb-ov-headctl { margin-left: auto; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .cb-ov-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
 .cb-ov-kpi { border: 1px solid var(--dsw-alias-border-l2); border-radius: 10px; padding: 10px 12px; }
 .cb-ov-kpi-label { font-size: 11px; color: var(--dsw-alias-label-secondary); }
 .cb-ov-kpi-value { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .cb-ov-kpi-sub { font-size: 11px; color: var(--dsw-alias-label-tertiary); }
 .cb-ov-first, .cb-ov-stats, .cb-ov-spend { display: flex; flex-direction: column; gap: 10px; }
-.cb-ov-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; }
+.cb-ov-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; align-items: stretch; }
 .cb-ov-body { display: grid; grid-template-columns: 3fr 7fr; gap: 16px; }
 @container (max-width: 900px) { .cb-ov-body { grid-template-columns: 1fr; } }
 .cb-ov-left, .cb-ov-right { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
@@ -50,7 +56,12 @@
 .cb-ov-empty { color: var(--dsw-alias-label-secondary); padding: 12px 0; text-align: center; }
 
 /* Donut + legend. */
-.cb-ov-donut-wrap { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.cb-ov-donut-wrap { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; }
+/* The ring cards in one row share a height; the legend starts at the ring's top edge so the pair reads as one
+ * unit, and the card does not stretch its legend across the extra height. */
+.cb-ov-stats > .cb-ov-card { display: flex; flex-direction: column; }
+.cb-ov-stats > .cb-ov-card .cb-donut-row,
+.cb-ov-stats > .cb-ov-card .cb-ov-donut-wrap { align-items: flex-start; }
 .cb-ov-donut-center { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .cb-ov-slices { list-style: none; margin: 0; padding: 0; flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .cb-ov-slice { display: flex; align-items: baseline; gap: 6px; font-size: 12px; cursor: default; }
@@ -249,3 +260,71 @@
 .cb-overview-pct { margin-left: auto; font-size: 11px; }
 .cb-overview-pct b { font-size: 20px; color: var(--dsw-alias-label-primary); margin-right: 4px; }
 
+/* --- usage columns (values ported from the shipped stylesheet) ------------
+ * Both series scale to their own window maximum: a two-dollar week must not be flattened next to a
+ * 169-million-token one. The plot is a three-column grid — left rail, chart, right rail — with the date strip as
+ * the chart column's second row, so each label sits centred under its own column. */
+.cb-ov-usage { flex: 1 1 auto; display: flex; flex-direction: column; margin-bottom: 0; min-width: 0; box-sizing: border-box; min-height: 160px; }
+/* The plot needs a real height: with `minmax(56px, 1fr)` inside a card that sized to content, the bar area
+ * collapsed to 56px and the columns had nothing to fill. 132px matches the context surface's own plot. */
+.cb-ov-usage-plot { flex: 1 1 auto; min-height: 132px; display: grid; grid-template-columns: 42px minmax(0, 1fr) 42px; grid-template-rows: minmax(96px, 1fr) auto; gap: 6px; }
+.cb-ov-usage-rail { position: relative; width: 42px; font-size: 9px; line-height: 1.2; color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; }
+.cb-ov-usage-rail-l { grid-area: 1 / 1; }
+.cb-ov-usage-rail-r { grid-area: 1 / 3; }
+.cb-ov-usage-rail-l .cb-ov-usage-tick { right: 0; }
+.cb-ov-usage-rail-r .cb-ov-usage-tick { left: 0; }
+.cb-ov-usage-tick { position: absolute; transform: translateY(-50%); white-space: nowrap; }
+/* The grid covers the bar area only, so the lines never cross the labels; the 56px row floor keeps
+ * percentage-height bars alive after a wrap. */
+.cb-ov-usage-grid { grid-area: 1 / 2; position: relative; min-width: 0; display: flex; align-items: stretch; }
+.cb-ov-usage-line { position: absolute; left: 0; right: 0; height: 1px; background: color-mix(in srgb, var(--dsw-alias-border-l2) 70%, transparent); }
+.cb-ov-usage-line-0 { background: var(--dsw-alias-border-l2); }
+.cb-ov-usage-cols { position: relative; flex: 1 1 auto; min-width: 0; display: flex; align-items: stretch; gap: 6px; height: 100%; }
+.cb-ov-usage-col { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; justify-content: flex-end; height: 100%; }
+/* The bar is a share of the column's height; give the column a floor so a short card still draws a bar. */
+.cb-ov-usage-bars { min-height: 80px; }
+/* `height: 100%` is load-bearing: the bars size themselves as a percentage of this box, and a flex child with
+ * no resolved height collapses them to zero — which is why the chart drew grid lines and no bars. */
+.cb-ov-usage-bars { flex: 1 1 auto; width: 100%; min-height: 0; height: 100%; display: flex; align-items: flex-end; justify-content: center; gap: 3px; }
+.cb-ov-usage-bar { flex: none; width: 10px; border-radius: 3px 3px 0 0; background: color-mix(in srgb, var(--color-blue-500) 72%, transparent); }
+.cb-ov-usage-tokens { background: color-mix(in srgb, var(--color-blue-500) 72%, transparent); }
+.cb-ov-usage-cost { background: color-mix(in srgb, var(--color-green-500) 72%, transparent); }
+.cb-ov-usage-days { grid-area: 2 / 2; display: flex; gap: 6px; margin: 0; }
+.cb-ov-usage-day { flex: 1 1 0; min-width: 0; text-align: center; font-size: 9px; line-height: 1.2; color: var(--dsw-alias-label-secondary); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.cb-ov-usage-key { flex: none; display: flex; align-items: center; justify-content: flex-end; gap: 5px; padding-top: 5px; }
+.cb-ov-usage-swatch { flex: none; width: 10px; height: 8px; border-radius: 2px; }
+.cb-ov-usage-key-label { font-size: 9px; color: var(--dsw-alias-label-secondary); }
+/* The pair of wide cards folds to one column below 932px, where the seven day groups would otherwise crush. */
+.cb-ov-first { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 10px; }
+@container cb-ov (max-width: 932px) { .cb-ov-first { grid-template-columns: minmax(0, 1fr); } }
+@container cb-ov (max-width: 640px) { .cb-ov-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* --- spend cards (values ported from the shipped stylesheet) -------------- */
+/* One card per platform, each with its own billing unit; the donut and the legend sit side by side, and the
+ * per-model table below them aligns its numeric columns to the right. */
+.cb-ov-spend { margin-bottom: 10px; }
+.cb-ov-spend-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; border-top: 1px solid var(--dsw-alias-border-l1); margin: 18px 0 10px; padding-top: 14px; }
+.cb-ov-spend-title { font-size: 15px; font-weight: 600; }
+.cb-ov-spend-sub { color: var(--dsw-alias-label-secondary); font-size: 12px; }
+.cb-ov-platform-row { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px; margin-bottom: 10px; }
+.cb-ov-platform-row > .cb-ov-pf-card { flex: auto; min-width: min(240px, 100%); container: cb-card / inline-size; }
+.cb-ov-pf-card { display: flex; flex-direction: column; min-width: 0; }
+/* The ring and its legend sit side by side in a wide card and stack in a narrow one, and the card's height is
+ * its content's: without these the empty space below the legend pushed the model table off the card. */
+.cb-ov-pf-card .cb-ov-donut-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; flex: 0 0 auto; }
+.cb-ov-pf-card .cb-ov-sl { flex: 1 1 200px; min-width: 0; }
+.cb-ov-pf-models { margin-top: 10px; flex: 0 0 auto; }
+/* The card's height follows its content; a fixed card height was cutting the model table off. */
+.cb-ov-card.cb-ov-pf-card { overflow: visible; }
+.cb-ov-pf-card .cb-donut-row { flex-wrap: wrap; }
+.cb-ov-pf-models { width: 100%; border-collapse: collapse; table-layout: auto; margin-top: 6px; font-size: 12px; }
+.cb-ov-pf-models th { font-weight: 400; font-size: 11px; color: var(--dsw-alias-label-secondary); text-align: right; padding: 0 0 4px; border-bottom: 1px solid var(--dsw-alias-border-l1); }
+.cb-ov-pf-models th:first-child { text-align: left; }
+.cb-ov-pf-models td { padding: 3px 0; border-top: 1px solid var(--dsw-alias-border-l1); color: var(--dsw-alias-label-primary); font-variant-numeric: tabular-nums; }
+.cb-ov-pf-models td.cb-ov-pf-model-name, .cb-ov-pf-models th.cb-ov-pf-model-name { max-width: 0; width: 100%; min-width: 0; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dsw-alias-label-secondary); }
+.cb-ov-pf-models th.cb-ov-pf-model-spend, .cb-ov-pf-models td.cb-ov-pf-model-spend,
+.cb-ov-pf-models th.cb-ov-pf-model-calls, .cb-ov-pf-models td.cb-ov-pf-model-calls { text-align: right; padding-left: 16px; white-space: nowrap; }
+.cb-ov-pf-models td.cb-ov-pf-model-spend { font-weight: 600; }
+.cb-ov-pf-models td.cb-ov-pf-model-calls { color: var(--dsw-alias-label-secondary); }
+.cb-ov-pf-models tr.cb-ov-pf-model-unpriced .cb-ov-pf-model-name { color: var(--dsw-alias-label-tertiary); }
+.cb-ov-pf-models tr.cb-ov-pf-model-unpriced .cb-ov-pf-model-spend { color: var(--dsw-alias-label-tertiary); font-weight: 400; }

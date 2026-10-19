@@ -166,8 +166,13 @@
 
 /* The turn band: neutral zebra fills (inline), deliberately disjoint from the stage palette — a stage colour
  * there would read as another segment at the bar's foot. */
-.cb-turns { display: flex; gap: 2px; overflow: hidden; margin-top: 4px; padding: 0 2px; box-sizing: border-box; width: max-content; min-width: 100%; }
-.cb-turn { flex: none; box-sizing: border-box; text-align: center; font-size: 10px; line-height: 14px; font-weight: 600; color: var(--dsw-alias-label-secondary); border-radius: 3px; height: 14px; white-space: nowrap; cursor: pointer; transition: filter var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out), opacity var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+/* Indented by the axis rail (40px) plus the plot row's 6px gap, so a turn cell sits exactly under the bars it
+ * spans. `min-width` is reduced by the same indent so the band never overflows the card. */
+/* A labelled band under the plot: the lead-in names it, then one cell per turn run. */
+.cb-turns-wrap { display: flex; align-items: center; gap: 6px; margin: 6px 0 0 46px; max-width: calc(100% - 46px); }
+.cb-turns-lead { flex: none; font-size: 10px; color: var(--dsw-alias-label-tertiary); }
+.cb-turns { display: flex; gap: 2px; overflow: hidden; padding: 0; box-sizing: border-box; width: max-content; min-width: 0; flex: 1; }
+.cb-turn { flex: none; box-sizing: border-box; text-align: center; font-size: 10px; line-height: 16px; font-weight: 600; color: var(--dsw-alias-label-secondary); border-radius: 3px; height: 16px; white-space: nowrap; overflow: hidden; cursor: pointer; transition: filter var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out), opacity var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 .cb-turn-on { filter: brightness(1.35); color: var(--dsw-alias-label-primary); }
 .cb-turn-label { display: inline-block; }
 
@@ -178,7 +183,7 @@
 .cb-agent-chip { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; }
 .cb-agent-chip-on { color: var(--dsw-alias-state-success-primary); border-color: color-mix(in srgb, var(--dsw-alias-state-success-primary) 40%, transparent); }
 /* Paired with the overscroll handling: a swipe past the stage edge must not chain into browser history. */
-.cb-agent-stage { overflow-x: auto; overscroll-behavior-x: contain; margin: 0 -4px; padding: 0 4px; position: relative; }
+.cb-agent-stage { position: relative; overflow-x: auto; overscroll-behavior-x: contain; margin: 0 -4px; padding: 0 4px; max-width: 100%; }
 .cb-agent-edges { position: absolute; inset: 0; pointer-events: none; }
 .cb-agent-edge { stroke-opacity: 0.45; transition: stroke-opacity var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 .cb-agent-edge-live { stroke-opacity: 0.85; }
@@ -237,7 +242,10 @@
 .cb-agent-node-done { flex: none; color: var(--dsw-alias-state-success-primary); }
 .cb-agent-overflow { margin-top: 8px; font-size: 11px; color: var(--dsw-alias-label-secondary); }
 .cb-agent-solo-note { padding: 4px 0 10px; font-size: 12px; color: var(--dsw-alias-label-secondary); }
-.cb-agent-card { overflow: hidden; }
+.cb-agent-card { overflow: hidden; min-width: 0; }
+/* The card is the stage's width reference: a layout wider than the card scrolls inside the stage rather than
+ * stretching the card itself. */
+.cb-agent-card > .cb-agent-stage { width: auto; }
 .cb-agent-expand { box-sizing: border-box; width: 100%; padding: 10px; border: 1px dashed var(--dsw-alias-border-l2); border-radius: 10px; background: transparent; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 12px; cursor: pointer; transition: border-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out), color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 .cb-agent-expand:hover { border-color: var(--dsw-alias-label-tertiary, var(--dsw-alias-border-l2)); color: var(--dsw-alias-label-primary); }
 
@@ -533,3 +541,17 @@
 .cb-agent-part { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 .cb-agent-part i { width: 7px; height: 7px; border-radius: 2px; display: inline-block; }
 .cb-agent-part em { font-style: normal; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); font-variant-numeric: tabular-nums; }
+
+/* --- the fourth band: events beside files, both half-width ---------------
+ * Two findings from measuring the rendered page drove these rules:
+ *   1. the pair must be a two-column grid, not a flex row — a flex row sized the file card to its content and
+ *      left the event card at 18px, which made the whole list unreadable;
+ *   2. both cards must be bounded — the file list ran to 1,853px on a real session, so it needs its own
+ *      internal scroll exactly like the event list, or it pushes everything below off the page. */
+.cb-cols-pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; margin-bottom: 14px; }
+.cb-cols-pair > .cb-card { min-width: 0; margin-bottom: 0; display: flex; flex-direction: column; }
+@container cb-ov (max-width: 932px) { .cb-cols-pair { grid-template-columns: minmax(0, 1fr); } }
+@container cb-card (max-width: 559px) { .cb-cols-pair { grid-template-columns: minmax(0, 1fr); } }
+/* Both lists scroll inside their card, so the pair reads as one band whatever the session's size. */
+.cb-files { display: flex; flex-direction: column; gap: 0; height: 320px; overflow-y: auto; margin: 0; padding: 0; list-style: none; }
+.cb-files-card { min-width: 0; }

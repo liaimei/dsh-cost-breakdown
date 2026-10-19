@@ -119,10 +119,12 @@ export function InsightsPage(props: InsightsProps): ReactElement {
   const span = custom ?? dayKeyRange(window)
 
   if (sessions === undefined) {
-    return h('div', { className: 'cb-ov-page' }, h('div', { className: 'cb-empty' }, t('ov.unavailable')))
+    return h('div', { className: 'cb-ov-page' }, h('div', { className: 'cb-ov-pagescroll' }, h('div', { className: 'cb-ov-pagecontent' }, h('div', { className: 'cb-empty' }, t('ov.unavailable')))))
   }
 
   return h('div', { className: 'cb-ov-page' },
+    h('div', { className: 'cb-ov-pagescroll' },
+    h('div', { className: 'cb-ov-pagecontent' },
     h('div', { className: 'cb-ov-head' },
       h('h1', { className: 'cb-ov-pagetitle' }, t('ov.title')),
       h('div', { className: 'cb-ov-headctl' },
@@ -230,7 +232,7 @@ export function InsightsPage(props: InsightsProps): ReactElement {
             h('button', { type: 'button', className: 'cb-gran-btn', disabled: paged.index >= paged.count - 1, onClick: () => { setPage(paged.index + 1) } }, '›'))
           : null)),
     h(PluginInfoCard, { t }),
-    h(UpgradeGate, { t, sessionId: props.sessionId, current: '', minimum: '' }))
+    h(UpgradeGate, { t, sessionId: props.sessionId, current: '', minimum: '' }))))
 }
 
 /** One KPI cell. */

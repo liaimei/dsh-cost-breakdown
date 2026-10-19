@@ -341,8 +341,8 @@ function ContextBody(props: ContextViewProps): ReactElement {
           sessionId,
           ...(browserCategory !== null ? { openCategory: browserCategory } : {}),
         }))),
-    // Band 4: the persistent events and the file activity, side by side.
-    h('div', { className: 'cb-cols' },
+    // Band 4: the persistent events and the file activity, side by side as an even two-column grid.
+    h('div', { className: 'cb-cols-pair' },
       h(EventsCard, {
         t,
         snapshot: head,

@@ -9,7 +9,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   AGENT_TREE_LIMIT, agentForestOf, agentIdentityOf, agentDurationOf, agentRowOf,
-  barSegmentsOf, catalogOrderOf, formatDurationCompact, layoutForest, lineageOf,
+  AGENT_CARD_HEIGHT, barSegmentsOf, catalogOrderOf, formatDurationCompact, layoutForest, lineageOf,
   pressureColorOf, subagentCostOf,
 } from '../../src/client/ui/context/agents'
 
@@ -230,5 +230,47 @@ describe('formatDurationCompact', () => {
     expect(formatDurationCompact(12_000)).toBe('12s')
     expect(formatDurationCompact(200_000)).toBe('3m 20s')
     expect(formatDurationCompact(3_840_000)).toBe('1h 04m')
+  })
+})
+
+describe('layoutForest geometry', () => {
+  /** A family shaped like a real one: one root, two children, and many grandchildren. */
+  function bigFamily(): never {
+    const rows: Record<string, Record<string, unknown>> = { root: row('root') }
+    rows.a = row('a', { parentId: 'root' })
+    rows.b = row('b', { parentId: 'root' })
+    for (let index = 0; index < 20; index++) rows[`g${index}`] = row(`g${index}`, { parentId: index % 2 === 0 ? 'a' : 'b' })
+    return agentForestOf(snapshot(rows), 'root') as never
+  }
+
+  it('never lays out wider than it needs to for a 700px card', () => {
+    const layout = layoutForest(bigFamily(), 700)
+    // A 20-node level must wrap rather than overflow: the stage is what the card can show.
+    expect(layout.width).toBeLessThanOrEqual(700 + 12)
+  })
+
+  it('keeps a parent one lane above its child on stacked levels', () => {
+    const forest = agentForestOf(snapshot({
+      root: row('root'),
+      a: row('a', { parentId: 'root' }),
+    }), 'root')
+    const layout = layoutForest(forest as never, 900)
+    const rootEntry = layout.placed.find(entry => entry.node.id === 'root')
+    const childEntry = layout.placed.find(entry => entry.node.id === 'a')
+    expect(childEntry!.top).toBeGreaterThan(rootEntry!.top)
+    // The lane between them is exactly the reserved 40px, so a curve fits without crossing a card.
+    expect(childEntry!.top - rootEntry!.top).toBe(AGENT_CARD_HEIGHT + 40)
+  })
+
+  it('reports a height that covers its last row', () => {
+    const layout = layoutForest(bigFamily(), 700)
+    const lowest = Math.max(...layout.placed.map(entry => entry.top))
+    expect(layout.height).toBeGreaterThan(lowest + AGENT_CARD_HEIGHT)
+  })
+
+  it('gives every card the same width whatever level it is on', () => {
+    const layout = layoutForest(bigFamily(), 900)
+    const widths = new Set(layout.placed.map(entry => entry.width))
+    expect(widths.size).toBe(1)
   })
 })
