@@ -18,156 +18,53 @@
 }
 .cb-jump:hover { color: var(--dsw-alias-label-secondary); background: var(--dsw-alias-bg-layer-2); }
 
-/* --- composition strip -------------------------------------------------- */
-.cb-comp-flow {
-  display: flex;
-  width: 100%;
-  height: 22px;
-  border-radius: 6px;
-  overflow: hidden;
-  background: var(--dsw-alias-bg-layer-2);
-}
-.cb-comp-seg {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 2px;
-  font-size: 10px;
-  color: #fff;
-  overflow: hidden;
-  white-space: nowrap;
-  transition: flex-grow 0.25s ease;
-}
-.cb-comp-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 8px; }
-.cb-comp-legend-item { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--dsw-alias-label-secondary); }
-.cb-comp-dot { width: 8px; height: 8px; border-radius: 2px; flex: none; }
-.cb-comp-legend-value { color: var(--dsw-alias-label-primary); font-variant-numeric: tabular-nums; }
-.cb-comp-legend-share { opacity: 0.7; font-variant-numeric: tabular-nums; }
-.cb-comp-occupancy { display: flex; align-items: baseline; gap: 8px; margin-top: 8px; }
-.cb-comp-pct { font-size: 18px; font-weight: 600; font-variant-numeric: tabular-nums; }
+/* --- composition strip (values ported from the shipped stylesheet) --------
+ * `wrap` is the positioning context for the absolutely positioned overlay layers (the occupied box, the
+ * reserve band) that stack above the flex segments. */
+.cb-comp-wrap { position: relative; width: 100%; }
+.cb-comp-flow { display: flex; width: 100%; border-radius: 5px; overflow: hidden; background: color-mix(in srgb, var(--color-neutral-500) 18%, transparent); position: relative; height: 14px; }
+.cb-comp-flow > div { height: 100%; }
+/* The bar's own grow-in uses `transform`, not `width`: the layout never reflows, and it plays once on mount, so
+ * later hover and width updates cannot replay it. */
+.cb-comp-seg { transition: filter var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out), opacity var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); transform-origin: 0 50%; }
+.cb-comp-seg-on { filter: brightness(1.18); }
+.cb-comp-dim .cb-comp-seg { opacity: 0.35; }
+.cb-comp-dim .cb-comp-seg-on { opacity: 1; }
+/* The legend chip: a colour dot, the label, then the figure and its share on the right. */
+.cb-comp-legend { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 6px 14px; margin-top: 10px; }
+.cb-comp-legend-item { display: flex; align-items: center; gap: 5px; min-width: 0; color: var(--dsw-alias-label-primary); padding: 1px 6px; border-radius: 6px; cursor: pointer; transition: background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+.cb-comp-legend-item:hover, .cb-comp-legend-on { background: var(--dsw-alias-interactive-bg-hover); }
+.cb-comp-dot { display: inline-block; width: 8px; height: 8px; border-radius: 2px; flex: none; transition: box-shadow var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+.cb-comp-legend-on .cb-comp-dot { box-shadow: 0 0 0 1px var(--dsw-alias-brand-primary); }
+.cb-comp-legend-label { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.cb-comp-legend-value { margin-left: auto; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cb-comp-legend-share { color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* The occupancy readout: the percentage claim beside the window it is a share of. */
+.cb-comp-occupancy { display: flex; align-items: baseline; gap: 6px; margin-top: 8px; }
+.cb-comp-pct { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
 
-/* --- trend -------------------------------------------------------------- */
-.cb-trend { display: flex; align-items: flex-end; gap: 2px; height: 120px; padding-top: 8px; overflow-x: auto; }
-.cb-trend-bar {
-  flex: none;
-  width: 14px;
-  min-height: 2px;
-  border: 0;
-  border-radius: 2px 2px 0 0;
-  background: var(--dsw-alias-brand-primary, #4d6bfe);
-  opacity: 0.55;
-  cursor: pointer;
-  padding: 0;
-  transition: opacity 0.15s ease;
-}
-.cb-trend-bar:hover { opacity: 0.85; }
-.cb-trend-bar-on { opacity: 1; }
-.cb-trend-detail { margin-top: 10px; border-top: 1px solid var(--dsw-alias-border-l2); padding-top: 8px; }
-.cb-trend-detail-row { display: flex; justify-content: space-between; align-items: baseline; }
+/* --- key/value grid (values ported from the shipped stylesheet) ---------- */
+.cb-kv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 4px 12px; margin-top: 8px; }
+.cb-kv { display: flex; align-items: baseline; gap: 6px; min-width: 0; font-size: 12px; }
+.cb-kv-key { color: var(--dsw-alias-label-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cb-kv-value { margin-left: auto; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* --- the trend card's detail block and DNA legend ------------------------ */
+.cb-trend-detail { border-top: 1px solid var(--dsw-alias-border-l2); margin-top: 10px; padding-top: 8px; }
+.cb-trend-detail-row { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .cb-trend-detail-total { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
-
-/* --- key/value grid ----------------------------------------------------- */
-.cb-kv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 6px 12px; margin-top: 8px; }
-.cb-kv { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; }
-.cb-kv-key { color: var(--dsw-alias-label-secondary); }
-.cb-kv-value { font-variant-numeric: tabular-nums; }
-
-/* --- browser ------------------------------------------------------------ */
-.cb-browser-cats { list-style: none; margin: 0; padding: 0; }
-.cb-browser-cat-row {
-  display: flex; justify-content: space-between; width: 100%;
-  border: 0; background: transparent; color: inherit; font: inherit;
-  padding: 5px 4px; border-radius: 5px; cursor: pointer;
-}
-.cb-browser-cat-row:hover { background: var(--dsw-alias-bg-layer-2); }
-.cb-browser-cat-count { color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; }
-.cb-browser-items { padding: 2px 0 6px 12px; }
-.cb-browser-item { display: flex; gap: 8px; align-items: baseline; padding: 3px 0; font-size: 12px; }
-.cb-browser-item-name { font-weight: 500; white-space: nowrap; }
-.cb-browser-item-text { color: var(--dsw-alias-label-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
-.cb-browser-item-tokens { margin-left: auto; color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; }
-.cb-browser-item-err { color: var(--dsw-alias-state-error-primary); }
-.cb-browser-note { font-size: 11px; color: var(--dsw-alias-label-tertiary); margin-bottom: 6px; }
-
-/* --- events ------------------------------------------------------------- */
-.cb-events { list-style: none; margin: 0; padding: 0; max-height: 260px; overflow-y: auto; }
-.cb-event-row { display: flex; gap: 8px; align-items: baseline; padding: 3px 0; font-size: 12px; }
-.cb-event-kind { flex: none; color: var(--dsw-alias-label-secondary); }
-.cb-event-time { flex: none; font-variant-numeric: tabular-nums; color: var(--dsw-alias-label-tertiary); }
-.cb-event-detail { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cb-event-tokens { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--dsw-alias-label-secondary); }
-
-/* --- files -------------------------------------------------------------- */
-.cb-files { list-style: none; margin: 0; padding: 0; max-height: 260px; overflow-y: auto; }
-.cb-file-row { display: flex; gap: 8px; align-items: baseline; padding: 3px 0; font-size: 12px; }
-.cb-file-kind { flex: none; font-size: 10px; text-transform: uppercase; color: var(--dsw-alias-label-tertiary); }
-.cb-file-path { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--ds-font-family-code, ui-monospace, monospace); }
-.cb-file-tool { color: var(--dsw-alias-label-tertiary); }
-.cb-file-delta { font-variant-numeric: tabular-nums; color: var(--dsw-alias-label-secondary); }
-.cb-file-err { color: var(--dsw-alias-state-error-primary); }
-
-/* --- agent network ------------------------------------------------------ */
-.cb-agent-self { display: flex; flex-direction: column; gap: 2px; }
-.cb-agent-node { display: inline-flex; gap: 8px; align-items: center; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; padding: 6px 10px; }
-.cb-agent-current { border-color: var(--dsw-alias-brand-primary, #4d6bfe); }
-.cb-agent-tokens { font-variant-numeric: tabular-nums; font-weight: 600; }
-.cb-agent-sub, .cb-agent-note { font-size: 11px; color: var(--dsw-alias-label-tertiary); }
-
-/* --- timing strip ------------------------------------------------------- */
-.cb-timing-strip { position: relative; height: 10px; border-radius: 3px; background: var(--dsw-alias-bg-layer-2); overflow: hidden; }
-.cb-timing-seg { position: absolute; top: 0; bottom: 0; }
-.cb-timing-ttft { background: #4d9cff; }
-.cb-timing-reasoning { background: #a78bfa; }
-.cb-timing-text { background: #f472b6; }
-.cb-timing-toolarg { background: #fbbf24; }
-.cb-timing-tools { background: #2dd4bf; }
-.cb-timing-other { background: #94a3b8; }
-
-/* --- modal -------------------------------------------------------------- */
-.cb-modal-backdrop {
-  position: fixed;
-  top: 0;
-  bottom: 0;
-  z-index: 1100;
-  background: rgba(0, 0, 0, 0.42);
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  padding: 48px 16px;
-  overflow-y: auto;
-}
-.cb-modal-card {
-  width: min(440px, 100%);
-  max-height: 100%;
-  overflow-y: auto;
-  background: var(--dsw-specific-menu, var(--dsw-alias-bg-layer-2));
-  border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: var(--dsw-radius-lg, 16px);
-  box-shadow: var(--dsw-elevation-prominent, 0 12px 32px rgba(0, 0, 0, 0.3));
-  padding: 16px;
-  box-sizing: border-box;
-}
-.cb-modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
-.cb-modal-title { font-weight: 500; }
-.cb-modal-close { border: 0; background: transparent; color: var(--dsw-alias-label-secondary); font-size: 18px; cursor: pointer; padding: 0 4px; }
-.cb-modal-body { display: flex; flex-direction: column; gap: 12px; }
-
-/* --- settings card ------------------------------------------------------ */
-.cb-set-card { padding: 4px 0; }
-.cb-set-title { font-weight: 600; margin-bottom: 10px; }
-.cb-set-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 0; }
-.cb-set-label { font-size: 12px; color: var(--dsw-alias-label-secondary); display: flex; flex-direction: column; }
-.cb-set-hint { font-size: 11px; color: var(--dsw-alias-label-tertiary); }
-.cb-set-control { flex: none; }
-.cb-set-control .cb-gran { margin-left: 0; }
-.cb-set-readonly { font-size: 11px; color: var(--dsw-alias-label-tertiary); margin-bottom: 8px; }
-
-/* --- gate card ---------------------------------------------------------- */
-.cb-gate-card { border: 1px solid var(--dsw-alias-border-l2); border-radius: 10px; padding: 12px 16px; margin-bottom: 14px; }
-.cb-gate-title { font-weight: 600; margin-bottom: 6px; }
-.cb-gate-body { font-size: 12px; color: var(--dsw-alias-label-secondary); margin-bottom: 8px; }
-.cb-gate-actions { display: flex; justify-content: flex-end; }
-.cb-root-footnote { height: 4px; }
+/* The DNA legend lists the active bar's items in read order; hovering an entry lights that slice in every bar. */
+.cb-trend-dna-legend { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(150px, 100%), 1fr)); gap: 4px 8px; margin-top: 8px; min-width: 0; }
+.cb-trend-dna-item { display: flex; align-items: center; gap: 5px; min-width: 0; padding: 1px 6px; border-radius: 6px; font-size: 12px; cursor: default; transition: background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+.cb-trend-dna-item:hover, .cb-trend-dna-item-on { background: var(--dsw-alias-interactive-bg-hover); }
+.cb-trend-dna-dot { display: inline-block; width: 8px; height: 8px; border-radius: 2px; flex: none; }
+.cb-trend-dna-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cb-trend-dna-tokens { margin-left: auto; flex: none; color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; }
+/* The stage legend under the chart: the same chips as the composition card. */
+.cb-trend-legend { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 6px 14px; margin-top: 10px; }
+.cb-trend-legend-item { display: flex; align-items: center; gap: 5px; min-width: 0; padding: 1px 6px; border-radius: 6px; cursor: pointer; transition: background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+.cb-trend-legend-item:hover, .cb-trend-legend-on { background: var(--dsw-alias-interactive-bg-hover); }
+.cb-trend-legend-dot { display: inline-block; width: 8px; height: 8px; border-radius: 2px; flex: none; }
 
 /* --- composition trend chart (values ported from the shipped stylesheet) ---------------
  * Every absolute offset below is tied to the chart's fixed geometry: `CHART_H = 112`, `PAD_TOP = 18`, and the
@@ -274,12 +171,75 @@
 .cb-turn-on { filter: brightness(1.35); color: var(--dsw-alias-label-primary); }
 .cb-turn-label { display: inline-block; }
 
-/* --- agent network ------------------------------------------------------ */
-.cb-agent-self { display: flex; flex-direction: column; gap: 2px; }
-.cb-agent-node { display: inline-flex; gap: 8px; align-items: center; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; padding: 6px 10px; }
-.cb-agent-current { border-color: var(--dsw-alias-brand-primary, #4d6bfe); }
-.cb-agent-tokens { font-variant-numeric: tabular-nums; font-weight: 600; }
-.cb-agent-sub, .cb-agent-note { font-size: 11px; color: var(--dsw-alias-label-tertiary); }
+/* --- agent network (values ported from the shipped stylesheet) -----------
+ * The link endpoints are computed from the card geometry in `agents.ts`, so `AGENT_CARD_HEIGHT` (104) and
+ * `.cb-agent-node`'s height must stay equal. */
+.cb-agent-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.cb-agent-chip { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; }
+.cb-agent-chip-on { color: var(--dsw-alias-state-success-primary); border-color: color-mix(in srgb, var(--dsw-alias-state-success-primary) 40%, transparent); }
+/* Paired with the overscroll handling: a swipe past the stage edge must not chain into browser history. */
+.cb-agent-stage { overflow-x: auto; overscroll-behavior-x: contain; margin: 0 -4px; padding: 0 4px; position: relative; }
+.cb-agent-edges { position: absolute; inset: 0; pointer-events: none; }
+.cb-agent-edge { stroke-opacity: 0.45; transition: stroke-opacity var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+.cb-agent-edge-live { stroke-opacity: 0.85; }
+
+.cb-agent-node {
+  position: absolute;
+  /* Mirrors `AGENT_CARD_HEIGHT` in agents.ts: the layout puts the link endpoints on the card edges. */
+  height: 104px;
+  padding: 9px 10px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  /* The worst-case content (two title lines + metric + bar + metadata) measures about 103px; clip the spare
+   * pixel rather than let it bleed into the link channel. */
+  overflow: hidden;
+  /* Sits above the enclosing `.cb-card`'s layer-1 surface: one step lighter background plus an l2 border, the
+   * same recipe the inspector uses. */
+  background: var(--dsw-alias-bg-layer-2);
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 10px;
+  outline: none;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out),
+    box-shadow var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out),
+    transform var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out);
+}
+.cb-agent-node:hover, .cb-agent-node:focus-visible {
+  border-color: var(--dsw-alias-label-tertiary, var(--dsw-alias-border-l2));
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--color-neutral-500) 22%, transparent);
+  transform: translateY(-2px);
+}
+.cb-agent-node:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary, var(--color-blue-500)); outline-offset: 1px; }
+/* The current session stands apart on its brand-coloured border alone; its surface matches its siblings. */
+.cb-agent-node-current { border-color: color-mix(in srgb, var(--dsw-alias-brand-primary, var(--color-blue-500)) 55%, var(--dsw-alias-border-l2)); }
+.cb-agent-node-running { box-shadow: 0 0 0 1px color-mix(in srgb, var(--dsw-alias-state-success-primary) 55%, transparent) inset; }
+.cb-agent-node-head { display: flex; align-items: flex-start; gap: 6px; }
+/* A fixed two-line title box: the metric and bar sit at the same height whether or not a title wraps. */
+.cb-agent-node-name { flex: 1; min-width: 0; height: 30px; font-size: 11.5px; line-height: 1.3; color: var(--dsw-alias-label-primary); overflow-wrap: break-word; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.cb-agent-badge { flex: none; font-size: 10px; padding: 1px 6px; border-radius: 999px; background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l1); color: var(--dsw-alias-label-secondary); white-space: nowrap; }
+.cb-agent-badge-running { color: var(--dsw-alias-state-success-primary); border-color: color-mix(in srgb, var(--dsw-alias-state-success-primary) 40%, transparent); }
+.cb-agent-badge-current { color: var(--dsw-alias-label-secondary); }
+.cb-agent-node-figures { display: flex; align-items: baseline; gap: 6px; margin-top: 5px; }
+.cb-agent-node-tokens { font-size: 13px; font-weight: 650; color: var(--dsw-alias-label-primary); font-variant-numeric: tabular-nums; }
+.cb-agent-node-pct { flex: none; font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.cb-agent-node-steps { flex: none; margin-left: auto; font-size: 10px; color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; }
+/* The bar's track is the idle window itself; the occupied segment reuses the shared grow-in animation. */
+.cb-agent-node-bar { display: flex; height: 7px; margin-top: 8px; border-radius: 4px; overflow: hidden; background: color-mix(in srgb, var(--dsw-alias-label-secondary) 16%, transparent); }
+.cb-agent-node-fill { display: block; height: 100%; transform-origin: 0 50%; background: var(--cb-ctx-indigo); }
+/* The activity footer: the run's duration on the left, the bar's occupancy figure on the right. */
+.cb-agent-node-foot { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; margin-top: auto; padding-top: 6px; font-size: 10px; line-height: 1.3; color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; }
+.cb-agent-node-mode { flex: none; border: 1px solid var(--dsw-alias-border-l1); border-radius: 999px; padding: 0 6px; }
+.cb-agent-node-time { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cb-agent-node-done { flex: none; color: var(--dsw-alias-state-success-primary); }
+.cb-agent-overflow { margin-top: 8px; font-size: 11px; color: var(--dsw-alias-label-secondary); }
+.cb-agent-solo-note { padding: 4px 0 10px; font-size: 12px; color: var(--dsw-alias-label-secondary); }
+.cb-agent-card { overflow: hidden; }
+.cb-agent-expand { box-sizing: border-box; width: 100%; padding: 10px; border: 1px dashed var(--dsw-alias-border-l2); border-radius: 10px; background: transparent; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 12px; cursor: pointer; transition: border-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out), color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+.cb-agent-expand:hover { border-color: var(--dsw-alias-label-tertiary, var(--dsw-alias-border-l2)); color: var(--dsw-alias-label-primary); }
 
 /* --- timing strip ------------------------------------------------------- */
 .cb-timing-strip { position: relative; height: 10px; border-radius: 3px; background: var(--dsw-alias-bg-layer-2); overflow: hidden; }
@@ -337,200 +297,83 @@
 .cb-gate-actions { display: flex; justify-content: flex-end; }
 .cb-root-footnote { height: 4px; }
 
-/* --- trend chart (stacked / DNA / delta + duration overlay) --------------- */
-.cb-trend-wrap { display: flex; flex-direction: column; gap: 6px; }
-.cb-trend-ctl { margin-left: auto; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
-.cb-trend-ctl .cb-gran { margin-left: 0; }
-
-.cb-trend {
-  position: relative;
-  display: flex;
-  align-items: flex-end;
-  gap: 2px;
-  height: 132px;
-  padding-top: 8px;
-  overflow-x: auto;
-  overflow-y: hidden;
-  overscroll-behavior-x: contain;
-  cursor: pointer;
-}
-.cb-trend-delta { align-items: center; }
-.cb-trend-bar {
-  position: relative;
-  flex: 1;
-  min-width: 2px;
-  max-width: 28px;
-  display: flex;
-  flex-direction: column-reverse;
-  align-items: stretch;
-  border: 0;
-  background: transparent;
-  padding: 0;
-  cursor: pointer;
-  border-radius: 2px 2px 0 0;
-  transition: transform 0.12s ease;
-}
-.cb-trend-bar:hover { transform: scaleY(1.02); }
-.cb-trend-bar-on { outline: 1px solid var(--cb-ctx-indigo); outline-offset: 1px; border-radius: 3px; }
-/* Newest bars animate in; older ones are static so the card never layers while expanding. */
-.cb-trend-bar-rise { animation: cb-bar-rise 0.24s ease-out both; }
-@keyframes cb-bar-rise { from { transform: scaleY(0.2); opacity: 0.4; } to { transform: scaleY(1); opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .cb-trend-bar-rise { animation: none; } }
-
-.cb-trend-band { width: 100%; border-radius: 1px; transition: opacity 0.12s ease; }
-.cb-trend-band-on { outline: 1px solid var(--dsw-alias-label-primary); outline-offset: -1px; }
-.cb-trend-zero { position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: var(--dsw-alias-border-l2); }
-.cb-trend-marker {
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 0;
-  height: 0;
-  border-left: 4px solid transparent;
-  border-right: 4px solid transparent;
-  border-top: 5px solid var(--cb-ctx-amber);
-}
-.cb-trend-turnline { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--dsw-alias-border-l1); opacity: 0.5; pointer-events: none; }
-.cb-trend-duration { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-.cb-trend-axis { display: flex; justify-content: space-between; font-size: 10px; color: var(--dsw-alias-label-tertiary); font-variant-numeric: tabular-nums; }
-
-.cb-trend-detail { border-top: 1px solid var(--dsw-alias-border-l2); margin-top: 8px; padding-top: 8px; }
-.cb-trend-detail-row { display: flex; justify-content: space-between; align-items: baseline; }
-.cb-trend-detail-total { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.cb-trend-dna-legend { display: flex; flex-wrap: wrap; gap: 4px 10px; margin: 6px 0; }
-.cb-trend-dna-item { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--dsw-alias-label-secondary); padding: 0 4px; border-radius: 4px; }
-.cb-trend-dna-item-on { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); }
-.cb-trend-dna-dot { width: 7px; height: 7px; border-radius: 2px; flex: none; }
-.cb-trend-dna-label { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cb-trend-dna-tokens { font-variant-numeric: tabular-nums; color: var(--dsw-alias-label-tertiary); }
-
-.cb-trend-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 8px; }
-.cb-trend-legend-item { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: var(--dsw-alias-label-secondary); cursor: default; }
-.cb-trend-legend-on { color: var(--dsw-alias-label-primary); }
-.cb-trend-legend-dot { width: 8px; height: 8px; border-radius: 2px; flex: none; }
-
-/* --- agent network ------------------------------------------------------ */
-.cb-agent-card { overflow: hidden; }
-.cb-agent-chips { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; }
-.cb-agent-chip {
-  font-size: 11px;
-  color: var(--dsw-alias-label-secondary);
-  border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 999px;
-  padding: 0 8px;
-  font-variant-numeric: tabular-nums;
-}
-/* The stage is the positioned canvas the cards and edges share. */
-.cb-agent-stage { position: relative; margin-top: 8px; }
-.cb-agent-edges { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-
-.cb-agent-node {
-  position: absolute;
-  box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  padding: 7px 9px;
-  border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 9px;
-  background: var(--dsw-alias-bg-layer-1);
-  color: var(--dsw-alias-label-primary);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  overflow: hidden;
-  transition: border-color 0.12s ease;
-}
-.cb-agent-node:hover { border-color: var(--dsw-alias-label-secondary); }
-.cb-agent-node-current { border-color: var(--cb-ctx-indigo); }
-.cb-agent-node-running { box-shadow: 0 0 0 1px var(--cb-ctx-green) inset; }
-.cb-agent-node-head { display: flex; align-items: baseline; gap: 5px; min-width: 0; }
-.cb-agent-node-name { font-weight: 600; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
-.cb-agent-badge { font-size: 9px; border-radius: 999px; padding: 0 5px; flex: none; }
-.cb-agent-badge-current { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-secondary); }
-.cb-agent-badge-running { background: var(--cb-ctx-green); color: #fff; }
-.cb-agent-node-figures { display: flex; align-items: baseline; gap: 6px; font-variant-numeric: tabular-nums; }
-.cb-agent-node-tokens { font-size: 13px; font-weight: 600; }
-.cb-agent-node-pct { font-size: 11px; color: var(--dsw-alias-label-secondary); }
-.cb-agent-node-steps { margin-left: auto; font-size: 10px; color: var(--dsw-alias-label-tertiary); }
-.cb-agent-node-bar { height: 3px; border-radius: 2px; background: var(--dsw-alias-bg-layer-2); overflow: hidden; }
-.cb-agent-node-fill { display: block; height: 100%; background: var(--cb-ctx-indigo); border-radius: 2px; }
-.cb-agent-node-foot { display: flex; gap: 6px; align-items: baseline; font-size: 10px; color: var(--dsw-alias-label-tertiary); margin-top: auto; }
-.cb-agent-node-mode { border: 1px solid var(--dsw-alias-border-l2); border-radius: 999px; padding: 0 5px; }
-.cb-agent-node-time { font-variant-numeric: tabular-nums; }
-.cb-agent-node-done { margin-left: auto; color: var(--cb-ctx-green); }
-.cb-agent-overflow { position: absolute; right: 0; bottom: -4px; font-size: 11px; color: var(--dsw-alias-label-tertiary); }
-.cb-agent-solo-note { font-size: 11px; color: var(--dsw-alias-label-tertiary); margin-top: 6px; }
-.cb-agent-expand {
-  border: 1px dashed var(--dsw-alias-border-l2);
-  background: transparent;
-  color: var(--dsw-alias-label-secondary);
-  font: inherit;
-  font-size: 12px;
-  border-radius: 8px;
-  padding: 10px;
-  width: 100%;
-  cursor: pointer;
-}
-.cb-agent-expand:hover { border-color: var(--dsw-alias-label-secondary); color: var(--dsw-alias-label-primary); }
-
-/* --- context browser (strip, rows, on-demand content) ------------------- */
-.cb-browser-strip { display: flex; height: 6px; border-radius: 3px; overflow: hidden; gap: 1px; margin-bottom: 8px; }
-.cb-browser-strip-seg { min-width: 3px; cursor: pointer; opacity: 0.75; transition: opacity 0.12s ease; }
-.cb-browser-strip-seg:hover, .cb-browser-strip-on { opacity: 1; }
-.cb-browser-cat-dot { width: 8px; height: 8px; border-radius: 2px; flex: none; }
-.cb-browser-cat-row { gap: 8px; align-items: center; }
-.cb-browser-cat-row svg { margin-left: auto; opacity: 0.5; }
-.cb-browser-cat-row[aria-expanded='true'] svg { transform: rotate(180deg); opacity: 1; }
-.cb-browser-cat-count { color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; }
-.cb-browser-empty { color: var(--dsw-alias-label-tertiary); font-size: 12px; padding: 4px 0 6px 12px; }
-
-.cb-browser-item-wrap { border-top: 1px solid var(--dsw-alias-border-l1); }
-.cb-browser-item-wrap:first-child { border-top: 0; }
-.cb-browser-item {
-  display: flex;
-  gap: 8px;
-  align-items: baseline;
-  width: 100%;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  font-size: 12px;
-  padding: 4px 2px;
-  border-radius: 4px;
-  cursor: pointer;
-  text-align: left;
-}
-.cb-browser-item:hover { background: var(--dsw-alias-bg-layer-2); }
-.cb-browser-item-open { background: var(--dsw-alias-bg-layer-2); }
-.cb-browser-item-name { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.cb-browser-item-plugin { color: var(--dsw-alias-label-tertiary); font-size: 10px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 999px; padding: 0 5px; }
-.cb-browser-item-tokens { margin-left: auto; color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; flex: none; }
-.cb-browser-item-body { padding: 2px 0 8px 10px; }
-.cb-browser-item-preview { color: var(--dsw-alias-label-secondary); white-space: pre-wrap; overflow-wrap: anywhere; margin-bottom: 4px; }
-.cb-browser-item-note { color: var(--dsw-alias-label-tertiary); font-size: 11px; padding: 2px 0; }
-.cb-browser-item-retry { border: 1px solid var(--dsw-alias-border-l2); background: transparent; color: inherit; font: inherit; font-size: 11px; border-radius: 5px; padding: 2px 8px; cursor: pointer; }
-.cb-browser-item-blocks { display: flex; flex-direction: column; gap: 4px; }
-.cb-browser-block { font-size: 12px; }
+/* --- context browser (values ported from the shipped stylesheet) ---------- */
+.cb-browser-meta { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-bottom: 8px; color: var(--dsw-alias-label-secondary); }
+.cb-browser-meta b { color: var(--dsw-alias-label-primary); }
+.cb-browser-note { margin-top: 8px; color: var(--dsw-alias-label-secondary); font-size: 12px; }
+.cb-browser-retry { border: 0; background: transparent; padding: 0; color: var(--dsw-alias-brand-primary); font: inherit; font-size: 12px; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.cb-browser-cats { margin-top: 10px; display: flex; flex-direction: column; gap: 4px; }
+/* One bordered bucket per stage: it owns its rounded frame, so an expanded body slides in beneath it. */
+.cb-browser-cat { border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; background: var(--dsw-alias-bg-layer-2); overflow: hidden; }
+.cb-browser-cat-row { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: transparent; color: var(--dsw-alias-label-primary); font: inherit; padding: 7px 10px; cursor: pointer; text-align: left; transition: background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+.cb-browser-cat-row:hover, .cb-browser-cat-open { background: var(--dsw-alias-interactive-bg-hover); }
+.cb-browser-cat-on { background: var(--dsw-alias-interactive-bg-hover); }
+.cb-browser-cat-on .cb-browser-cat-dot { box-shadow: 0 0 0 1px var(--dsw-alias-brand-primary); }
+/* The stage's own colour dot: a rounded square, like the composition legend's. */
+.cb-browser-cat-dot { display: inline-block; width: 8px; height: 8px; border-radius: 2px; flex: none; transition: box-shadow var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+.cb-browser-cat-name { font-weight: 600; flex: 1; }
+.cb-browser-cat-count { color: var(--dsw-alias-label-secondary); font-size: 12px; white-space: nowrap; }
+/* The disclosure chevron: a bordered square rotated about its true centre, crisp at any scale. */
+.cb-browser-chev { flex: none; width: 12px; height: 14px; display: flex; align-items: center; justify-content: center; color: var(--dsw-alias-label-tertiary); }
+.cb-browser-chev::before { content: ''; width: 5px; height: 5px; border-right: 1px solid currentColor; border-bottom: 1px solid currentColor; transform: rotate(-45deg); transition: transform var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+.cb-browser-chev-on::before { transform: rotate(45deg); }
+/* The expanded body: a hairline separates it from its row, so a bucket reads as one object. */
+.cb-browser-items { border-top: 1px solid var(--dsw-alias-border-l1); padding: 4px 6px; display: flex; flex-direction: column; gap: 2px; }
+.cb-browser-item-wrap { border-radius: 6px; }
+.cb-browser-item-open { background: var(--dsw-alias-interactive-bg-active); }
+.cb-browser-item { display: flex; align-items: center; gap: 8px; width: 100%; border: 0; background: transparent; color: var(--dsw-alias-label-primary); font: inherit; font-size: 12px; padding: 5px 6px; cursor: pointer; text-align: left; border-radius: 6px; transition: background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+.cb-browser-item:hover { background: var(--dsw-alias-interactive-bg-hover); }
+/* A failed tool call's dot, visible without expanding the row. */
+.cb-browser-item-err { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--dsw-alias-state-error-primary); box-shadow: 0 0 0 2px color-mix(in srgb, var(--dsw-alias-state-error-primary) 10%, transparent); font-size: 0; color: transparent; }
+/* A tag chip: a tool name, a skill, or an injection form. */
+.cb-browser-item-name { min-width: 0; font-size: 12px; font-weight: 500; color: var(--dsw-alias-label-primary); background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l2); border-radius: 4px; padding: 0 6px; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cb-browser-item-plugin { flex: none; font-size: 12px; border-radius: 6px; color: var(--dsw-alias-brand-primary); background: color-mix(in srgb, var(--dsw-alias-brand-primary) 14%, transparent); border: 1px solid transparent; padding: 0 6px; }
+/* The preview absorbs the spare width; every trailing fact is `flex: none`, so rows align. */
+.cb-browser-item-text, .cb-browser-item-preview { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dsw-alias-label-secondary); }
+.cb-browser-item-tokens { flex: none; color: var(--dsw-alias-label-secondary); font-size: 12px; font-variant-numeric: tabular-nums; }
+.cb-browser-item-body { padding: 2px 6px 8px 26px; display: flex; flex-direction: column; gap: 6px; }
+.cb-browser-item-note { color: var(--dsw-alias-label-secondary); font-size: 11px; }
+.cb-browser-item-retry { border: 0; background: transparent; padding: 0; color: var(--dsw-alias-brand-primary); font: inherit; font-size: 11px; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; align-self: flex-start; }
+.cb-browser-empty { color: var(--dsw-alias-label-tertiary); font-size: 12px; padding: 4px 6px; }
+.cb-browser-dim { color: var(--dsw-alias-label-secondary); }
+.cb-browser-item-blocks { display: flex; flex-direction: column; gap: 6px; }
+.cb-browser-block { font: inherit; font-size: 12px; color: var(--dsw-alias-label-primary); }
 .cb-browser-block-text { white-space: pre-wrap; overflow-wrap: anywhere; }
-.cb-browser-block-label { font-size: 10px; color: var(--dsw-alias-label-tertiary); margin-right: 6px; }
-.cb-browser-block-call code { font-family: var(--ds-font-family-code, ui-monospace, monospace); }
-.cb-browser-item-text-block {
-  margin: 2px 0 0;
-  padding: 6px 8px;
-  background: var(--dsw-alias-bg-layer-1);
-  border: 1px solid var(--dsw-alias-border-l1);
-  border-radius: 6px;
-  font-family: var(--ds-font-family-code, ui-monospace, monospace);
-  font-size: 11px;
-  line-height: 1.45;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  max-height: 240px;
-  overflow: auto;
-}
-.cb-browser-schema-desc { color: var(--dsw-alias-label-secondary); margin-bottom: 4px; }
+.cb-browser-block-label { font-size: 10px; font-weight: 600; color: var(--dsw-alias-label-secondary); margin-right: 6px; }
+.cb-browser-block-call code { font-family: var(--ds-font-family-code, ui-monospace, monospace); color: var(--dsw-alias-label-primary); }
+.cb-browser-block-raw { font-family: var(--ds-font-family-code, ui-monospace, monospace); white-space: pre-wrap; overflow-wrap: anywhere; }
+/* Verbatim content: monospaced, wrapped, and bounded so a huge result cannot push the card off-screen. */
+.cb-browser-item-text-block { margin: 0; padding: 6px 8px; background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; font-family: var(--ds-font-family-code, ui-monospace, monospace); font-size: 11px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 240px; overflow: auto; }
+.cb-browser-schema-desc { color: var(--dsw-alias-label-secondary); font-size: 12px; }
+/* The composition strip above the buckets: one proportional bar in the stage palette. */
+.cb-browser-strip { display: flex; height: 6px; border-radius: 3px; overflow: hidden; gap: 1px; margin-top: 8px; }
+.cb-browser-strip-seg { min-width: 3px; cursor: pointer; opacity: 0.75; transition: opacity var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+.cb-browser-strip-seg:hover, .cb-browser-strip-on { opacity: 1; }
+.cb-browser-card { min-height: 0; }
+
+/* --- context events (values ported from the shipped stylesheet) ---------- */
+/* One row per event. The 18px icon column and every trailing fact are `flex: none`, so the label column is the
+ * only element that absorbs width and rows align however long a label is. */
+.cb-event-row { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
+.cb-event-icon { width: 18px; text-align: center; color: var(--dsw-alias-state-warn-primary); }
+.cb-event-inject { color: var(--color-purple-500); }
+.cb-event-model { color: var(--dsw-alias-brand-primary); }
+.cb-event-mode { color: var(--dsw-alias-label-secondary); }
+/* The kind chip: one fixed tone per kind — inject adds (success), compaction/prune free (error/violet),
+ * model/mode switch (brand/secondary). */
+.cb-event-kind { flex: none; font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
+.cb-kind-inject { background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 15%, transparent); color: var(--dsw-alias-state-success-primary); }
+.cb-kind-compaction { background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 15%, transparent); color: var(--dsw-alias-state-error-primary); }
+.cb-kind-prune { background: color-mix(in srgb, var(--color-violet-500) 15%, transparent); color: var(--color-violet-500); }
+.cb-kind-model { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 15%, transparent); color: var(--dsw-alias-brand-primary); }
+.cb-kind-mode { background: color-mix(in srgb, var(--dsw-alias-label-secondary) 15%, transparent); color: var(--dsw-alias-label-secondary); }
+/* Long labels are ellipsised; the row height never grows with a label. */
+.cb-event-detail { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cb-event-at { flex: none; color: var(--dsw-alias-label-secondary); font-size: 11px; white-space: nowrap; }
+.cb-event-time { color: var(--dsw-alias-label-secondary); font-size: 12px; flex: none; white-space: nowrap; }
+/* Green for a healthy token count; `.cb-up` marks a count above its kind's baseline. */
+.cb-event-tokens { color: var(--dsw-alias-state-success-primary); font-weight: 600; white-space: nowrap; flex: none; font-variant-numeric: tabular-nums; }
+.cb-event-tokens.cb-up { color: var(--dsw-alias-state-warn-primary); }
 
 /* --- file activity card ------------------------------------------------ */
 .cb-files-floor { font-size: 11px; color: var(--dsw-alias-label-tertiary); margin-bottom: 4px; }
