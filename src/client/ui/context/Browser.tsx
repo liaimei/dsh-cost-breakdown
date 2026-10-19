@@ -32,6 +32,8 @@ export interface BrowserProps {
   selectedSeq: number | null
   /** The session the content reads are anchored on. */
   sessionId?: string
+  /** A category another card asked to open (the overview's skill/answer figures, the file card's locate). */
+  openCategory?: string
 }
 
 /** The categories in draw order: the cached prompt prefix first, then the messages as read. */
@@ -45,7 +47,12 @@ export function BrowserCard(props: BrowserProps): ReactElement {
   const { t, data, headers, selectedSeq, sessionId } = props
   const assembled = useMemo(() => assemble(data, headers, selectedSeq), [data, headers, selectedSeq])
   const byCat = useMemo(() => byCatOf(assembled), [assembled])
-  const [open, setOpen] = useState<string | null>('user')
+  const [open, setOpen] = useState<string | null>(props.openCategory ?? 'user')
+  // A request from another card wins while it is the newest one; the reader's own toggle then takes over.
+  const asked = props.openCategory
+  useEffect(() => {
+    if (asked !== undefined) setOpen(asked)
+  }, [asked])
 
   // The history face arrives through a declarative inject, so the first render can beat it. Rebuilding the
   // fetchers when it lands (or is revoked) is what makes the reads work without a reload.

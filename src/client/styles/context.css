@@ -409,3 +409,81 @@
 .cb-file-op-tool { font-family: var(--ds-font-family-code, ui-monospace, monospace); }
 .cb-file-op-read, .cb-file-op-hits, .cb-file-op-program { font-variant-numeric: tabular-nums; color: var(--dsw-alias-label-tertiary); }
 .cb-file-op-detail { color: var(--dsw-alias-label-tertiary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 40ch; }
+
+/* --- the surface's five-band layout ------------------------------------- */
+/* Two-column band: the left column stacks the composition and the trend, the right holds the browser. The
+ * browser is stretched to the left column's height so the band reads as one flat strip. */
+.cb-cols-main { align-items: stretch; }
+.cb-col { display: flex; flex-direction: column; gap: 14px; min-width: min(360px, 100%); flex: 1 1 0; }
+.cb-col .cb-card:last-child { margin-bottom: 0; }
+.cb-col-browser { flex: 1 1 0; }
+.cb-col-browser > .cb-card { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.cb-col-browser .cb-browser-cats { overflow-y: auto; min-height: 0; }
+@container cb-card (max-width: 559px) {
+  .cb-cols-main > .cb-col { flex-basis: 100%; }
+}
+
+/* Band 1-2: the header cards pair up 3:1 and 1:1, folding to full width at their own minimums. */
+.cb-head > .cb-overview-card { flex: 3 1 0; min-width: min(360px, 100%); }
+.cb-head > .cb-plugin-card { flex: 1 1 0; min-width: min(200px, 100%); }
+.cb-head > .cb-tokens-card,
+.cb-head > .cb-timing-card { flex: 1 1 0; min-width: min(360px, 100%); }
+
+/* --- overview card ------------------------------------------------------ */
+.cb-overview-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(78px, 1fr)); gap: 6px 10px; }
+.cb-overview-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  padding: 2px 0;
+  border-radius: 5px;
+}
+.cb-overview-cell-link { cursor: pointer; }
+.cb-overview-cell-link:hover { background: var(--dsw-alias-bg-layer-2); }
+.cb-overview-label { font-size: 11px; color: var(--dsw-alias-label-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cb-overview-value { font-size: 15px; font-variant-numeric: tabular-nums; }
+.cb-overview-pills { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.cb-overview-pill { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--dsw-alias-label-secondary); border: 1px solid var(--dsw-alias-border-l2); border-radius: 999px; padding: 0 7px; font-variant-numeric: tabular-nums; }
+.cb-overview-pill-dim { opacity: 0.5; }
+.cb-overview-pill-dot { width: 6px; height: 6px; border-radius: 50%; }
+.cb-kind-inject { background: var(--cb-ctx-purple); }
+.cb-kind-compaction { background: var(--cb-ctx-amber); }
+.cb-kind-prune { background: var(--cb-ctx-orange); }
+.cb-overview-tools { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+.cb-overview-tool { display: inline-flex; gap: 4px; align-items: baseline; font-size: 11px; background: var(--dsw-alias-bg-layer-2); border-radius: 5px; padding: 1px 6px; font-variant-numeric: tabular-nums; }
+.cb-overview-tool-name { color: var(--dsw-alias-label-secondary); max-width: 12ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cb-overview-tool-more { font-size: 11px; color: var(--dsw-alias-label-tertiary); align-self: center; }
+.cb-overview-family { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-top: 8px; border-top: 1px solid var(--dsw-alias-border-l2); padding-top: 6px; }
+.cb-overview-family-tokens { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* --- donut rows (token and timing cards) -------------------------------- */
+.cb-donut-row { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.cb-card-rate { font-size: 11px; color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; }
+@container cb-card (max-width: 320px) { .cb-donut-row { gap: 8px; } }
+@container cb-card (max-width: 240px) { .cb-donut-row { flex-wrap: wrap; justify-content: center; } }
+.cb-root .cb-ov-slices,
+.cb-root .cb-slices { flex: 1; min-width: 0; }
+
+/* --- plugin card -------------------------------------------------------- */
+.cb-plugin-row { display: flex; align-items: center; gap: 8px; }
+.cb-plugin-name { font-size: 12px; color: var(--dsw-alias-label-secondary); }
+.cb-plugin-version { margin-left: auto; font-variant-numeric: tabular-nums; color: var(--dsw-alias-label-tertiary); }
+.cb-plugin-link { font-size: 12px; }
+
+/* --- sidebar summary ---------------------------------------------------- */
+.cb-sidebar-tokens { display: flex; flex-direction: column; gap: 3px; }
+.cb-sidebar-token-row { display: flex; align-items: baseline; gap: 6px; font-size: 12px; }
+.cb-sidebar-token-dot { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+.cb-sidebar-token-label { color: var(--dsw-alias-label-secondary); }
+.cb-sidebar-token-value { margin-left: auto; font-variant-numeric: tabular-nums; }
+.cb-sidebar-total { display: flex; justify-content: space-between; border-top: 1px solid var(--dsw-alias-border-l2); margin-top: 6px; padding-top: 6px; font-variant-numeric: tabular-nums; }
+.cb-sidebar-platforms { display: flex; flex-direction: column; gap: 6px; }
+.cb-sidebar-platform { display: flex; align-items: baseline; gap: 8px; font-size: 12px; flex-wrap: wrap; }
+.cb-sidebar-platform-name { font-weight: 500; }
+.cb-sidebar-platform b { margin-left: auto; font-variant-numeric: tabular-nums; }
+.cb-sidebar-note { font-size: 11px; color: var(--dsw-alias-label-tertiary); margin-top: 4px; }

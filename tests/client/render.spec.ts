@@ -159,20 +159,44 @@ describe('stats page', () => {
 })
 
 describe('context view', () => {
-  it('renders the composition, trend, browser, events, files, agent and timing sections', () => {
+  it('renders the five bands in the old layout order', () => {
     const markup = renderToStaticMarkup(h(ContextView, {
       ...seat(),
       t,
       ctx: clientContext(),
       preferences: preferences(),
     }))
+    // Band 1: the overview and the plugin's identity.
+    expect(markup).toContain('stats.title')
+    expect(markup).toContain('plugin.title')
+    // Band 2: the token and timing rings.
+    expect(markup).toContain('tokens.title')
+    expect(markup).toContain('timing.title')
+    // Band 3: composition + trend on the left, the browser on the right.
     expect(markup).toContain('overview.title')
     expect(markup).toContain('trend.title')
     expect(markup).toContain('browser.title')
+    // Band 4: events beside the file activity.
     expect(markup).toContain('events.title')
     expect(markup).toContain('files.title')
+    // Band 5: the agent network.
     expect(markup).toContain('agents.title')
-    expect(markup).toContain('timing.title')
+  })
+
+  it('renders the sidebar seat as the two-section summary only', () => {
+    const markup = renderToStaticMarkup(h(ContextView, {
+      ...seat(),
+      host: 'sidebar' as never,
+      t,
+      ctx: clientContext(),
+      preferences: preferences(),
+    }))
+    // The column answers one question: tokens, then spend. The analysis stack stays on the tab.
+    expect(markup).toContain('sidebar.title')
+    expect(markup).toContain('spend.title')
+    expect(markup).not.toContain('trend.title')
+    expect(markup).not.toContain('browser.title')
+    expect(markup).not.toContain('agents.title')
   })
 
   it('renders the loading state before the timeline arrives', () => {

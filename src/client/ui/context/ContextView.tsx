@@ -16,16 +16,23 @@ import { headerEpochsOf } from '../../shell/contracts'
 import type { Translate } from '../../i18n/dict'
 import type { PreferencesStore } from '../../shell/preferences'
 import { useTimelineSource } from '../../data/timeline'
-import { formatClock, formatCount, formatDuration, formatShare } from '../../i18n/format'
+import { formatClock, formatCount, formatShare } from '../../i18n/format'
 import { headlineOf, STAGES, stageLabel, STAGE_COLOR } from './derive'
 import { TrendChart } from './TrendChart'
 import { attachMarkers, assemble } from './assemble'
 import { trendBandsOf } from './dna'
 import type { TrendBand } from './dna'
 import { takeContextFocus } from './jump'
+import { subagentCostOf } from './agents'
+import { platformSpendsOf } from '../../data/platformSpend'
+import { formatCredits, formatNativeSpend } from '../../data/cost'
+import { moneyRates } from '../../shell/rateTables'
+import { creditRates } from '../../shell/rateTables'
 import { makeErrorBoundary } from './ErrorBoundary'
 import { BrowserCard } from './Browser'
 import { AgentNetwork } from './AgentNetwork'
+import { OverviewCard, PluginCard, TimingCard, TokensCard } from './HeaderCards'
+import { buildInfo } from './buildInfo'
 import { FilesCard } from './Files'
 import {
   canOpenPaths, openPathWith, openSessionWith, resourceOpenerOf, serviceOf, workspaceOf,
@@ -71,6 +78,93 @@ export function aggregateByTurn(rows: readonly RequestRow[]): RequestRow[] {
   return out
 }
 
+/**
+ * The right-sidebar summary: two sections, in the order the column's question deserves — the session's token
+ * totals first, then what each platform charged.
+ *
+ * Money appears here (and on the statistics page) and nowhere else on this surface: the conversation tab is
+ * token-only, so the two quantities never share a page.
+ */
+function SidebarSummary(props: {
+  t: Translate
+  ctx: ClientContext
+  snapshot: Snapshot
+  sessionId: string
+}): ReactElement {
+  const { t, snapshot } = props
+  const rows = useMemo(() => {
+    const ledger = snapshot.cost ?? null
+    const calls = snapshot.calls ?? null
+    return platformSpendsOf(ledger, calls, null, moneyRates(), snapshot.creditRates ?? creditRates())
+  }, [snapshot])
+  return h('div', { className: 'cb-sidebar-summary' },
+    h('div', { className: 'cb-card' },
+      h('div', { className: 'cb-card-title' },
+        h('span', { className: 'cb-card-title-text' }, t('sidebar.title')),
+        h('span', { className: 'cb-card-sub' }, t('sidebar.tokensSub'))),
+      h('div', { className: 'cb-sidebar-tokens' }, STAGES.map(stage => h('div', {
+        key: stage,
+        className: 'cb-sidebar-token-row',
+      },
+        h('span', { className: 'cb-sidebar-token-dot', style: { background: STAGE_COLOR[stage] } }),
+        h('span', { className: 'cb-sidebar-token-label' }, stageLabel(t, stage)),
+        h('b', { className: 'cb-sidebar-token-value' }, formatCount(snapshot.current[stage]))))),
+      h('div', { className: 'cb-sidebar-total' },
+        h('span', { className: 'cb-card-sub' }, t('tokens.total')),
+        h('b', null, formatCount(snapshot.current.total)))),
+    h('div', { className: 'cb-card' },
+      h('div', { className: 'cb-card-title' },
+        h('span', { className: 'cb-card-title-text' }, t('spend.title')),
+        h('span', { className: 'cb-card-sub' }, t('spend.sub'))),
+      rows.length === 0
+        ? h('div', { className: 'cb-empty' }, t('spend.empty'))
+        : h('div', { className: 'cb-sidebar-platforms' }, rows.map(row => h('div', { key: row.provider, className: 'cb-sidebar-platform' },
+          h('span', { className: 'cb-sidebar-platform-name' }, row.provider),
+          h('b', null, row.unit === 'credits'
+            ? t('dock.creditsSpent', { n: formatCredits(row.value) })
+            : formatNativeSpend(row.value, row.currency ?? 'USD')),
+          h('span', { className: 'cb-card-sub' }, t('costStat.calls', { n: formatCount(row.calls) })))))),
+    h('div', { className: 'cb-sidebar-note' }, t('dock.note'))
+  )
+}
+
+/**
+ * The session-list snapshot, subscribed so the agent family follows it.
+ *
+ * The list is the only service this surface reads, and a sub-agent appears in it after it is spawned — so a
+ * one-shot read would leave the family stale until a reload.
+ */
+function useSessionsSnapshot(ctx: ClientContext): unknown {
+  const [snapshot, setSnapshot] = useState<unknown>(undefined)
+  useEffect(() => {
+    const face = serviceOf<SessionsFace>(ctx, 'sessions')
+    const list = face?.list
+    if (list === undefined) return
+    const update = (): void => {
+      try {
+        setSnapshot(list.getSnapshot())
+      } catch {
+        setSnapshot(undefined)
+      }
+    }
+    update()
+    return list.subscribe?.(update)
+  }, [ctx])
+  return snapshot
+}
+
+/** The billed tokens of a ledger (or of nothing). */
+function billedOf(ledger: { [provider: string]: { [model: string]: { peak?: { uncached: number; cacheRead: number; cacheWrite: number; output: number }; off?: { uncached: number; cacheRead: number; cacheWrite: number; output: number } } } } | null): number {
+  let total = 0
+  for (const models of Object.values(ledger ?? {})) {
+    for (const entry of Object.values(models)) {
+      if (entry.peak !== undefined) total += entry.peak.uncached + entry.peak.cacheRead + entry.peak.cacheWrite + entry.peak.output
+      if (entry.off !== undefined) total += entry.off.uncached + entry.off.cacheRead + entry.off.cacheWrite + entry.off.output
+    }
+  }
+  return total
+}
+
 /** Index of the row carrying a seq, or -1. */
 function indexOfSeq(rows: readonly RequestRow[], seq: number): number {
   for (let index = 0; index < rows.length; index++) if (rows[index].seq === seq) return index
@@ -94,10 +188,14 @@ function ContextBody(props: ContextViewProps): ReactElement {
   const [adaptive, setAdaptive] = useState(true)
   const [durationCurve, setDurationCurve] = useState(preferences.get().defaultDurationCurve !== 'hide')
   const [hoverBand, setHoverBand] = useState<string | null>(null)
+  // A category the browser should open (driven by the overview card's clickable figures and the file card's
+  // locate action). Consumed once, so a later manual toggle is not overridden.
+  const [browserCategory, setBrowserCategory] = useState<string | null>(null)
   const root = useRef<HTMLDivElement | null>(null)
   const sidebar = host === 'sidebar'
   const head = timeline.data
   const workspace = workspaceOf(props.ctx, props.sessionId)
+  const sessionsSnapshot = useSessionsSnapshot(props.ctx)
   const [opener, setOpener] = useState<((path: string) => void) | undefined>(undefined)
   const [previewer, setPreviewer] = useState<((path: string) => boolean) | undefined>(undefined)
 
@@ -156,50 +254,107 @@ function ContextBody(props: ContextViewProps): ReactElement {
   const activeIndex = hoverSeq !== null ? indexOfSeq(displayed, hoverSeq) : selectedSeq !== null ? indexOfSeq(displayed, selectedSeq) : displayed.length - 1
   const activeRow = activeIndex >= 0 ? displayed[activeIndex] : null
 
+  // The tools tally of the live surface, for the overview card's ranked list.
+  const tools = useMemo(() => {
+    const tally = new Map<string, number>()
+    for (const node of head.nodes) {
+      if (node.cat !== 'tool' && !(node.cat === 'skill' && node.tool !== undefined)) continue
+      if (typeof node.tool !== 'string' || node.tool === '') continue
+      tally.set(node.tool, (tally.get(node.tool) ?? 0) + 1)
+    }
+    return [...tally].sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0])) as Array<readonly [string, number]>
+  }, [head.nodes])
+  const family = useMemo(() => subagentCostOf(sessionsSnapshot, sessionId), [sessionsSnapshot, sessionId])
+  const familyTokens = family.ledger === null && head.cost === undefined
+    ? null
+    : billedOf(family.ledger) + billedOf(head.cost ?? null)
+
+  // The file scope: the active step's cut, so the file list and the browser describe the same moment.
+  const filesBefore = activeRow === null || activeIndex === displayed.length - 1
+    ? null
+    : head.requests.find(row => row.seq > activeRow.seq)?.seq ?? null
+
+  // The sidebar seat answers one question — this session's summary — in two sections: tokens, then spend.
+  // The whole context stack (composition, trend, browser, events, files, agent network) stays on the
+  // conversation tab: that column is narrow, and stacking the analysis tools into it makes both unreadable.
+  if (sidebar) {
+    return h('div', { className: 'cb-root', ref: root },
+      h(SidebarSummary, { t, ctx: props.ctx, snapshot: head, sessionId }),
+      head.unsupported !== undefined
+        ? h('div', { className: 'cb-gate-card' },
+          h('div', { className: 'cb-gate-title' }, t('gate.title')),
+          h('div', { className: 'cb-gate-body' }, t('gate.body', { current: head.unsupported.current, minimum: head.unsupported.minimum })))
+        : null)
+  }
+
   return h('div', { className: 'cb-root', ref: root },
-    sidebar ? null : h(CompositionSection, { t, headline, subtitle: [head.model, head.provider].filter(Boolean).join(' · '), snapshot: head }),
-    h(TrendSection, {
-      t,
-      snapshot: head,
-      rows: displayed,
-      granularity,
-      onGranularity: setGranularity,
-      mode,
-      onMode: setMode,
-      dna,
-      onDna: setDna,
-      adaptive,
-      onAdaptive: setAdaptive,
-      durationCurve,
-      onDurationCurve: setDurationCurve,
-      selectedSeq,
-      hoverSeq,
-      hoverBand,
-      onBandHover: setHoverBand,
-      onSelect: setSelectedSeq,
-      onHover: setHoverSeq,
-      ready,
-      retry: timeline.retryDetail,
-      headers,
-    }),
-    h(BrowserCard, { t, data: head, headers, selectedSeq: activeRow?.seq ?? null, sessionId }),
-    h(EventsSection, { t, snapshot: head }),
-    h(FilesCard, {
-      t,
-      fileOps: head.fileOps,
-      ...(head.fileOpsFloor !== undefined ? { floor: head.fileOpsFloor } : {}),
-      // The file scope is the active step: the op log is cut at the next request's seq, so this card and the
-      // browser always describe the same moment.
-      before: activeRow === null || activeIndex === displayed.length - 1
-        ? null
-        : head.requests.find(row => row.seq > (activeRow.seq))?.seq ?? null,
-      ...(workspace !== undefined ? { workspace } : {}),
-      onPreview: (path: string) => previewer?.(path) ?? false,
-      ...(opener !== undefined ? { onOpen: opener } : {}),
-      onLocate: () => { /* the browser has no path filter; locating keeps the card's own row in view */ },
-    }),
+    // Band 1: the overview and the plugin's identity, side by side.
+    h('div', { className: 'cb-cols cb-head' },
+      h(OverviewCard, {
+        t,
+        snapshot: head,
+        familyTokens,
+        familyCount: family.count,
+        tools,
+        onFigureClick: (kind: 'skills' | 'answers') => { setBrowserCategory(kind === 'answers' ? 'tool' : 'skill') },
+      }),
+      h(PluginCard, { t, version: buildInfo().version, repo: buildInfo().repo })),
+    // Band 2: the token ring and the timing ring.
+    h('div', { className: 'cb-cols cb-head' },
+      h(TokensCard, { t, snapshot: head }),
+      h(TimingCard, { t, snapshot: head })),
+    // Band 3: composition and trend on the left, the browser on the right.
+    h('div', { className: 'cb-cols cb-cols-main' },
+      h('div', { className: 'cb-col cb-col-left' },
+        h(CompositionSection, { t, headline, subtitle: [head.model, head.provider].filter(Boolean).join(' · '), snapshot: head }),
+        h(TrendSection, {
+          t,
+          snapshot: head,
+          rows: displayed,
+          granularity,
+          onGranularity: setGranularity,
+          mode,
+          onMode: setMode,
+          dna,
+          onDna: setDna,
+          adaptive,
+          onAdaptive: setAdaptive,
+          durationCurve,
+          onDurationCurve: setDurationCurve,
+          selectedSeq,
+          hoverSeq,
+          hoverBand,
+          onBandHover: setHoverBand,
+          onSelect: setSelectedSeq,
+          onHover: setHoverSeq,
+          ready,
+          retry: timeline.retryDetail,
+          headers,
+        })),
+      h('div', { className: 'cb-col cb-col-browser' },
+        h(BrowserCard, {
+          t,
+          data: head,
+          headers,
+          selectedSeq: activeRow?.seq ?? null,
+          sessionId,
+          ...(browserCategory !== null ? { openCategory: browserCategory } : {}),
+        }))),
+    // Band 4: the persistent events and the file activity, side by side.
+    h('div', { className: 'cb-cols' },
+      h(EventsSection, { t, snapshot: head }),
+      h(FilesCard, {
+        t,
+        fileOps: head.fileOps,
+        ...(head.fileOpsFloor !== undefined ? { floor: head.fileOpsFloor } : {}),
+        before: filesBefore,
+        ...(workspace !== undefined ? { workspace } : {}),
+        onPreview: (path: string) => previewer?.(path) ?? false,
+        ...(opener !== undefined ? { onOpen: opener } : {}),
+        onLocate: () => { setBrowserCategory('tool') },
+      })),
+    // Band 5: the agent network.
     h(AgentNetworkBridge, { t, ctx: props.ctx, sessionId, snapshot: head, now: Date.now() }),
-    h(TimingSection, { t, snapshot: head }),
   )
 }
 
@@ -365,13 +520,6 @@ function segment(t: Translate, label: string, on: boolean, onClick: () => void):
   }, label)
 }
 
-/** One key/value cell, shared by the request detail and the timing totals. */
-function kv(key: string, value: string): ReactElement {
-  return h('div', { key, className: 'cb-kv' },
-    h('span', { className: 'cb-kv-key' }, key),
-    h('span', { className: 'cb-kv-value' }, value))
-}
-
 /** The persistent-event list, with one toggle per kind. */
 function EventsSection(props: { t: Translate; snapshot: Snapshot }): ReactElement {
   const { t, snapshot } = props
@@ -467,30 +615,4 @@ function AgentNetworkBridge(props: {
     now,
     onOpen: (id: string) => { openSessionWith(ctx, id) },
   })
-}
-
-/** The session timing strip and totals. */
-function TimingSection(props: { t: Translate; snapshot: Snapshot }): ReactElement {
-  const { t, snapshot } = props
-  const timing = snapshot.timing
-  if (timing === undefined) return h('div', { className: 'cb-card' }, h('div', { className: 'cb-card-title' }, h('span', { className: 'cb-card-title-text' }, t('timing.title'))), h('div', { className: 'cb-empty' }, t('timing.empty')))
-  const spans = snapshot.spans ?? []
-  const from = spans.length > 0 ? spans[0].start : 0
-  const to = spans.length > 0 ? spans[spans.length - 1].end : 0
-  const width = Math.max(1, to - from)
-  return h('div', { className: 'cb-card' },
-    h('div', { className: 'cb-card-title' }, h('span', { className: 'cb-card-title-text' }, t('timing.title'))),
-    h('div', { className: 'cb-timing-strip' }, spans.map((span, index) => h('span', {
-      key: index,
-      className: `cb-timing-seg cb-timing-${span.kind}`,
-      style: { left: `${((span.start - from) / width) * 100}%`, width: `${((span.end - span.start) / width) * 100}%` },
-      title: `${span.kind}: ${formatDuration(span.end - span.start)}`,
-    }))),
-    h('div', { className: 'cb-kv-grid' },
-      kv(t('timing.total'), formatDuration(timing.wallMs)),
-      kv(t('timing.ttft'), formatDuration(timing.ttftMs)),
-      kv(t('timing.gen'), formatDuration(timing.genMs)),
-      kv(t('timing.tools'), formatDuration(timing.toolsMs)),
-      kv(t('stats.toolCalls'), formatCount(timing.toolCalls)),
-      kv(t('stats.answers'), formatCount(snapshot.answers ?? 0))))
 }

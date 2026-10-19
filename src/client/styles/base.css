@@ -185,3 +185,31 @@
 [data-conversation-scroll]:has(.cb-root, .cb-modal-backdrop) ~ [data-width-handle] {
   display: none;
 }
+
+/* The plugin's palette. Defined once here so every surface (composition strip, rings, trend bands, agent
+ * graph, file badges) draws from one set of names; the context sheets use the `--cb-ctx-*` aliases, the
+ * statistics sheet its own `--cb-ov-*` ones, and both resolve to the same colours. */
+.cb-root,
+.cb-ov-page,
+.cb-dock-card {
+  --cb-ctx-indigo: #6366f1;
+  --cb-ctx-blue: #3b82f6;
+  --cb-ctx-teal: #14b8a6;
+  --cb-ctx-green: #22c55e;
+  --cb-ctx-amber: #f59e0b;
+  --cb-ctx-orange: #f97316;
+  --cb-ctx-purple: #a855f7;
+  --cb-ctx-pink: #ec4899;
+  --cb-ctx-violet: #8b5cf6;
+  --cb-ctx-slate: #94a3b8;
+  --cb-ov-indigo: var(--cb-ctx-indigo);
+  --cb-ov-blue: var(--cb-ctx-blue);
+  --cb-ov-teal: var(--cb-ctx-teal);
+  --cb-ov-green: var(--cb-ctx-green);
+  --cb-ov-amber: var(--cb-ctx-amber);
+  --cb-ov-orange: var(--cb-ctx-orange);
+  --cb-ov-purple: var(--cb-ctx-purple);
+  --cb-ov-pink: var(--cb-ctx-pink);
+  --cb-ov-violet: var(--cb-ctx-violet);
+  --cb-ov-slate: var(--cb-ctx-slate);
+}
