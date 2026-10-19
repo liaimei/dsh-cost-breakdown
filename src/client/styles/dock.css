@@ -1,101 +1,194 @@
 /* The composer-row readout and its expanded card.
  *
- * The collapsed row copies the official readout pill on the same line (the "48.6M tok · 缓存命中 97%"
- * one), item for item: the same 12px size, 20px line box, `padding: 1px 8px`, full capsule radius, a
- * frozen 14×14 glyph, `label-tertiary` rest, `label-secondary` hover and the official separators, with
- * nothing bolded. Only the peak/off badge keeps its semantic red/green — that is the one thing this row
- * exists to say.
- *
- * Side by side it must not read as a foreign control, which is why the metrics are copied rather than
- * re-invented.
+ * Every number here is carried over from the version this plugin shipped before the rewrite, so the row reads
+ * as the same control it always was: the official readout pill's own metrics (the "48.6M tok · 缓存命中 97%"
+ * pill beside it) — the 12px size formula, the 20px line box, `padding: 1px 8px`, the 999px capsule with
+ * `corner-shape: round`, the 14×14 frozen glyph, `label-tertiary` rest / `label-secondary` hover and the
+ * official `separator-primary` separators, none of them bolded. Only peak/off keeps its semantic red/green.
  */
 
+/* Peak red / off-peak green: the same pair the cost chart uses. */
+.cb-dock, .cb-dock-card {
+  --cb-dock-peak: var(--color-red-500, #ef4444);
+  --cb-dock-off: var(--color-green-500, #22c55e);
+  /* Rate-card *text* colours. The 500 shades are picked for thin fills; as 12px body text on a light
+   * background they only reach 2.5–3.7:1. Both themes get a legible variant. */
+  --cb-rate-hit: color-mix(in srgb, var(--color-teal-500, #14b8a6) 60%, #000);
+  --cb-rate-miss: color-mix(in srgb, var(--color-blue-500, #3b82f6) 60%, #000);
+  --cb-rate-out: color-mix(in srgb, var(--color-pink-500, #ec4899) 60%, #000);
+}
+
+/* Dark theme: the lightened variant. `body[data-ds-dark-theme]` is the harness's own dark marker. */
+body[data-ds-dark-theme] .cb-dock,
+body[data-ds-dark-theme] .cb-dock-card {
+  --cb-rate-hit: color-mix(in srgb, var(--color-teal-500, #14b8a6) 60%, #fff);
+  --cb-rate-miss: color-mix(in srgb, var(--color-blue-500, #3b82f6) 60%, #fff);
+  --cb-rate-out: color-mix(in srgb, var(--color-pink-500, #ec4899) 60%, #fff);
+}
+
 .cb-dock {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 6px;
   flex: none;
-  padding: 1px 8px;
+  box-sizing: border-box;
+  max-width: 100%;
   border: 0;
-  border-radius: 999px;
-  corner-shape: round;
   background: transparent;
   color: var(--dsw-alias-label-tertiary);
+  font-family: inherit;
   font-size: calc(var(--dsh-content-font-size-secondary, 13px) - 1px);
-  line-height: 20px;
+  line-height: calc(20px + var(--dsh-content-font-delta-secondary, 0px));
+  font-variant-numeric: tabular-nums;
+  padding: 1px 8px;
+  corner-shape: round;
+  border-radius: 999px;
   cursor: pointer;
   white-space: nowrap;
-  font-family: inherit;
+  transition: color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out),
+    background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out);
 }
-.cb-dock:hover { color: var(--dsw-alias-label-secondary); }
-.cb-dock-sep { color: var(--dsw-alias-separator-primary); }
+.cb-dock:hover {
+  color: var(--dsw-alias-label-secondary);
+  background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2));
+}
+/* The official pill pins its glyph at 14×14 rather than letting flex squash it: on this row the readout is
+ * cut before the glyph is, so the glyph must keep the official size. */
+.cb-dock > svg { flex: none; width: 14px; height: 14px; }
+.cb-dock-cost { color: inherit; font-weight: inherit; font-variant-numeric: tabular-nums; }
+.cb-dock-balance { color: inherit; font-variant-numeric: tabular-nums; }
+/* The separator's spacing comes from the two 6px flex gaps (the row's `gap` on its left, the platform
+ * segment's `gap` on its right), so both sides are symmetric without a margin. */
+.cb-dock-sep { color: var(--dsw-alias-separator-primary, var(--dsw-alias-label-tertiary)); }
+.cb-dock-period { color: var(--cb-dock-off); }
+.cb-dock[data-peak='1'] .cb-dock-period { color: var(--cb-dock-peak); }
+
+/* Each platform's segment: name, this session's spend, the remaining quota. Credits and money share one grey
+ * tone — both are readouts, neither should shout. */
 .cb-dock-platform { display: inline-flex; align-items: center; gap: 6px; }
-.cb-dock-platform-name { color: inherit; }
-.cb-dock-spend { font-variant-numeric: tabular-nums; }
-.cb-dock-balance, .cb-dock-left { color: var(--dsw-alias-label-tertiary); font-variant-numeric: tabular-nums; }
-.cb-dock-period { font-variant-numeric: tabular-nums; }
-.cb-dock[data-peak='1'] .cb-dock-period { color: var(--dsw-alias-state-error-primary, #ef4444); }
-.cb-dock[data-peak='0'] .cb-dock-period { color: var(--dsw-alias-state-success-primary, #16a34a); }
+.cb-dock-platform-name { color: var(--dsw-alias-label-tertiary); }
+.cb-dock-spend { color: inherit; font-variant-numeric: tabular-nums; }
+.cb-dock-left { color: var(--dsw-alias-label-tertiary); font-variant-numeric: tabular-nums; }
 .cb-dock-count { display: inline-flex; align-items: center; gap: 3px; }
 
-/* The probe is always laid out at its full natural width and moved out of view, never `display:none`:
- * a hidden probe would measure 0 and the verdict would always say "fits". */
+/* The width probe: laid out as the full readout, so the "does it fit" verdict measures what the row really
+ * needs however narrow the visible form currently is. It must reproduce the visible row's *box* metrics —
+ * the 14px glyph, the 6px gap, the `1px 8px` padding — or it would measure only the text and be short by
+ * about 36px. Parked off-screen and out of flow, so it neither shows nor widens the row. */
 .cb-dock-probe {
   position: absolute;
+  left: -9999px;
+  top: 0;
   visibility: hidden;
   pointer-events: none;
-  white-space: nowrap;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  left: -10000px;
-  top: 0;
+  padding: 1px 8px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
+.cb-dock-probe > svg { flex: none; width: 14px; height: 14px; }
+/* The probe is absolutely positioned, so the row is its containing block. */
+.cb-dock { position: relative; }
+/* Icon-only mode still needs a hit area: the glyph is 14px, so a little padding keeps it tappable. */
+.cb-dock-narrow { padding: 1px 6px; }
 
-/* The card: fixed positioning with a measured anchor, portalled to `body`, layered like the official
- * stat dialog. The composer's own seat clips (sticky + z-index), so the card cannot live inside it. */
+/* The expanded card, matching the harness's official stat dialog (`stat-dialog.module.css` `.panel`):
+ * the same `--dsw-specific-menu` layer, the same `--dsw-radius-lg` corner, the same hairline stroke plus
+ * prominent elevation, the same `z-index: 1100`, the same 16px padding and 12px/18px body.
+ * `overflow-x: hidden` is explicit because `overflow-y: auto` alone computes the other axis to `auto` and
+ * would add sideways scrollbars the moment anything overflows. */
 .cb-dock-card {
   position: fixed;
   z-index: 1100;
-  width: min(440px, calc(100vw - 24px));
-  min-width: 264px;
-  max-width: min(560px, calc(100vw - 24px));
+  box-sizing: border-box;
   overflow-x: hidden;
   overflow-y: auto;
   scrollbar-gutter: stable;
-  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  /* A fixed width is load-bearing: nearly every block inside is a percentage width (`.cb-dock-cards >
+   * .cb-card` is `width:100%`, so is the table, and `.cb-ov-sl` is an auto-fill grid), and percentage
+   * children contribute no intrinsic width — sizing to content would collapse the card to its floor and
+   * squash it (the legend folds onto two lines, the rate table's model names truncate). 440px matches the
+   * official dialog's `max-width` and is the narrowest width at which the seven-row legend and the
+   * four-column rate table both stop wrapping. */
+  width: min(440px, calc(100vw - 24px));
+  min-width: 264px;
+  max-width: min(560px, calc(100vw - 24px));
   padding: 16px;
-  border-radius: var(--dsw-radius-lg, 16px);
-  border: 1px solid var(--dsw-alias-border-l2);
   background: var(--dsw-specific-menu, var(--dsw-alias-bg-layer-2));
-  box-shadow: var(--dsw-elevation-prominent, 0 12px 32px rgba(0, 0, 0, 0.3));
-  color: var(--dsw-alias-label-primary);
+  backdrop-filter: var(--dsw-menu-backdrop-filter, none);
+  border-radius: var(--dsw-radius-lg, 16px);
+  --dsw-elevation-stroke-color: var(--dsw-alias-border-l1);
+  box-shadow: var(--dsw-elevation-prominent, 0 3px 8px rgba(0, 0, 0, 0.08), 0 0 20px rgba(0, 0, 0, 0.05));
+  color: var(--dsw-alias-label-secondary);
   font-size: 12px;
   line-height: 18px;
 }
-.cb-dock-head { display: flex; align-items: baseline; justify-content: space-between; font-weight: 500; }
-.cb-dock-head-rule { height: 0.5px; background: var(--dsw-alias-border-l2); margin: 8px 0 10px; }
-.cb-dock-badge { font-size: 11px; padding: 0 6px; border-radius: 999px; background: var(--dsw-alias-bg-layer-1); }
-.cb-dock-badge-peak { color: var(--dsw-alias-state-error-primary, #ef4444); }
-.cb-dock-period-row { display: flex; justify-content: space-between; gap: 12px; color: var(--dsw-alias-label-secondary); }
-.cb-dock-period-eta { font-variant-numeric: tabular-nums; }
-.cb-dock-cards { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
-.cb-dock-card-block { border-top: 1px solid var(--dsw-alias-border-l2); padding-top: 10px; }
-.cb-dock-block-title { font-weight: 500; margin-bottom: 6px; }
+/* The title row matches the official `.title`: label-primary, space-between, a 16px gap, 8px below it,
+ * weight 500, size inherited from the panel. */
+.cb-dock-head { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; margin-bottom: 8px; }
+.cb-dock-head-title { font-weight: 500; color: var(--dsw-alias-label-primary); }
+/* The hairline under the title, matching the official `.titleRule`: 0.5px, `border-l2`, 10px below. */
+.cb-dock-head-rule { flex: none; border-top: 0.5px solid var(--dsw-alias-border-l2); margin: 0 0 10px; }
+/* Peak windows on the left, the countdown on the right; the right side is tertiary because it explains
+ * rather than measures. */
+.cb-dock-period-row { display: flex; align-items: baseline; gap: 8px; font-size: 11px; color: var(--dsw-alias-label-tertiary); }
+.cb-dock-period-windows { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cb-dock-period-eta { margin-left: auto; flex: none; font-variant-numeric: tabular-nums; }
+.cb-dock-badge { margin-left: auto; font-size: 11px; padding: 1px 8px; border-radius: 999px; color: var(--cb-dock-off); background: color-mix(in srgb, var(--cb-dock-off) 14%, transparent); }
+.cb-dock-badge-peak { color: var(--cb-dock-peak); background: color-mix(in srgb, var(--cb-dock-peak) 14%, transparent); }
+
+/* The blocks inside the card. `box-sizing: border-box` is required: the base `.cb-card` rule only declares it
+ * under `.cb-root`, and the popover has no such ancestor — without it every `width: 100%` block overflows by
+ * its padding plus border. */
+.cb-dock-cards { display: flex; flex-direction: column; gap: 8px; }
+.cb-dock-cards > .cb-card {
+  flex: none;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  margin-bottom: 0;
+  padding: 10px 12px;
+}
+.cb-dock-cards .cb-donut-row { flex-wrap: wrap; }
+.cb-dock-card-block {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  background: var(--dsw-alias-bg-layer-1);
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.cb-dock-block-title { display: flex; align-items: baseline; gap: 8px; font-size: 11px; color: var(--dsw-alias-label-secondary); }
+.cb-dock-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.cb-dock-table th { font-weight: 400; font-size: 11px; color: var(--dsw-alias-label-secondary); text-align: right; padding: 2px 0; }
+.cb-dock-table th:first-child { text-align: left; }
+.cb-dock-table td { text-align: right; padding: 2px 0; color: var(--dsw-alias-label-secondary); }
+.cb-dock-table td:first-child { text-align: left; color: var(--dsw-alias-label-primary); }
+/* The rate table colours each column by the bucket it prices, matching the token card: cache read = teal,
+ * uncached = blue, output = pink. "Which column is expensive" and "which bucket the spend went to" then speak
+ * the same colour. */
+.cb-dock-rate-hit { color: var(--cb-rate-hit); }
+.cb-dock-rate-miss { color: var(--cb-rate-miss); }
+.cb-dock-rate-out { color: var(--cb-rate-out); }
+.cb-dock-note { color: var(--dsw-alias-label-tertiary); font-size: 11px; line-height: 1.5; }
+
+/* Token block extras (the dock card's own summary rows). */
 .cb-dock-token-total { display: flex; align-items: baseline; gap: 8px; }
 .cb-dock-figure { font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.cb-dock-sub { color: var(--dsw-alias-label-tertiary); }
+.cb-dock-sub { color: var(--dsw-alias-label-tertiary); font-size: 11px; }
 .cb-dock-token-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 4px 10px; margin-top: 6px; }
-.cb-dock-token-cell { display: flex; justify-content: space-between; }
+.cb-dock-token-cell { display: flex; justify-content: space-between; font-size: 11px; }
 .cb-dock-cell-label { color: var(--dsw-alias-label-secondary); }
 .cb-dock-cell-value { font-variant-numeric: tabular-nums; }
 .cb-dock-empty { color: var(--dsw-alias-label-tertiary); }
-.cb-dock-table { width: 100%; border-collapse: collapse; font-size: 11px; margin-top: 4px; }
-.cb-dock-table th { text-align: right; font-weight: 400; color: var(--dsw-alias-label-tertiary); }
-.cb-dock-table th:first-child { text-align: left; }
-.cb-dock-table td { text-align: right; font-variant-numeric: tabular-nums; }
-.cb-dock-table td:first-child { text-align: left; }
-.cb-dock-note { color: var(--dsw-alias-label-tertiary); margin-top: 8px; }
 .cb-dock-platforms { display: flex; flex-direction: column; gap: 4px; }
-.cb-dock-platform-line { display: flex; gap: 8px; align-items: baseline; }
+.cb-dock-platform-line { display: flex; gap: 8px; align-items: baseline; font-size: 11px; }
 .cb-dock-platform-line .cb-dock-spend { margin-left: auto; }

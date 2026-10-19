@@ -113,16 +113,28 @@ describe('TrendChart', () => {
     spans: undefined,
   }
 
-  it('draws one bar per row in stacked mode', () => {
+  it('draws the old chart structure: a bar per row, a stage stack, the axis rail and the grid', () => {
     const markup = renderToStaticMarkup(h(TrendChart, { ...base, rows: rows(), mode: 'total' }))
-    expect((markup.match(/cb-trend-bar/g) ?? []).length).toBeGreaterThanOrEqual(2)
-    expect(markup).toContain('cb-trend-band')
-    expect(markup).toContain('cb-trend-marker')
+    // One constant-width bar per row, each stacking its stage segments.
+    expect((markup.match(/class="cb-bar[\s"]/g) ?? []).length).toBe(2)
+    expect(markup).toContain('cb-bar-stack')
+    expect(markup).toContain('cb-cat-seg')
+    expect(markup).toContain('cb-bar-marker')
+    // The numeric rail and the four dashed guides plus the solid baseline.
+    expect(markup).toContain('cb-axis')
+    expect(markup).toContain('cb-grid-top')
+    expect(markup).toContain('cb-grid-zero')
+    // The turn band beneath mirrors the column grid.
+    expect(markup).toContain('cb-turns')
+    expect(markup).toContain('cb-turn')
   })
 
-  it('draws the delta mode with a zero line', () => {
+  it('draws the delta mode as two arms around the zero line', () => {
     const markup = renderToStaticMarkup(h(TrendChart, { ...base, rows: rows(), mode: 'delta', dna: null }))
-    expect(markup).toContain('cb-trend-zero')
+    expect(markup).toContain('cb-bar-up')
+    expect(markup).toContain('cb-bar-down')
+    // The axis labels the centre as zero in this mode.
+    expect(markup).toContain('cb-axis-mid')
   })
 
   it('draws DNA bands and their legend when the mode is on', () => {
@@ -134,9 +146,9 @@ describe('TrendChart', () => {
 
   it('draws the duration overlay when enabled', () => {
     const withCurve = renderToStaticMarkup(h(TrendChart, { ...base, rows: rows(), mode: 'total', durationCurve: true }))
-    expect(withCurve).toContain('cb-trend-duration')
+    expect(withCurve).toContain('cb-duration')
     const without = renderToStaticMarkup(h(TrendChart, { ...base, rows: rows(), mode: 'total', durationCurve: false }))
-    expect(without).not.toContain('cb-trend-duration')
+    expect(without).not.toContain('cb-duration')
   })
 
   it('narrows the window to one screenful in adaptive mode', () => {
@@ -148,7 +160,7 @@ describe('TrendChart', () => {
     const full = renderToStaticMarkup(h(TrendChart, { ...base, rows: many, mode: 'total', adaptive: false }))
     // Count only the bar buttons: the class also appears on the active/rīse modifiers, so anchor on the
     // attribute boundary that ends the base class.
-    const barsIn = (markup: string): number => (markup.match(/class="cb-trend-bar[ "]/g) ?? []).length
+    const barsIn = (markup: string): number => (markup.match(/class="cb-bar[\s"]/g) ?? []).length
     expect(barsIn(adaptive)).toBeLessThan(barsIn(full))
     expect(barsIn(adaptive)).toBeLessThanOrEqual(40)
   })

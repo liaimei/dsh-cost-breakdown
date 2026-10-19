@@ -169,6 +169,174 @@
 .cb-gate-actions { display: flex; justify-content: flex-end; }
 .cb-root-footnote { height: 4px; }
 
+/* --- composition trend chart (values ported from the shipped stylesheet) ---------------
+ * Every absolute offset below is tied to the chart's fixed geometry: `CHART_H = 112`, `PAD_TOP = 18`, and the
+ * 14px bar + 2px gap column grid. Change one and the grid lines drift off the bars. */
+
+/* The plot row: a fixed-height bar row beside the numeric axis rail. */
+.cb-chartrow { display: flex; gap: 6px; align-items: stretch; }
+.cb-axis { position: relative; width: 40px; height: 150px; padding-top: 18px; box-sizing: border-box; color: var(--dsw-alias-label-secondary); font-size: 11px; }
+.cb-axis span { position: absolute; right: 0; line-height: 1; }
+/* Mirrors Q3_TOP / Q1_TOP in the component, used by the delta-mode overlap check. */
+.cb-axis-top { top: 13px; }
+.cb-axis-q3 { top: 41px; }
+.cb-axis-mid { top: 69px; }
+.cb-axis-q1 { top: 97px; }
+.cb-axis-bot { top: 125px; }
+
+/* Holds the scroll container and the hover tip: an absolutely positioned child of the scroll container would
+ * join its scrollable overflow and slide away with the content. */
+.cb-chart-wrap { position: relative; flex: 1; min-width: 0; }
+/* Do not set `scrollbar-width` / `scrollbar-color`: either makes Chromium/Safari drop every
+ * `::-webkit-scrollbar*` rule, including the harness's global 8px skin. `overscroll-behavior-x: contain` stops
+ * an edge swipe from chaining into browser history navigation. */
+.cb-chart-scroll { overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scrollbar-gutter: stable; padding-bottom: var(--dsh-scrollbar-width, 8px); }
+/* 2px of padding leaves room for the hover outline, which the scroll container would otherwise clip. */
+.cb-chart { position: relative; display: flex; align-items: flex-end; gap: 2px; height: 130px; padding: 18px 2px 0; box-sizing: border-box; width: max-content; min-width: 100%; }
+.cb-grid { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--dsw-alias-border-l2); pointer-events: none; }
+.cb-grid-top { top: 18px; }
+.cb-grid-q3 { top: 46px; }
+.cb-grid-mid { top: 74px; }
+.cb-grid-q1 { top: 102px; }
+/* The solid zero baseline: the delta mode's centre line, the total mode's plot floor. Drawn after the
+ * dashed guides. */
+.cb-grid-zero { top: 130px; border-top-style: solid; border-top-color: color-mix(in srgb, var(--color-neutral-500) 50%, transparent); }
+
+/* A constant-width bar: dense history scrolls rather than compressing. */
+.cb-bar { position: relative; width: 14px; flex: none; height: 100%; display: flex; align-items: flex-end; cursor: pointer; border-radius: 2px; outline: 1px dashed transparent; outline-offset: 1px; transition: opacity var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out), background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out), outline-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+/* Dimming is driven by the shared hovered stage, so a memoised bar never re-renders for it. Only `opacity`:
+ * `filter` would force per-segment layering on every toggle. */
+.cb-chart-catdim .cb-bar { opacity: 0.35; }
+/* The selected rule comes last at equal specificity: otherwise the dashed hover box keeps covering a bar the
+ * pointer rests on right after clicking it. */
+.cb-bar-hovered { outline-color: var(--dsw-alias-brand-primary); }
+.cb-bar-selected { outline: 2px solid var(--dsw-alias-label-primary); outline-offset: 1px; }
+
+.cb-bar-stack { display: flex; flex-direction: column-reverse; width: 100%; }
+.cb-bar-stack > div { width: 100%; }
+.cb-bar-dna { width: 100%; border-radius: 2px; }
+/* Rise on entry: the stack scales up from the baseline; in delta mode the arms grow from the zero line, so the
+ * lower arm's origin is its top edge. */
+.cb-bar-stack, .cb-bar-up, .cb-bar-down, .cb-bar-dna { transform-origin: 50% 100%; }
+.cb-bar-down { transform-origin: 50% 0; }
+/* Round only the bar's outer corners; internal boundaries stay square so no background shows between stacked
+ * segments. */
+.cb-bar-stack > div:first-child { border-radius: 0 0 2px 2px; }
+.cb-bar-stack > div:last-child { border-radius: 2px 2px 0 0; }
+.cb-bar-stack > div:only-child { border-radius: 2px; }
+/* Delta mode: a two-armed stack anchored on the zero line, growth up and shrink down; each arm rounds only its
+ * outer end so the zero seam stays crisp. */
+.cb-bar-up, .cb-bar-down { position: absolute; left: 0; width: 100%; display: flex; }
+.cb-bar-up { flex-direction: column-reverse; }
+.cb-bar-down { flex-direction: column; }
+.cb-bar-up > div, .cb-bar-down > div { width: 100%; }
+.cb-bar-up > div:last-child { border-radius: 2px 2px 0 0; }
+.cb-bar-down > div:last-child { border-radius: 0 0 2px 2px; }
+
+/* Stage segments re-light on a cross-card hover. The relit list must follow the stage vocabulary exactly: a
+ * missing bucket dims every bar without lighting any. */
+.cb-cat-seg { transition: opacity var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+.cb-chart[data-catdim] .cb-cat-seg { opacity: 0.35; }
+.cb-chart[data-catdim='system'] .cb-cat-seg[data-cat='system'],
+.cb-chart[data-catdim='tools'] .cb-cat-seg[data-cat='tools'],
+.cb-chart[data-catdim='user'] .cb-cat-seg[data-cat='user'],
+.cb-chart[data-catdim='inject'] .cb-cat-seg[data-cat='inject'],
+.cb-chart[data-catdim='skill'] .cb-cat-seg[data-cat='skill'],
+.cb-chart[data-catdim='assistant'] .cb-cat-seg[data-cat='assistant'],
+.cb-chart[data-catdim='tool'] .cb-cat-seg[data-cat='tool'] { opacity: 1; }
+
+/* The DNA highlight row: a flex row mirroring the bar grid, so no per-bar x maths is needed. Above the bars
+ * (z-index 1), below the markers and step flags (z-index 2). */
+.cb-dna-hl { position: absolute; top: 18px; right: 2px; bottom: 0; left: 2px; z-index: 1; display: flex; gap: 2px; align-items: stretch; pointer-events: none; }
+.cb-dna-cell { position: relative; width: 14px; flex: none; }
+.cb-dna-slice { position: absolute; left: 0; width: 100%; box-sizing: border-box; border: 1px solid var(--dsw-alias-brand-primary); border-radius: 1px; background: color-mix(in srgb, var(--dsw-alias-brand-primary) 26%, transparent); }
+
+/* The duration overlay: an SVG sized in content pixels so it scrolls with the bars; `overflow: visible` lets an
+ * adaptive spike poke above the plot. `label-tertiary` rather than the brand colour, so the curve does not
+ * become the loudest element and clash with the hover outline. */
+.cb-duration { position: absolute; top: 18px; left: 2px; z-index: 1; overflow: visible; pointer-events: none; }
+.cb-duration polyline, .cb-duration circle { fill: none; stroke: var(--dsw-alias-label-tertiary); stroke-width: 1.25; stroke-linejoin: round; stroke-linecap: round; }
+.cb-chart-catdim .cb-duration { opacity: 0.35; }
+
+/* The compaction/prune scissors marker above a bar. */
+.cb-bar-marker { position: absolute; top: -16px; left: 50%; transform: translateX(-50%); z-index: 2; font-size: 11px; color: var(--dsw-alias-state-warn-primary); }
+
+/* Step flags (step granularity only): every Nth bar gets a 1px pole in the label band with its cumulative step
+ * number boxed at the top; it grows leftwards, so it adds no scrollable overflow. Decoration only, it ignores
+ * the pointer, and it stays outside the animated stack so the entry rise cannot knock it over. */
+.cb-step-flag { position: absolute; right: -1px; top: -17px; bottom: 0; z-index: 2; width: 1px; background: color-mix(in srgb, var(--color-neutral-500) 45%, transparent); pointer-events: none; }
+.cb-step-flag-label { position: absolute; top: 0; right: 0; box-sizing: border-box; padding: 1px 3px; border: 1px solid color-mix(in srgb, var(--color-neutral-500) 45%, transparent); border-radius: 3px; background: var(--dsw-alias-bg-layer-1); font-size: 9px; line-height: 1; font-weight: 600; color: var(--dsw-alias-label-secondary); white-space: nowrap; }
+
+/* The turn band: neutral zebra fills (inline), deliberately disjoint from the stage palette — a stage colour
+ * there would read as another segment at the bar's foot. */
+.cb-turns { display: flex; gap: 2px; overflow: hidden; margin-top: 4px; padding: 0 2px; box-sizing: border-box; width: max-content; min-width: 100%; }
+.cb-turn { flex: none; box-sizing: border-box; text-align: center; font-size: 10px; line-height: 14px; font-weight: 600; color: var(--dsw-alias-label-secondary); border-radius: 3px; height: 14px; white-space: nowrap; cursor: pointer; transition: filter var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out), opacity var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+.cb-turn-on { filter: brightness(1.35); color: var(--dsw-alias-label-primary); }
+.cb-turn-label { display: inline-block; }
+
+/* --- agent network ------------------------------------------------------ */
+.cb-agent-self { display: flex; flex-direction: column; gap: 2px; }
+.cb-agent-node { display: inline-flex; gap: 8px; align-items: center; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; padding: 6px 10px; }
+.cb-agent-current { border-color: var(--dsw-alias-brand-primary, #4d6bfe); }
+.cb-agent-tokens { font-variant-numeric: tabular-nums; font-weight: 600; }
+.cb-agent-sub, .cb-agent-note { font-size: 11px; color: var(--dsw-alias-label-tertiary); }
+
+/* --- timing strip ------------------------------------------------------- */
+.cb-timing-strip { position: relative; height: 10px; border-radius: 3px; background: var(--dsw-alias-bg-layer-2); overflow: hidden; }
+.cb-timing-seg { position: absolute; top: 0; bottom: 0; }
+.cb-timing-ttft { background: #4d9cff; }
+.cb-timing-reasoning { background: #a78bfa; }
+.cb-timing-text { background: #f472b6; }
+.cb-timing-toolarg { background: #fbbf24; }
+.cb-timing-tools { background: #2dd4bf; }
+.cb-timing-other { background: #94a3b8; }
+
+/* --- modal -------------------------------------------------------------- */
+.cb-modal-backdrop {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  z-index: 1100;
+  background: rgba(0, 0, 0, 0.42);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 48px 16px;
+  overflow-y: auto;
+}
+.cb-modal-card {
+  width: min(440px, 100%);
+  max-height: 100%;
+  overflow-y: auto;
+  background: var(--dsw-specific-menu, var(--dsw-alias-bg-layer-2));
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: var(--dsw-radius-lg, 16px);
+  box-shadow: var(--dsw-elevation-prominent, 0 12px 32px rgba(0, 0, 0, 0.3));
+  padding: 16px;
+  box-sizing: border-box;
+}
+.cb-modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.cb-modal-title { font-weight: 500; }
+.cb-modal-close { border: 0; background: transparent; color: var(--dsw-alias-label-secondary); font-size: 18px; cursor: pointer; padding: 0 4px; }
+.cb-modal-body { display: flex; flex-direction: column; gap: 12px; }
+
+/* --- settings card ------------------------------------------------------ */
+.cb-set-card { padding: 4px 0; }
+.cb-set-title { font-weight: 600; margin-bottom: 10px; }
+.cb-set-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 0; }
+.cb-set-label { font-size: 12px; color: var(--dsw-alias-label-secondary); display: flex; flex-direction: column; }
+.cb-set-hint { font-size: 11px; color: var(--dsw-alias-label-tertiary); }
+.cb-set-control { flex: none; }
+.cb-set-control .cb-gran { margin-left: 0; }
+.cb-set-readonly { font-size: 11px; color: var(--dsw-alias-label-tertiary); margin-bottom: 8px; }
+
+/* --- gate card ---------------------------------------------------------- */
+.cb-gate-card { border: 1px solid var(--dsw-alias-border-l2); border-radius: 10px; padding: 12px 16px; margin-bottom: 14px; }
+.cb-gate-title { font-weight: 600; margin-bottom: 6px; }
+.cb-gate-body { font-size: 12px; color: var(--dsw-alias-label-secondary); margin-bottom: 8px; }
+.cb-gate-actions { display: flex; justify-content: flex-end; }
+.cb-root-footnote { height: 4px; }
+
 /* --- trend chart (stacked / DNA / delta + duration overlay) --------------- */
 .cb-trend-wrap { display: flex; flex-direction: column; gap: 6px; }
 .cb-trend-ctl { margin-left: auto; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }

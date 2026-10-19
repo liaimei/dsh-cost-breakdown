@@ -1,207 +1,87 @@
-/**
- * Shared page scaffolding.
- *
- * Only the pieces that two or more surfaces genuinely share live here: the scrollable root, the card
- * grid, the title-chip bits, and the container-query plumbing that lets a card reflow by its own width
- * rather than the viewport's. Everything surface-specific stays in that surface's own sheet, so a card
- * cannot accidentally inherit another card's rhythm.
- *
- * Import order matters: this sheet loads before the surface sheets, so a surface rule at equal
- * specificity wins. Utilities (spacing, flex helpers) load even earlier for the same reason.
- */
+/* Imported first among the plugin's own sheets: everything after it recolours the shared chrome at equal
+ * specificity, so this order cannot move. The values are the ones this plugin has always used. */
 
-.cb-root {
-  padding: 16px 20px 32px;
-  overflow-y: auto;
-  height: 100%;
-  box-sizing: border-box;
-  color: var(--dsw-alias-label-primary);
-  font-size: 13px;
-}
-
-/* The right sidebar brings its own fixed-height body; without this the root's natural height is
- * clipped by that body's overflow. */
+/* --- layout scaffolding -------------------------------------------------- */
+.cb-root { padding: 16px 20px 32px; overflow-y: auto; height: 100%; box-sizing: border-box; color: var(--dsw-alias-label-primary); font-size: 13px; }
+/* The right sidebar brings its own fixed-height body; without this the root's natural height is clipped. */
 [data-sidebar-right-open] .cb-root,
-[data-sidebar-right-float-host] .cb-root {
-  padding: 12px;
-}
-
+[data-sidebar-right-float-host] .cb-root { padding: 12px; }
+.cb-title-icon { flex: none; }
 /* 30px is the fade headroom the shell's tab chip itself reserves; if that mask moves, revisit this. */
-.cb-title-icon {
-  flex: none;
-}
+.cb-title-label { padding-right: 30px; }
 
-.cb-title-label {
-  padding-right: 30px;
-}
+.cb-card { background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l2); border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; }
+/* Every tab card is an inline-size query container; this rule must precede the `.cb-cols`/`.cb-col` margin
+ * resets below, and the cards' `min-w-[min(360px,100%)]` floor depends on `box-sizing: border-box`. */
+.cb-root .cb-card { box-sizing: border-box; padding: 7px 8px; margin-bottom: 7px; container: cb-card / inline-size; }
+.cb-root .cb-cols { gap: 7px; margin-bottom: 7px; }
+.cb-card-title { font-weight: 600; margin-bottom: 10px; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.cb-card-title-text { flex: none; white-space: nowrap; }
+/* A regular-weight subtitle pinned to the right of a 600-weight title; the native `title` explains it. */
+.cb-card-sub { flex: none; margin-left: auto; font-weight: 400; color: var(--dsw-alias-label-secondary); font-size: 12px; }
 
-/* A card is a container-query container so its contents can reflow on the card's width, which is what
- * makes the same card work in the wide conversation tab and the narrow sidebar. */
-.cb-card {
-  background: var(--dsw-alias-bg-layer-1);
-  border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 10px;
-  padding: 14px 16px;
-  margin-bottom: 14px;
-  box-sizing: border-box;
-  container: cb-card / inline-size;
-}
+/* Segmented controls (step/turn, total/delta, sorts, event kinds). */
+.cb-gran, .cb-kinds { margin-left: auto; display: flex; gap: 2px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l2); border-radius: 6px; padding: 1px; }
+/* A title carrying two control groups wraps them, so the row keeps one auto-margin push. */
+.cb-trend-ctl, .cb-heat-ctl { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+.cb-trend-ctl .cb-gran, .cb-heat-ctl .cb-gran { margin-left: 0; }
+.cb-heat-ctl .cb-card-sub { margin-left: 0; }
+.cb-trend-mods { margin-left: 0; flex: none; }
+.cb-gran-btn { border: 0; background: transparent; color: var(--dsw-alias-label-secondary); font-size: 11px; line-height: 1; padding: 3px 8px; border-radius: 5px; cursor: pointer; font-family: inherit; transition: color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+.cb-gran-btn:hover { color: var(--dsw-alias-label-primary); }
+.cb-gran-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.cb-gran-btn:disabled:hover { color: var(--dsw-alias-label-secondary); }
+.cb-gran-on, .cb-gran-on:hover { background: var(--dsw-alias-button-primary-fill); color: var(--dsw-alias-label-primary-foreground); }
+.cb-kind-n { margin-left: 4px; font-variant-numeric: tabular-nums; opacity: 0.65; }
+.cb-gran-on .cb-kind-n { opacity: 0.85; }
 
-.cb-card-title {
-  font-weight: 600;
-  margin-bottom: 10px;
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  flex-wrap: wrap;
-}
+/* Shared tooltip chrome: a consumer pairs this with its own tip class and positions it in place. */
+.cb-tip { position: absolute; z-index: 6; width: max-content; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 6px 10px; font-size: 12px; color: var(--dsw-alias-label-primary); box-shadow: var(--dsw-shadow-lv3, 0 2px 8px rgba(0, 0, 0, 0.18)); pointer-events: none; opacity: 0; transition: opacity var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 
-.cb-card-title-text {
-  flex: none;
-  white-space: nowrap;
-}
+.cb-events, .cb-fa-list { display: flex; flex-direction: column; gap: 2px; height: 320px; overflow-y: auto; }
 
-/* A row of cards: the row owns the vertical rhythm, so its cards drop their own bottom margin and a
- * section boundary measures one gap however the flex line wraps. */
-.cb-cols {
-  display: flex;
-  gap: 14px;
-  flex-wrap: wrap;
-  margin-bottom: 14px;
-}
+/* A `.cb-cols` row owns the vertical rhythm: its cards drop their own bottom margin, so a section boundary
+ * measures one gap however the flex line wraps. */
+.cb-cols { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
+.cb-cols > .cb-card { margin-bottom: 0; }
+.cb-col > .cb-card:last-child { margin-bottom: 0; }
+.cb-col-browser { display: flex; flex-direction: column; }
+.cb-col-browser > .cb-card { flex: 1; }
+/* The header band runs in two rows: the session overview beside the plugin card at 3:1, then the two ring
+ * cards side by side. Both are flex-wrap rows; the cards keep the shared `min-w-[min(360px,100%)]` floor, and
+ * that floor is the fold point (below 360 + 240 + gap the 3:1 pair takes the full row; below 2 × 360 + gap the
+ * ring pair does too). Below those floors each card reflows on its own container query. */
+.cb-head > .cb-card:has(.cb-overview-grid) { display: flex; flex-direction: column; }
 
-.cb-cols > .cb-card {
-  margin-bottom: 0;
-}
+.cb-empty { color: var(--dsw-alias-label-secondary); padding: 18px 0; text-align: center; }
+.cb-error { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 40px 16px; }
+.cb-error-msg { font-family: var(--ds-font-family-code, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: 12px; color: var(--dsw-alias-state-error-primary); background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 6px; padding: 4px 8px; max-width: 100%; overflow-wrap: anywhere; }
+.cb-error-retry { border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); font: inherit; font-size: 12px; padding: 4px 14px; border-radius: 6px; cursor: pointer; transition: border-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
 
-.cb-col > .cb-card:last-child {
-  margin-bottom: 0;
-}
+/* While the plugin's surface takes over the content area, hide the composer — but keep it whenever an
+ * approval, question or plan review is pending, because those prompts live there. */
+[data-conversation-scroll]:has(.cb-root) > [data-composer-seat]:not(:has([data-approval-key], [data-question-key], [data-plan-review-key])) { display: none; }
+/* The width drag handle is a following sibling of the shared scroll container, so this must use `~`; hide it
+ * while the plugin's surface or modal covers the area, or a drag would run across the content and float above
+ * the modal backdrop. */
+[data-conversation-scroll]:has(.cb-root, .cb-modal-backdrop) ~ [data-width-handle] { display: none; }
 
-.cb-empty {
-  color: var(--dsw-alias-label-secondary);
-  padding: 18px 0;
-  text-align: center;
-}
-
-.cb-error {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding: 40px 16px;
-}
-
-.cb-error-msg {
-  font-family: var(--ds-font-family-code, ui-monospace, SFMono-Regular, Menlo, monospace);
-  font-size: 12px;
-  color: var(--dsw-alias-state-error-primary);
-  background: var(--dsw-alias-bg-layer-2);
-  border: 1px solid var(--dsw-alias-border-l1);
-  border-radius: 6px;
-  padding: 4px 8px;
-  max-width: 100%;
-  overflow-wrap: anywhere;
-}
-
-.cb-error-retry {
-  border: 1px solid var(--dsw-alias-border-l2);
-  background: var(--dsw-alias-bg-layer-2);
-  color: var(--dsw-alias-label-primary);
-  font: inherit;
-  font-size: 12px;
-  padding: 4px 14px;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: border-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out);
-}
-
-/* A segmented control (step/turn, total/delta, the sort groups): a small pill row of buttons. */
-.cb-gran {
-  margin-left: auto;
-  display: flex;
-  gap: 2px;
-  background: var(--dsw-alias-bg-layer-2);
-  border: 1px solid var(--dsw-alias-border-l2);
-  border-radius: 6px;
-  padding: 1px;
-}
-
-.cb-gran-btn {
-  border: 0;
-  background: transparent;
-  color: var(--dsw-alias-label-secondary);
-  font-size: 11px;
-  line-height: 1;
-  padding: 3px 8px;
-  border-radius: 5px;
-  cursor: pointer;
-  font-family: inherit;
-  transition: color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out);
-}
-
-.cb-gran-btn:hover {
-  color: var(--dsw-alias-label-primary);
-}
-
-.cb-gran-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.cb-gran-on,
-.cb-gran-on:hover {
-  background: var(--dsw-alias-button-primary-fill);
-  color: var(--dsw-alias-label-primary-foreground);
-}
-
-/* The shared tooltip chrome: a consumer pairs this with its own tip class and positions it in place, so
- * a new tip does not restate the whole box. */
-.cb-tip {
-  position: absolute;
-  z-index: 6;
-  width: max-content;
-  background: var(--dsw-alias-bg-layer-2);
-  border: 1px solid var(--dsw-alias-border-l1);
-  border-radius: 6px;
-  padding: 6px 10px;
-  font-size: 12px;
-  color: var(--dsw-alias-label-primary);
-  box-shadow: var(--dsw-shadow-lv3, 0 2px 8px rgba(0, 0, 0, 0.18));
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out);
-}
-
-/* When the plugin's surface takes over the content area, hide the composer — but keep it whenever an
- * approval, question or plan review is pending, because those prompts live in the composer. */
-[data-conversation-scroll]:has(.cb-root) > [data-composer-seat]:not(:has([data-approval-key], [data-question-key], [data-plan-review-key])) {
-  display: none;
-}
-
-/* The harness's conversation-width drag handle is a following sibling of the shared scroll container,
- * so this must use `~` (a descendant combinator would match nothing). Hide it while the plugin's surface
- * or modal covers the area, or a drag would run across the content and float above the modal backdrop. */
-[data-conversation-scroll]:has(.cb-root, .cb-modal-backdrop) ~ [data-width-handle] {
-  display: none;
-}
-
-/* The plugin's palette. Defined once here so every surface (composition strip, rings, trend bands, agent
- * graph, file badges) draws from one set of names; the context sheets use the `--cb-ctx-*` aliases, the
- * statistics sheet its own `--cb-ov-*` ones, and both resolve to the same colours. */
+/* --- the palette ---------------------------------------------------------
+ * Declared once so every surface draws from one set of names: the context sheets use the `--cb-ctx-*` family,
+ * the statistics sheet its `--cb-ov-*` aliases, and both resolve to these colours. */
 .cb-root,
 .cb-ov-page,
 .cb-dock-card {
-  --cb-ctx-indigo: #6366f1;
-  --cb-ctx-blue: #3b82f6;
-  --cb-ctx-teal: #14b8a6;
-  --cb-ctx-green: #22c55e;
-  --cb-ctx-amber: #f59e0b;
-  --cb-ctx-orange: #f97316;
-  --cb-ctx-purple: #a855f7;
-  --cb-ctx-pink: #ec4899;
-  --cb-ctx-violet: #8b5cf6;
-  --cb-ctx-slate: #94a3b8;
+  --cb-ctx-indigo: oklch(58.5% 0.233 277.117);
+  --cb-ctx-blue: oklch(62.3% 0.214 259.815);
+  --cb-ctx-teal: oklch(70.4% 0.14 182.503);
+  --cb-ctx-green: oklch(72.3% 0.219 149.579);
+  --cb-ctx-amber: oklch(76.9% 0.188 70.08);
+  --cb-ctx-orange: oklch(70.5% 0.213 47.604);
+  --cb-ctx-purple: oklch(62.7% 0.265 303.9);
+  --cb-ctx-pink: oklch(65.6% 0.241 354.308);
+  --cb-ctx-violet: oklch(60.6% 0.25 292.717);
+  --cb-ctx-slate: oklch(70.4% 0.04 256.788);
   --cb-ov-indigo: var(--cb-ctx-indigo);
   --cb-ov-blue: var(--cb-ctx-blue);
   --cb-ov-teal: var(--cb-ctx-teal);

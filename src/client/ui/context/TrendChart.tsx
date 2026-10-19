@@ -14,7 +14,7 @@
  */
 
 import { useMemo, useRef, useState } from 'react'
-import { createElement as h, Fragment } from 'react'
+import { createElement as h } from 'react'
 import type { ReactElement } from 'react'
 import type { RequestRow, Snapshot, TimingSegment } from '../../../wire/model'
 import type { Translate } from '../../i18n/dict'
@@ -23,10 +23,6 @@ import { headlineOf } from './derive'
 import { STAGE_COLOR } from './derive'
 import type { TrendBand, DeltaBand, DnaDelta } from './dna'
 import { bandLabel, deltaBandsOf } from './dna'
-
-/** Only the newest columns animate in: the chart mounts anchored to the newest bar, and animating the whole
- * window would layer the card and stall its expansion. */
-const RISE_CAP = 200
 
 /** Bars drawn at most in adaptive mode, centred on the active one. */
 const ADAPTIVE_WINDOW = 40
@@ -163,11 +159,36 @@ function barsOf(input: {
   return { bars, peak }
 }
 
-/** The chart. */
+/** The chart's fixed plot height in px — mirrored by `.cb-chart` in the stylesheet, and by the grid/axis
+ * offsets below; changing one without the others makes the grid lines drift. */
+const CHART_H = 112
+/** Label band above the plot: the chart's `padding-top`. */
+const PAD_TOP = 18
+/** Bars are a constant width: dense history scrolls rather than compressing. The turn band below mirrors the
+ * same column grid. */
+const BAR_W = 14
+const BAR_GAP = 2
+/** One step flag every N bars (step granularity only). */
+const STEP_FLAG_EVERY = 5
+/** Neutral zebra fills for the turn band, deliberately disjoint from the stage palette: that band is a
+ * partition of time, not a slice of a bar. */
+const TURN_FILLS = [
+  'color-mix(in srgb, var(--color-neutral-500) 12%, transparent)',
+  'color-mix(in srgb, var(--color-neutral-500) 26%, transparent)',
+]
+
+/** The chart.
+ *
+ * The structure is the one this chart has always had: a fixed-height plot row of constant-width bars beside a
+ * numeric axis rail, dashed grid lines at the quarters, a solid zero baseline, an optional turn band beneath
+ * mirroring the column grid, and two independent overlays — the DNA highlight row and the duration curve.
+ * Absolute pixel offsets tie the grid and the axis to `CHART_H` + `PAD_TOP`, so all three constants live here.
+ */
 export function TrendChart(props: TrendChartProps): ReactElement {
   const { t, rows, markers, mode, selectedSeq, hoveredSeq, dna, durationCurve, adaptive } = props
-  const plot = useRef<HTMLDivElement | null>(null)
+  const scroll = useRef<HTMLDivElement | null>(null)
   const [localHover, setLocalHover] = useState<number | null>(null)
+  const [hoverTurn, setHoverTurn] = useState<number | null>(null)
 
   const activeIndex = (() => {
     const hovered = hoveredSeq ?? localHover
@@ -182,8 +203,7 @@ export function TrendChart(props: TrendChartProps): ReactElement {
     return rows.length - 1
   })()
 
-  // Adaptive: once the history outgrows a readable column width, show a slice centred on the active bar. The
-  // newest bar stays in view when nothing is selected, which is where the chart mounts.
+  // Adaptive: once the history outgrows a readable column width, show a slice centred on the active bar.
   const [from, to] = (() => {
     if (!adaptive || rows.length <= ADAPTIVE_WINDOW) return [0, rows.length] as const
     const half = Math.floor(ADAPTIVE_WINDOW / 2)
@@ -196,105 +216,172 @@ export function TrendChart(props: TrendChartProps): ReactElement {
   const windowDna = dna === null ? null : dna.slice(from, to)
   const colorOf = (cat: string): string => STAGE_COLOR[cat as keyof typeof STAGE_COLOR] ?? 'var(--cb-ctx-slate)'
 
+  // The plot's scale: in total mode the tallest bar, in delta mode the largest single change, so one big
+  // compaction cannot flatten every other bar.
   const { bars, peak } = useMemo(
     () => barsOf({ rows: windowRows, dna: windowDna, mode, colorOf }),
-    // `colorOf` is derived from a frozen table, so the rows and the mode are the real inputs.
     [windowRows, windowDna, mode],
   )
 
-  // The duration curve: each visible step's active time, scaled to the largest in the window.
+  // Painted values for the axis labels: the scale top, its quarters, and zero.
+  const axisTop = Math.max(1, peak)
+
+  // The duration curve, scaled to the largest active time in the window.
   let peakActive = 1
   for (const row of windowRows) if ((row.activeMs ?? 0) > peakActive) peakActive = row.activeMs ?? 0
-  const durationPoints = windowRows.map((row, index) => {
+  const activePath = windowRows.map((row, index) => {
     const active = row.activeMs
-    if (active === undefined) return null
-    return { index, y: PLOT_HEIGHT - Math.min(1, active / peakActive) * PLOT_HEIGHT }
+    return active === undefined ? null : { index, y: PAD_TOP + CHART_H - Math.min(1, active / peakActive) * CHART_H }
   })
-
-  /** Resolve a pointer position to a bar index (used by the click-anywhere-in-the-plot convention). */
-  const barAt = (event: { clientX: number }): number | null => {
-    const element = plot.current
-    if (element === null) return null
-    const rect = element.getBoundingClientRect()
-    if (rect.width <= 0 || windowRows.length === 0) return null
-    const ratio = (event.clientX - rect.left) / rect.width
-    return Math.max(0, Math.min(windowRows.length - 1, Math.floor(ratio * windowRows.length)))
-  }
+  const activePoints = activePath.filter((point): point is { index: number; y: number } => point !== null)
 
   const activeRow = activeIndex >= 0 && activeIndex < rows.length ? rows[activeIndex] : null
+  const turnOf = (row: RequestRow): number => row.turn ?? 0
 
-  return h('div', { className: 'cb-trend-wrap' },
-    h('div', {
-      ref: plot,
-      className: `cb-trend${mode === 'delta' ? ' cb-trend-delta' : ''}`,
-      role: 'img',
-      'aria-label': t('trend.title'),
-      onClick: (event: MouseEvent) => {
-        const index = barAt(event)
-        if (index === null) return
-        const row = windowRows[index]
-        props.onSelect(activeRow?.seq === row.seq ? null : row.seq)
-      },
-      onMouseLeave: () => {
-        props.onHover(null)
-        setLocalHover(null)
-        props.onHoverBand(null)
-      },
-    },
-      colors(durationCurve ? durationPoints : []),
-      // turn bands: a hairline at each turn change, so a long run of steps stays readable.
-      windowRows.map((row, index) => {
-        const isTurnStart = index === 0 || (windowRows[index - 1].turn ?? 0) !== (row.turn ?? 0)
-        return isTurnStart
-          ? h('span', { key: `turn-${row.seq}`, className: 'cb-trend-turnline', style: { left: `${(index / windowRows.length) * 100}%` } })
-          : null
-      }),
-      bars.map((bar, index) => h('button', {
-        key: bar.seq,
-        type: 'button',
-        className: `cb-trend-bar${index === activeIndex - from ? ' cb-trend-bar-on' : ''}${index < windowRows.length - RISE_CAP ? '' : ' cb-trend-bar-rise'}`,
-        style: { height: `${Math.max(2, bar.height)}px` },
-        title: tooltipOf(t, bar.row, props.granularity),
-        'aria-label': tooltipOf(t, bar.row, props.granularity),
-        onMouseEnter: () => {
-          setLocalHover(bar.seq)
-          props.onHover(bar.seq)
-        },
-        onClick: (event: MouseEvent) => {
-          // The plot's own click handler would otherwise toggle twice.
-          event.stopPropagation()
-          props.onSelect(activeRow?.seq === bar.seq ? null : bar.seq)
-        },
-      },
+  // The turn band: one cell per turn run, sized to the columns it spans, so the grid below the bars matches the
+  // bars themselves.
+  const turns = useMemo(() => {
+    const bands: Array<{ turn: number; start: number; span: number }> = []
+    windowRows.forEach((row, index) => {
+      const turn = turnOf(row)
+      const last = bands.at(-1)
+      if (last !== undefined && last.turn === turn) {
+        last.span += 1
+        return
+      }
+      bands.push({ turn, start: index, span: 1 })
+    })
+    return bands
+  }, [windowRows])
+
+  return h('div', { className: 'cb-chart-wrap' },
+    h('div', { className: 'cb-chartrow' },
+      // The numeric axis rail: shared by both modes, its offsets tied to the plot geometry.
+      h('div', { className: 'cb-axis' },
+        h('span', { className: 'cb-axis-top' }, formatCount(axisTop)),
+        h('span', { className: 'cb-axis-q3' }, formatCount(Math.round(axisTop * 0.75))),
         mode === 'delta'
-          ? h(Fragment, null,
-            h('span', { className: 'cb-trend-zero' }),
-            bar.up.map(band => h('span', {
-              key: `u-${band.key}`,
-              className: `cb-trend-band${props.hoverBand === band.key ? ' cb-trend-band-on' : ''}`,
-              style: { background: band.color, height: `${band.height}px`, bottom: `calc(50% + ${band.bottom}px)` },
-              onMouseEnter: () => { props.onHoverBand(band.key) },
-            })),
-            bar.down.map(band => h('span', {
-              key: `d-${band.key}`,
-              className: `cb-trend-band${props.hoverBand === band.key ? ' cb-trend-band-on' : ''}`,
-              style: { background: band.color, height: `${band.height}px`, top: `calc(50% + ${band.bottom}px)` },
-              onMouseEnter: () => { props.onHoverBand(band.key) },
-            })))
-          : bar.bands.map(band => h('span', {
-            key: band.key,
-            className: `cb-trend-band${props.hoverBand === band.key ? ' cb-trend-band-on' : ''}`,
-            style: { background: band.color, height: `${band.height}px`, bottom: `${band.bottom}px` },
-            onMouseEnter: () => { props.onHoverBand(band.key) },
-          })),
-        (windowMarkers[index] ?? null) !== null
-          ? h('span', { className: 'cb-trend-marker', title: t(`kind.${(windowMarkers[index] as Snapshot['events'][number]).kind}`) })
-          : null)),
+          ? h('span', { className: 'cb-axis-mid' }, '0')
+          : h('span', { className: 'cb-axis-mid' }, formatCount(Math.round(axisTop * 0.5))),
+        h('span', { className: 'cb-axis-q1' }, formatCount(Math.round(axisTop * 0.25))),
+        h('span', { className: 'cb-axis-bot' }, mode === 'delta' ? `−${formatCount(axisTop)}` : '0')),
+      h('div', { className: 'cb-chart-scroll', ref: scroll },
+        h('div', {
+          className: `cb-chart${props.hoverBand !== null ? ' cb-chart-catdim' : ''}`,
+          role: 'img',
+          'aria-label': t('trend.title'),
+          ...(props.hoverBand !== null ? { 'data-catdim': props.hoverBand } : {}),
+        },
+          // Grid lines first, in the same order the stylesheet stacks them.
+          h('span', { className: 'cb-grid cb-grid-top' }),
+          h('span', { className: 'cb-grid cb-grid-q3' }),
+          h('span', { className: 'cb-grid cb-grid-mid' }),
+          h('span', { className: 'cb-grid cb-grid-q1' }),
+          h('span', { className: 'cb-grid cb-grid-zero' }),
+          // The duration curve, drawn under the bars so it never hides one.
+          durationCurve && activePoints.length > 1
+            ? h('svg', {
+              className: 'cb-duration',
+              width: windowRows.length * (BAR_W + BAR_GAP),
+              height: CHART_H,
+              'aria-hidden': 'true',
+            }, h('polyline', {
+              points: activePoints.map(point => `${point.index * (BAR_W + BAR_GAP) + BAR_W / 2},${Math.round(point.y - PAD_TOP)}`).join(' '),
+            }))
+            : null,
+          bars.map((bar, index) => h('div', {
+            key: bar.seq,
+            className: `cb-bar${index === activeIndex - from ? ' cb-bar-selected' : ''}${index === localHover ? ' cb-bar-hovered' : ''}`,
+            role: 'button',
+            tabIndex: 0,
+            title: tooltipOf(t, bar.row, props.granularity),
+            onMouseEnter: () => {
+              setLocalHover(index)
+              props.onHover(bar.seq)
+              setHoverTurn(turnOf(bar.row))
+            },
+            onMouseLeave: () => {
+              setLocalHover(null)
+              props.onHover(null)
+              setHoverTurn(null)
+            },
+            onClick: () => { props.onSelect(activeRow?.seq === bar.seq ? null : bar.seq) },
+            onKeyDown: (event: KeyboardEvent) => {
+              if (event.key !== 'Enter' && event.key !== ' ') return
+              event.preventDefault()
+              props.onSelect(activeRow?.seq === bar.seq ? null : bar.seq)
+            },
+          },
+            // A step flag every N bars: a 1px pole in the label band with its step number boxed at the top,
+            // decor only, outside the animated stack.
+            props.granularity === 'step' && index % STEP_FLAG_EVERY === 0 && index > 0
+              ? h('span', { className: 'cb-step-flag' },
+                h('span', { className: 'cb-step-flag-label' }, formatCount(bar.row.step ?? index)))
+              : null,
+            mode === 'delta'
+              ? [
+                h('div', { key: 'up', className: 'cb-bar-up' }, bar.up.map(band => h('div', {
+                  key: band.key,
+                  'data-cat': band.key,
+                  className: 'cb-cat-seg',
+                  style: { height: `${Math.max(1, band.height)}px`, background: band.color },
+                }))),
+                h('div', { key: 'down', className: 'cb-bar-down' }, bar.down.map(band => h('div', {
+                  key: band.key,
+                  'data-cat': band.key,
+                  className: 'cb-cat-seg',
+                  style: { height: `${Math.max(1, band.height)}px`, background: band.color },
+                }))),
+              ]
+              : [
+                dna !== null
+                  ? h('div', {
+                    key: 'dna',
+                    className: 'cb-bar-dna',
+                    style: {
+                      height: `${Math.max(1, bar.height)}px`,
+                      background: `linear-gradient(to top, ${bar.bands.map(band => `${band.color} ${band.bottom}px ${band.bottom + band.height}px`).join(', ')})`,
+                    },
+                  })
+                  : h('div', { key: 'stack', className: 'cb-bar-stack' }, bar.bands.map(band => h('div', {
+                    key: band.key,
+                    'data-cat': band.key,
+                    className: 'cb-cat-seg',
+                    style: { height: `${Math.max(1, band.height)}px`, background: band.color },
+                  }))),
+              ],
+            windowMarkers[index] !== undefined
+              ? h('span', {
+                className: 'cb-bar-marker',
+                title: t(`kind.${(windowMarkers[index] as Snapshot['events'][number]).kind}`),
+              }, '✂')
+              : null,
+          )),
+          // The DNA highlight row: a mirrored column grid, so a hovered item lights the same slice in every bar.
+          windowDna !== null
+            ? h('div', { className: 'cb-dna-hl' }, windowDna.map((bands, index) => h('span', { key: windowRows[index]?.seq ?? index, className: 'cb-dna-cell' },
+              bands.map(band => props.hoverBand === band.key
+                ? h('span', {
+                  key: band.key,
+                  className: 'cb-dna-slice',
+                  style: { bottom: `${band.off}px`, height: `${Math.max(1, band.tokens)}px` },
+                })
+                : null))))
+            : null)),
     ),
-    h('div', { className: 'cb-trend-axis' },
-      h('span', null, `0`),
-      h('span', null, formatCount(peak))),
-    // The active bar's detail: what it is, and what it is made of.
+    // The turn band: one cell per turn run, mirroring the column grid.
+    h('div', { className: 'cb-turns' }, turns.map(band => h('div', {
+      key: band.turn,
+      className: `cb-turn${hoverTurn === band.turn ? ' cb-turn-on' : ''}`,
+      style: {
+        width: `${band.span * (BAR_W + BAR_GAP) - BAR_GAP}px`,
+        background: TURN_FILLS[band.turn % TURN_FILLS.length],
+      },
+      title: t('detail.turn', { t: band.turn, n: band.span }),
+      onMouseEnter: () => { setHoverTurn(band.turn) },
+      onMouseLeave: () => { setHoverTurn(null) },
+    }, h('span', { className: 'cb-turn-label' }, formatCount(band.turn))))),
+    // The active bar's composition, below the plot.
     activeRow !== null
       ? h('div', { className: 'cb-trend-detail' },
         h('div', { className: 'cb-trend-detail-row' },
@@ -328,22 +415,6 @@ export function TrendChart(props: TrendChartProps): ReactElement {
           kv(t('timing.total'), activeRow.activeMs !== undefined ? formatDuration(activeRow.activeMs) : '—')))
       : null,
   )
-}
-
-/** The duration curve overlay: a polyline through each visible step's active time. */
-function colors(points: ReadonlyArray<{ index: number; y: number } | null>): ReactElement | null {
-  const visible = points.filter((point): point is { index: number; y: number } => point !== null)
-  if (visible.length < 2) return null
-  const width = 100
-  const path = visible
-    .map((point, order) => `${order === 0 ? 'M' : 'L'}${(point.index / Math.max(1, points.length - 1)) * width},${point.y}`)
-    .join(' ')
-  return h('svg', {
-    className: 'cb-trend-duration',
-    viewBox: `0 0 ${width} ${PLOT_HEIGHT}`,
-    preserveAspectRatio: 'none',
-    'aria-hidden': 'true',
-  }, h('path', { d: path, fill: 'none', stroke: 'var(--cb-ctx-pink)', 'stroke-width': 1.2, 'vector-effect': 'non-scaling-stroke' }))
 }
 
 /** A bar's tooltip: its turn/step identity and its billed total. */

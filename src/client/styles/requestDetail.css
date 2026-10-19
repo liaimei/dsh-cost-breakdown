@@ -1,0 +1,47 @@
+/* 请求明细区：请求卡下方的指标 chip、各分类行及其居中的零基线柱，
+   以及它们上方定高的简报通道。 */
+.lc-detail { margin-top: 12px; border-top: 1px solid var(--dsw-alias-border-l1); padding-top: 12px; }
+.lc-detail-head { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 8px; margin-bottom: 10px; color: var(--dsw-alias-label-secondary); }
+.lc-detail-head b { font-size: 13px; color: var(--dsw-alias-label-primary); }
+.lc-detail-time { margin-left: auto; font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.lc-detail-marker { color: var(--dsw-alias-state-warn-primary); font-size: 11px; background: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 12%, transparent); border-radius: 6px; padding: 1px 7px; }
+.lc-detail-tag { background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); border-radius: 4px; padding: 0 6px; font-size: 11px; color: var(--dsw-alias-label-secondary); }
+.lc-detail-metric { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; padding: 2px 8px; border-radius: 6px; color: var(--dsw-alias-label-primary); background: color-mix(in srgb, var(--dsw-alias-label-secondary) 14%, transparent); }
+/* 正负号语义与 harness 的 diff 块保持一致。 */
+.lc-detail-metric-up { color: var(--dsw-alias-state-success-primary); background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 15%, transparent); }
+.lc-detail-metric-down { color: var(--dsw-alias-state-error-primary); background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 15%, transparent); }
+/* 用 auto-fit 而不是固定两列：一行的 min-content 约 196px，再窄两列就会溢出。 */
+.lc-detail-rows { margin-top: 10px; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 4px 24px; }
+/* 定高三行的通道：即使一行都解析不出来，容器也照样存在，因此 hover 趋势图永远不会改变明细面板的高度。 */
+.lc-brief { display: flex; flex-direction: column; gap: 2px; margin: -4px 0 10px; min-height: 76px; }
+.lc-brief-row { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 3px 6px; margin-left: -6px; margin-right: -6px; border-radius: 6px; border: 0; background: transparent; font-family: inherit; font-size: 12px; line-height: 1.5; color: var(--dsw-alias-label-primary); text-align: left; transition: background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+/* link 类标记可悬停的行；指针光标只留给真正的点击目标。 */
+button.lc-brief-row-link { cursor: pointer; }
+.lc-brief-tag { flex: none; box-sizing: border-box; min-width: 56px; text-align: center; font-size: 11px; padding: 0 6px; border-radius: 4px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l2); color: var(--dsw-alias-label-secondary); position: relative; }
+.lc-brief-tip { bottom: calc(100% + 6px); left: 0; max-width: 240px; white-space: normal; text-align: left; line-height: 1.5; font-weight: 400; }
+.lc-brief-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lc-brief-empty { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dsw-alias-label-tertiary); }
+.lc-brief-fact { flex: none; box-sizing: border-box; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; padding: 0 6px; border-radius: 4px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l2); color: var(--dsw-alias-label-secondary); }
+.lc-brief-chip { display: inline-flex; align-items: center; gap: 5px; max-width: 260px; min-width: 0; overflow: hidden; font-size: 12px; padding: 0 7px; border-radius: 5px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); color: var(--dsw-alias-label-primary); transition: background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+.lc-brief-chip-grow { flex: 1; max-width: none; }
+.lc-brief-chip-tag { flex: none; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; padding: 0 6px; border-radius: 4px; background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l2); color: var(--dsw-alias-label-secondary); }
+.lc-brief-chip-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lc-brief-chip-link { cursor: pointer; }
+.lc-brief-more { flex: none; font-size: 11px; color: var(--dsw-alias-label-secondary); }
+.lc-detail-row { display: flex; align-items: center; gap: 8px; border-radius: 4px; /* 内边距配相等负外边距：高亮因此画到文字之外，而布局保持不动。 */ padding: 1px 4px; margin: -1px -4px; transition: background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+/* 分类 hover 联动：共享的 hover 会点亮对应的明细行。 */
+.lc-detail-row i { transition: box-shadow var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+.lc-detail-row-on { background: var(--dsw-alias-interactive-bg-hover); }
+.lc-detail-row-on i { box-shadow: 0 0 0 1px var(--dsw-alias-brand-primary); }
+.lc-detail-row-on .lc-detail-label { font-weight: 600; }
+.lc-detail-label { min-width: 70px; white-space: nowrap; color: var(--dsw-alias-label-secondary); }
+.lc-bar-track { flex: 1; height: 5px; border-radius: 3px; background: color-mix(in srgb, var(--color-neutral-500) 18%, transparent); overflow: hidden; display: block; position: relative; }
+.lc-bar-fill { display: block; height: 100%; border-radius: 3px; }
+.lc-bar-zero { position: absolute; left: 50%; top: 0; bottom: 0; border-left: 1px solid color-mix(in srgb, var(--color-neutral-500) 45%, transparent); }
+.lc-bar-fill-up, .lc-bar-fill-down { position: absolute; top: 0; height: 100%; display: block; }
+.lc-bar-fill-up { left: 50%; border-radius: 0 3px 3px 0; }
+.lc-bar-fill-down { right: 50%; border-radius: 3px 0 0 3px; }
+.lc-detail-num { width: 52px; text-align: right; font-variant-numeric: tabular-nums; }
+.lc-detail-num-up { color: var(--dsw-alias-state-success-primary); }
+.lc-detail-num-down { color: var(--dsw-alias-state-error-primary); }
+.lc-detail-pct { width: 34px; text-align: right; color: var(--dsw-alias-label-secondary); }

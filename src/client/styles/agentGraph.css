@@ -1,0 +1,88 @@
+/* Agent 网络图：血缘 chip、绝对定位的卡片画布及其背后的 SVG 连线层，以及 hover 检视器。
+   连线端点由 agentTree.ts 依下方的卡片几何算出，因此 `AGENT_CARD_H` 与 `.lc-agent-card`
+   的高度必须保持一致。 */
+.lc-agents-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.lc-agents-chip { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l1); color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; }
+.lc-agents-chip-on { color: var(--dsw-alias-state-success-primary); border-color: color-mix(in srgb, var(--dsw-alias-state-success-primary) 40%, transparent); }
+/* 与 overscroll.ts 配套：滑过舞台边缘的滑动不得链式触发浏览器的前进后退导航。 */
+.lc-agents-stage { overflow-x: auto; overscroll-behavior-x: contain; margin: 0 -4px; padding: 0 4px; }
+.lc-agents-canvas { position: relative; margin: 0 auto; }
+/* 连线层永不接管指针，接管指针的是它上方的卡片。 */
+.lc-agents-links { position: absolute; inset: 0; pointer-events: none; }
+.lc-agents-link { stroke-opacity: 0.45; transition: stroke-opacity var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+.lc-agents-link-live { stroke-opacity: 0.85; }
+.lc-agents-flow { stroke-linecap: round; stroke-dasharray: 2 7; transition: opacity var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+.lc-agents-joint { opacity: 0.75; transition: opacity var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+/* 血缘聚焦：hover 一张卡片时点亮其祖先链与子树，其余连线退为淡淡的背景。 */
+.lc-agents-focus .lc-agents-link { stroke-opacity: 0.1; }
+.lc-agents-focus .lc-agents-flow { opacity: 0.1; }
+.lc-agents-focus .lc-agents-joint { opacity: 0.12; }
+.lc-agents-focus .lc-agents-on .lc-agents-link { stroke-opacity: 1; }
+.lc-agents-focus .lc-agents-on .lc-agents-flow { opacity: 1; }
+.lc-agents-focus .lc-agents-on .lc-agents-joint { opacity: 1; }
+
+.lc-agent-card {
+  position: absolute;
+  /* 与 agentTree.ts 里的 `AGENT_CARD_H` 镜像：布局必须让连线端点落在卡片边缘上。 */
+  height: 104px;
+  padding: 9px 10px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+    /* 最坏情况的内容（两行标题 + 指标 + 进度条 + 元信息）合计约 103px；多出的那一像素
+     直接裁掉，别让它渗到连线的通道上。 */
+  overflow: hidden;
+  /* 嵌在 `lc-card` 的 layer-1 表面之上：提升一级背景色加 l2 边框（检视器自身用的同一套配方）。 */
+  background: var(--dsw-alias-bg-layer-2);
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 10px;
+  outline: none;
+  transition: border-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out),
+    box-shadow var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out),
+    transform var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out);
+}
+.lc-agent-clickable { cursor: pointer; }
+.lc-agent-card:hover, .lc-agent-card:focus-visible {
+  border-color: var(--dsw-alias-label-tertiary, var(--dsw-alias-border-l2));
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--color-neutral-500) 22%, transparent);
+  transform: translateY(-2px);
+}
+.lc-agent-card:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary, var(--color-blue-500)); outline-offset: 1px; }
+/* 当前会话仅凭品牌色边框自成一体，表面色与其他兄弟卡片相同。 */
+.lc-agent-self {
+  border-color: color-mix(in srgb, var(--dsw-alias-brand-primary, var(--color-blue-500)) 55%, var(--dsw-alias-border-l2));
+}
+.lc-agent-card-head { display: flex; align-items: flex-start; gap: 6px; }
+/* 复用 harness 自带的 StateDot（头部弹窗里的那个小圆点），微调对齐到标题首行。 */
+.lc-agent-state { margin-top: 2px; }
+/* 固定两行标题盒：无论标题是否折行，每张卡片的指标与进度条
+   都落在同一高度。 */
+.lc-agent-label { flex: 1; min-width: 0; height: 30px; font-size: 11.5px; line-height: 1.3; color: var(--dsw-alias-label-primary); overflow-wrap: break-word; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.lc-agent-metric { display: flex; align-items: baseline; gap: 6px; margin-top: 5px; }
+.lc-agent-tokens { font-size: 13px; font-weight: 650; color: var(--dsw-alias-label-primary); font-variant-numeric: tabular-nums; }
+.lc-agent-pct { flex: none; font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
+/* 进度条轨道就是空闲窗口本身；已占用的分段复用共用的生长入场动画。 */
+.lc-agent-bar { display: flex; height: 7px; margin-top: 8px; border-radius: 4px; overflow: hidden; background: color-mix(in srgb, var(--dsw-alias-label-secondary) 16%, transparent); }
+.lc-agent-bar-seg { display: block; height: 100%; transform-origin: 0 50%; }
+/* 活动页脚：左侧是本次运行的时长，右侧是进度条的占用数值。 */
+.lc-agent-meta { display: flex; align-items: baseline; justify-content: space-between; gap: 6px; margin-top: auto; padding-top: 6px; font-size: 10px; line-height: 1.3; color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; }
+.lc-agent-meta-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.lc-agents-solo { padding: 4px 0 10px; }
+.lc-agents-inspector { margin-top: 10px; padding: 7px 10px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; background: var(--dsw-alias-bg-layer-2); font-size: 12px; }
+.lc-agents-inspector-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; min-width: 0; }
+.lc-agents-inspector-name { color: var(--dsw-alias-label-primary); overflow-wrap: anywhere; }
+.lc-agents-badge { flex: none; font-size: 10px; padding: 1px 6px; border-radius: 999px; background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l1); color: var(--dsw-alias-label-secondary); }
+.lc-agents-badge-on { color: var(--dsw-alias-state-success-primary); border-color: color-mix(in srgb, var(--dsw-alias-state-success-primary) 40%, transparent); }
+.lc-agents-inspector-stats { color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lc-agents-inspector-open { margin-left: auto; flex: none; color: var(--dsw-alias-brand-primary, var(--color-blue-500)); }
+/* hover 节点的构成读数：用文字与数字列出进度条各分类的占比。 */
+.lc-agents-inspector-parts { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--dsw-alias-border-l2); font-size: 11px; color: var(--dsw-alias-label-secondary); }
+.lc-agents-part { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.lc-agents-part i { width: 7px; height: 7px; border-radius: 2px; }
+.lc-agents-part em { font-style: normal; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); font-variant-numeric: tabular-nums; }
+.lc-agents-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; font-size: 11px; color: var(--dsw-alias-label-secondary); }
+.lc-agents-legend-item { display: inline-flex; align-items: center; gap: 5px; }
+.lc-agents-legend-item i { width: 8px; height: 8px; border-radius: 2px; }
+.lc-agents-legend-free { background: color-mix(in srgb, var(--dsw-alias-label-secondary) 18%, transparent); }
+.lc-agents-legend-edge { width: 14px !important; height: 0 !important; border-radius: 0 !important; border-top: 2px dashed var(--dsw-alias-label-secondary); }

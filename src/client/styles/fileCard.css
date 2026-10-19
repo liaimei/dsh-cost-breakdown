@@ -1,0 +1,47 @@
+/* 文件活动卡。布局约定：尾部每个事实（形态图标、徽标、增量、时间）
+   都是 `flex: none`，只有路径列可伸缩，因此无论路径多深，
+   事实列都沿列表对齐。 */
+.lc-fa-ctl, .lc-br-toolctl { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; }
+.lc-fa-ctl .lc-gran { margin-left: 0; }
+.lc-fa-n { margin-left: 4px; font-weight: 700; opacity: 0.75; }
+.lc-fa-search, .lc-br-tool-search, .lc-find-input { flex: 1; min-width: 80px; font: inherit; font-size: 12px; color: var(--dsw-alias-label-primary); background: var(--dsw-alias-bg-layer-2); border: 1px solid var(--dsw-alias-border-l2); border-radius: 6px; padding: 3px 8px; outline: none; }
+.lc-fa-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 6px; color: var(--dsw-alias-label-secondary); font-size: 12px; }
+.lc-fa-meta .lc-fa-sort { flex: none; }
+/* 位于滚动列表之外，所以提示气泡永远不会被裁掉。 */
+.lc-fa-meta-delta { position: relative; }
+.lc-fa-meta-tip { top: calc(100% + 6px); left: 0; max-width: 260px; white-space: normal; line-height: 1.5; }
+.lc-fa-item { border: 1px solid transparent; border-radius: 8px; transition: background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out), border-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+.lc-fa-item-on { background: var(--dsw-alias-bg-layer-2); border-color: var(--dsw-alias-border-l2); }
+.lc-fa-row { display: flex; align-items: center; gap: 7px; width: 100%; border: 0; background: transparent; color: var(--dsw-alias-label-primary); font: inherit; font-size: 12px; padding: 6px 8px; cursor: pointer; text-align: left; border-radius: 7px; transition: background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+.lc-fa-form { flex: none; width: 20px; height: 14px; display: flex; align-items: center; justify-content: center; font-size: 11px; opacity: 0.85; }
+.lc-fa-lang { display: inline-flex; align-items: center; justify-content: center; min-width: 16px; height: 13px; padding: 0 2px; border-radius: 4px; font-size: 8px; font-weight: 700; line-height: 1; }
+.lc-fa-row .lc-br-chev { margin-right: -2px; }
+/* 用 `break-all` 而不是常规的省略号：路径的尾段才是有信息量的一端，所以整段折行而不是截成没用的前缀。 */
+.lc-fa-path { min-width: 0; word-break: break-all; }
+.lc-fa-file { cursor: pointer; }
+.lc-fa-path em { font-style: normal; color: var(--dsw-alias-label-secondary); }
+.lc-fa-badge { flex: none; display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; padding: 1px 7px; border-radius: 999px; white-space: nowrap; }
+.lc-fa-badge i { display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+.lc-fa-b-read { color: var(--dsw-alias-brand-primary); background: color-mix(in srgb, var(--dsw-alias-brand-primary) 14%, transparent); }
+.lc-fa-b-write { color: var(--dsw-alias-state-success-primary); background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 14%, transparent); }
+.lc-fa-b-search { color: var(--dsw-alias-state-warn-primary); background: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 14%, transparent); }
+/* 类型 chip 在任何状态下都保留其用途色；只有激活的 chip 再叠一层填充底色。 */
+.lc-fa-chip-read, .lc-fa-chip-read:hover { color: var(--dsw-alias-brand-primary); }
+.lc-fa-chip-write, .lc-fa-chip-write:hover { color: var(--dsw-alias-state-success-primary); }
+.lc-fa-chip-search, .lc-fa-chip-search:hover { color: var(--dsw-alias-state-warn-primary); }
+.lc-fa-chip-read.lc-gran-on, .lc-fa-chip-read.lc-gran-on:hover { background: color-mix(in srgb, var(--dsw-alias-brand-primary) 14%, transparent); color: var(--dsw-alias-brand-primary); }
+.lc-fa-chip-write.lc-gran-on, .lc-fa-chip-write.lc-gran-on:hover { background: color-mix(in srgb, var(--dsw-alias-state-success-primary) 14%, transparent); color: var(--dsw-alias-state-success-primary); }
+.lc-fa-chip-search.lc-gran-on, .lc-fa-chip-search.lc-gran-on:hover { background: color-mix(in srgb, var(--dsw-alias-state-warn-primary) 14%, transparent); color: var(--dsw-alias-state-warn-primary); }
+/* 变大并不总是好事 —— 写得越频繁的文件显示绿色，而变小的显示红色。 */
+.lc-fa-delta { flex: none; display: inline-flex; gap: 5px; font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.lc-fa-up { color: var(--dsw-alias-state-success-primary); }
+.lc-fa-down { color: var(--dsw-alias-state-error-primary); }
+.lc-fa-time { flex: none; color: var(--dsw-alias-label-secondary); font-size: 11px; font-variant-numeric: tabular-nums; }
+/* 展开的单文件操作：左侧竖线是唯一把这段缩进标记为上方行子级的视觉线索。 */
+.lc-fa-ops { margin: 0 8px 8px 15px; padding: 2px 0 2px 10px; border-left: 2px solid var(--dsw-alias-border-l1); display: flex; flex-direction: column; gap: 1px; }
+.lc-fa-op { display: flex; align-items: center; gap: 8px; min-width: 0; border: 0; background: transparent; color: var(--dsw-alias-label-primary); font: inherit; font-size: 11px; padding: 3px 6px; text-align: left; border-radius: 5px; transition: background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+.lc-fa-op-link { cursor: pointer; }
+.lc-fa-op-time { flex: none; margin-left: auto; color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; }
+.lc-fa-op-tool { flex: none; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; padding: 0 6px; border-radius: 999px; background: var(--dsw-alias-bg-layer-1); border: 1px solid var(--dsw-alias-border-l2); color: var(--dsw-alias-label-secondary); }
+.lc-fa-op-detail { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dsw-alias-label-secondary); }
+.lc-fa-read { flex: none; color: var(--dsw-alias-brand-primary); font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }

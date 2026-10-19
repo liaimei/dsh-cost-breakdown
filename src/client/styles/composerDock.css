@@ -1,0 +1,221 @@
+/* 输入区停靠读数：输入框下方常驻的花费行，以及
+   它展开后的明细卡。卡片用 `position: fixed` 逃出输入区自身的溢出裁剪，
+   位置由 composerDock.tsx 依据触发器测量得出。 */
+
+/* 峰时红 / 谷时绿，与费用图表用的是同一套配色。 */
+.lc-dock, .lc-dock-card {
+  --lc-dock-peak: var(--color-red-500, #ef4444);
+  --lc-dock-off: var(--color-green-500, #22c55e);
+  /* 价目表里的**文字**色。同色系不能直接用 500 那一档：
+     那些是给细填充条选的，当成 12px 正文放在浅色底上只有 2.5–3.7:1，读不清。
+     这里与 harness 语义 token 同一思路——按主题取两档：浅色底压暗、暗色底提亮，
+     两种主题都过 4.5:1（正文阈）。 */
+  --lc-rate-hit: color-mix(in srgb, var(--color-teal-500, #14b8a6) 60%, #000);
+  --lc-rate-miss: color-mix(in srgb, var(--color-blue-500, #3b82f6) 60%, #000);
+  --lc-rate-out: color-mix(in srgb, var(--color-pink-500, #ec4899) 60%, #000);
+}
+
+/* 暗色主题：换成提亮的一档（`body[data-ds-dark-theme]` 是 harness 自己的暗色标记）。 */
+body[data-ds-dark-theme] .lc-dock,
+body[data-ds-dark-theme] .lc-dock-card {
+  --lc-rate-hit: color-mix(in srgb, var(--color-teal-500, #14b8a6) 60%, #fff);
+  --lc-rate-miss: color-mix(in srgb, var(--color-blue-500, #3b82f6) 60%, #fff);
+  --lc-rate-out: color-mix(in srgb, var(--color-pink-500, #ec4899) 60%, #fff);
+}
+
+/* 触发器做成无边框按钮，读起来像环境文本而非控件；`white-space: nowrap` 让费用、余额、
+   时段在窄窄的输入区行内保持同一行。
+   尺寸与形状**逐项对齐官方读数胶囊**（`ui-chat/.../StatsPills.module.css` 的
+   `.pill` / `.root`），而不是同一行右边那个 ContextMeter 的 `.trigger`：
+   插件这一行和官方读数胶囊是同一类东西——图标 + 读数 + `·` 分隔的多个值——而
+   `.trigger` 是「环 + 百分比」那种独立控件。官方这两个组件本就不一样：`.pill`
+   是 12px 的整胶囊（`999px` + `corner-shape: round`），`.trigger` 是 13px、8px 圆角。
+   照抄后者会让插件与紧邻的官方读数胶囊并排时**字号大一档、形状方一档**。
+   两者共有的部分照旧一致：同一个 20px 行高、同一个 `padding: 1px 8px`，
+   因此盒子高度同为 22px；悬浮底色同为 `--dsw-alias-interactive-bg-hover`。 */
+.lc-dock {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  box-sizing: border-box;
+  max-width: 100%;
+  border: 0;
+  background: transparent;
+  /* 配色逐项对齐官方同排组件（`StatsPills.module.css` 的 `.pill` 与
+     `ContextMeter.module.css` 的 `.trigger`）：基色 `label-tertiary`、悬浮
+     `label-secondary`，分隔符用官方的 `separator-primary`，且都不加粗。
+     只有峰/谷保留语义红绿——那是这一行唯一要传达的信息。 */
+  color: var(--dsw-alias-label-tertiary);
+  font-family: inherit;
+  /* 官方读数胶囊的字号：`calc(var(--dsh-content-font-size-secondary, 13px) - 1px)`
+     ——在默认的 13px 下即 12px，比旁边 ContextMeter 的 13px 小一档。 */
+  font-size: calc(var(--dsh-content-font-size-secondary, 13px) - 1px);
+  line-height: calc(20px + var(--dsh-content-font-delta-secondary, 0px));
+  font-variant-numeric: tabular-nums;
+  padding: 1px 8px;
+  /* 官方胶囊的圆角：整圆 + 现代 `corner-shape: round`（与 `.pill` 同写法）。
+     旁边 ContextMeter 的 8px 小圆角会把它画成一个圆角矩形，在 22px 的高上明显是方的。 */
+  corner-shape: round;
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out), background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out);
+}
+.lc-dock:hover { color: var(--dsw-alias-label-secondary); background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); }
+/* 官方 `.pill` 把图标钉死在 14×14（`.pill svg{flex:none;width:14px;height:14px}`），
+   不让 flex 把它压扁：本行在窄处会先切读数、后切图标，图标尺寸必须与官方一致。 */
+.lc-dock > svg { flex: none; width: 14px; height: 14px; }
+/* 数字用 `tabular-nums`，一轮对话流式输出时读数不会抖动。
+   费用与余额都继承官方的 tertiary——官方 pill 里的读数同样不加粗、不提亮。 */
+.lc-dock-cost { color: inherit; font-weight: inherit; font-variant-numeric: tabular-nums; }
+.lc-dock-balance { color: inherit; font-variant-numeric: tabular-nums; }
+/* 分隔符：官方把它写成 `.sep{margin:0 6px}`，与官方渲染量到的两侧各约 6px 吻合。
+   这里 `·` 的间距由两处 6px 的 flex 间距给出——外侧 `.lc-dock{gap:6px}` 管它的左边，
+   平台段内 `.lc-dock-platform{gap:6px}` 管它的右边——因此两边同样对称，不再另加外边距。 */
+.lc-dock-sep { color: var(--dsw-alias-separator-primary, var(--dsw-alias-label-tertiary)); }
+/* 绿色表示谷时（此刻更便宜）；`data-peak` 属性无需换类即可把它翻成红色。
+   峰/谷是这一行唯一保留语义色的地方，其余一律走官方灰阶。 */
+.lc-dock-period { color: var(--lc-dock-off); }
+.lc-dock[data-peak='1'] .lc-dock-period { color: var(--lc-dock-peak); }
+
+/* 展开卡对齐 harness **官方弹出面板**的规格（源码
+   `packages/client/ui-chat/src/client/chat/stat-dialog.module.css` 的 `.panel`，
+   也就是点状态栏那枚「48.6M tok · 缓存命中 97%」浮出来的「Token 用量」面板）：
+   同一层 `--dsw-specific-menu`、同一个 16px 圆角、同一道 0.5px 发丝描边 + prominent 阴影、
+   同一个 z-index 1100，内边距 16px、正文 12px/18px。
+   这样它与会话底部那个官方弹窗读作同一层，而不是「插件自己的小面板」。
+   `overflow-x: hidden` 必须显式写出：只给 `overflow-y: auto` 时，按 CSS 规范
+   另一轴的 `visible` 会计算成 `auto`，于是一旦有横向溢出就冒出左右滚动条。
+   宽度与高度**有意不同**：官方那块只列 5 行 token 明细，本卡要装两张统计卡
+   加一张价目表，沿用内容定宽（`max-content`）与自己的上下限。 */
+.lc-dock-card {
+  position: fixed;
+  z-index: 1100;
+  box-sizing: border-box;
+  overflow-x: hidden;
+  overflow-y: auto;
+  /* 纵向滚动条出现时不再挤压内容：否则三块宽度会随滚动条有无而跳一下，
+     右列数值也可能被压到换行。 */
+  scrollbar-gutter: stable;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  /* 宽度**必须定宽**：卡内几乎每个块都是百分比宽度（`.lc-dock-cards > .lc-card`
+     的 `width:100%`、`width:100%` 的表格、`.lc-sl` 的 auto-fill 网格），而百分比子项
+     不贡献内在宽度——按内容定宽在这里不会撑开，只会一路塌到 `min-width` 那个下限
+     （实测约 250px），整张卡被压扁：图例折成两行、价目表的模型名被截断。
+     440px 与官方 stat-dialog 的 `max-width: min(440px, …)` 同值，也是实测「7 行图例
+     与 4 列价目表都不折行、模型名不截断」的最小宽度（再窄到 420px 就开始截断）。
+     窄视口仍夹进 `100vw - 24px`；横向位置由 JS 量出实际宽度后再夹取（见 dockPlacement.ts）。 */
+  width: min(440px, calc(100vw - 24px));
+  min-width: 264px;
+  max-width: min(560px, calc(100vw - 24px));
+  /* 内边距逐字对齐官方 stat-dialog 的 `.panel`：16px。 */
+  padding: 16px;
+  background: var(--dsw-specific-menu, var(--dsw-alias-bg-layer-2));
+  backdrop-filter: var(--dsw-menu-backdrop-filter, none);
+  border-radius: var(--dsw-radius-lg, 16px);
+  --dsw-elevation-stroke-color: var(--dsw-alias-border-l1);
+  box-shadow: var(--dsw-elevation-prominent, 0 3px 8px rgba(0, 0, 0, 0.08), 0 0 20px rgba(0, 0, 0, 0.05));
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+/* 标题行对齐官方 `.title`：`label-primary`、两端对齐、`gap: 16px`、
+   标题下方 8px 留白、字重 500，字号继承面板的 12px（官方 `.title` 不另设字号）。 */
+.lc-dock-head { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; margin-bottom: 8px; }
+/* 官方面板的标题是 label-primary、正文是 label-secondary，所以标题要显式提亮。 */
+.lc-dock-head-title { font-weight: 500; color: var(--dsw-alias-label-primary); }
+/* 标题下的发丝分割线，对齐官方 `.titleRule`：0.5px、`border-l2`，线后 10px 留白。
+   它把标题与明细分开，正是官方那块面板的读法。 */
+.lc-dock-head-rule { flex: none; border-top: 0.5px solid var(--dsw-alias-border-l2); margin: 0 0 10px; }
+/* 峰谷窗口 + 倒计时这一行：左边是「峰时是哪几段」，右边是「还有多久翻转」。
+   右侧用 tertiary，因为它是说明而非读数。 */
+.lc-dock-period-row { display: flex; align-items: baseline; gap: 8px; font-size: 11px; color: var(--dsw-alias-label-tertiary); }
+.lc-dock-period-windows { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lc-dock-period-eta { margin-left: auto; flex: none; font-variant-numeric: tabular-nums; }
+.lc-dock-badge { margin-left: auto; font-size: 11px; padding: 1px 8px; border-radius: 999px; color: var(--lc-dock-off); background: color-mix(in srgb, var(--lc-dock-off) 14%, transparent); }
+.lc-dock-badge-peak { color: var(--lc-dock-peak); background: color-mix(in srgb, var(--lc-dock-peak) 14%, transparent); }
+
+/* 明细卡里嵌的是统计页那两张卡本身（Token 统计 / 费用统计），所以这里只负责
+   把它们的页内写法归零：`flex-1` 与 `min-w-[min(360px,100%)]` 是给页面横向排布
+   准备的，在浮层里要改成整宽堆叠。
+   `box-sizing: border-box` 是**必须**的：基础 `.lc-card` 规则只声明在 `.lc-root`
+   之下，浮层里没有那个祖先，于是卡片退回 content-box，`width: 100%` 再加上
+   12px 内边距与 1px 描边就横向溢出 26px——右列数值被 `overflow-x: hidden` 切掉，
+   同时逼出一条纵向滚动条。三块（两张卡 + 价目表）因此宽度不齐。 */
+.lc-dock-cards { display: flex; flex-direction: column; gap: 8px; }
+.lc-dock-cards > .lc-card {
+  flex: none;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  margin-bottom: 0;
+  padding: 10px 12px;
+}
+/* 环形图与图例：卡片够宽时并排（与统计页一致），不够时图例整行折到环图下方。
+   `flex-wrap` 必须在这里显式给出——复用卡自己的 `flex-wrap` 挂在容器查询上，
+   而浮层里没有那个查询容器。 */
+.lc-dock-cards .lc-donut-row { flex-wrap: wrap; }
+
+/* 价目表也做成一张与上面两张卡同规格的分区：同样的 `border-box`、同样的
+   10/12 内边距、同样的 10px 圆角，宽度因此三者对齐（先前它比复用卡窄 26px，
+   看起来像被切掉一截）。底色仍用 layer-1——浮层底色已是 `--dsw-specific-menu`，
+   用卡片层才不会与浮层糊在一起。 */
+.lc-dock-card-block {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  background: var(--dsw-alias-bg-layer-1);
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.lc-dock-block-title { display: flex; align-items: baseline; gap: 8px; font-size: 11px; color: var(--dsw-alias-label-secondary); }
+
+.lc-dock-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.lc-dock-table th { font-weight: 400; font-size: 11px; color: var(--dsw-alias-label-secondary); text-align: right; padding: 2px 0; }
+.lc-dock-table th:first-child { text-align: left; }
+.lc-dock-table td { text-align: right; padding: 2px 0; color: var(--dsw-alias-label-secondary); }
+.lc-dock-table td:first-child { text-align: left; color: var(--dsw-alias-label-primary); }
+/* 价目表的费率按列取色，与上方 token 分桶一一对应：缓存输入=青、未缓存输入=蓝、输出=粉。
+   于是「表里哪一列贵」和「用量花在哪个桶」用同一种颜色说话，不必回看上方的条。 */
+.lc-dock-rate-hit { color: var(--lc-rate-hit); }
+.lc-dock-rate-miss { color: var(--lc-rate-miss); }
+.lc-dock-rate-out { color: var(--lc-rate-out); }
+.lc-dock-note { color: var(--dsw-alias-label-tertiary); font-size: 11px; line-height: 1.5; }
+
+/* 状态栏里的每个平台一小段：平台名 + 本次消耗 + 剩余额度。
+   积分与金额用同一档灰——两者都是读数，没有一个更该抢眼。
+   `gap: 6px` 与官方 `.pill{gap:6px}` 一致；官方把 `·` 的间距写成 `.sep{margin:0 6px}`，
+   这里换用同一个 6px 的 flex 间距，读到的节奏完全相同。 */
+.lc-dock-platform { display: inline-flex; align-items: center; gap: 6px; }
+.lc-dock-platform-name { color: var(--dsw-alias-label-tertiary); }
+.lc-dock-spend { color: inherit; font-variant-numeric: tabular-nums; }
+.lc-dock-left { color: var(--dsw-alias-label-tertiary); font-variant-numeric: tabular-nums; }
+
+/* 量宽探针：始终按完整读数排版，好让「够不够宽」的判据量到真正需要多宽，
+   而不管这一行当前显示的是完整读数还是只有一个图标——判据靠它才不自激。
+   它必须复刻可见那一行的**盒子度量**：同样 14px 的图标、同样 `gap: 6px`、
+   同样 `padding: 1px 8px`，否则量到的只是文字宽度，会少算约 36px。
+   移出可视区且不参与排布，因此看不见也不撑宽这一行。 */
+.lc-dock-probe {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  visibility: hidden;
+  pointer-events: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 1px 8px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.lc-dock-probe > svg { flex: none; width: 14px; height: 14px; }
+/* 探针是绝对定位的，需要这一行当它的包含块。 */
+.lc-dock { position: relative; }
+/* 只有图标时也要有可点的面积：图标本身 14px，给一点内边距让它好点。 */
+.lc-dock-narrow { padding: 1px 6px; }

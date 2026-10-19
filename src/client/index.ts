@@ -10,7 +10,32 @@
  * sheets win at equal specificity, so the order is part of the styling contract.
  */
 
+// Import order **is** the cascade order at equal specificity: the Tailwind utility sheet first (it is
+// unlayered, so it must lose to everything below), then the shared scaffolding, then each surface's own
+// sheet. Later sheets win.
+import './styles/tailwind.css'
 import './styles/base.css'
+import './styles/stats.css'
+import './styles/statsCost.css'
+import './styles/jump.css'
+import './styles/settings.css'
+import './styles/stackedBar.css'
+import './styles/trendChart.css'
+import './styles/requestDetail.css'
+import './styles/events.css'
+import './styles/fileCard.css'
+import './styles/modal.css'
+import './styles/browser.css'
+import './styles/detailSections.css'
+import './styles/attachments.css'
+import './styles/agentGraph.css'
+import './styles/overview.css'
+import './styles/dateRange.css'
+import './styles/spend.css'
+import './styles/composerDock.css'
+
+// The rewritten surfaces' own sheets load after the ported ones, so where both describe the same element the
+// current markup wins while every value it inherits is the shipped one.
 import './styles/context.css'
 import './styles/dock.css'
 import './styles/insights.css'

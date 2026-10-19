@@ -344,12 +344,12 @@ function DockCard(props: {
         : { left: anchor.left, top: anchor.top, width: anchor.width, maxHeight: anchor.maxHeight }}
     >
       <div className="cb-dock-head">
-        <span>{t('dock.title')}</span>
+        <span className="cb-dock-head-title">{t('dock.title')}</span>
         <span className={`cb-dock-badge${period.peak ? ' cb-dock-badge-peak' : ''}`}>{periodLabel}</span>
       </div>
       <div className="cb-dock-head-rule" />
       <div className="cb-dock-period-row">
-        <span>{t('dock.peakWindows', { windows: props.windows })}</span>
+        <span className="cb-dock-period-windows">{t('dock.peakWindows', { windows: props.windows })}</span>
         <span className="cb-dock-period-eta">
           {period.dayOff === 'weekend' ? t('dock.weekendOff') : null}
           {period.dayOff === 'holiday' ? t('dock.holidayOff') : null}
