@@ -146,7 +146,7 @@ function fakeClientContext(dictionaries: string[], slots: string[], commands: nu
 }
 
 describe('host artifact loads and assembles', () => {
-  it('registers the three projections and five routes', async () => {
+  it('registers the three projections and seven routes', async () => {
     const module = await import(pathToFileURL(join(root, 'lib/index.js')).href) as {
       apply(ctx: unknown, config: unknown): void
       name: string
@@ -167,6 +167,8 @@ describe('host artifact loads and assembles', () => {
       '/api/dsh-cost-breakdown/balance',
       '/api/dsh-cost-breakdown/credits',
       '/api/dsh-cost-breakdown/detail',
+      '/api/dsh-cost-breakdown/plan-quota',
+      '/api/dsh-cost-breakdown/relay-prices',
       '/api/dsh-cost-breakdown/skills',
     ])
     expect(routes.every(route => route.methods.length === 1 && route.methods[0] === 'POST')).toBe(true)

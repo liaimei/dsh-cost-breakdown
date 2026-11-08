@@ -1,6 +1,6 @@
 {
   "meta": {
-    "title": "Usage & Cost",
-    "description": "Token usage and cost: each platform is billed in its own unit (CNY / USD / credits), with per-model spend and call counts inside each card. The official CNY table covers peak/off-peak windows and Chinese public holidays; the context dashboard, browser and /context command are kept."
+    "title": "Summary",
+    "description": "Token usage and cost: each platform is billed in its own unit (CNY / USD / credits), with per-model spend and call counts inside each card. The official CNY table covers peak/off-peak windows and Chinese public holidays; relay price lists and subscription-plan quotas are supported too. The context dashboard, browser and /context command are kept."
   }
 }

@@ -10,7 +10,7 @@
  */
 
 import type {
-  DeltaBase, DurationCurve, FileSort, Granularity, InsightsEntry, Placement, Preferences, PreferenceKey,
+  DurationCurve, FileSort, Granularity, InsightsEntry, Placement, Preferences, PreferenceKey,
   ToolSort, TrendMode,
 } from '../../wire/model'
 
@@ -46,11 +46,11 @@ const DEFAULTS: Omit<PreferencesState, 'status' | 'writable'> = {
   defaultPlacement: 'all',
   defaultGranularity: 'step',
   defaultTrendMode: 'total',
-  defaultDeltaBase: 'step',
   defaultToolSort: 'count',
   defaultFileSort: 'count',
   insightsEntry: 'show',
   defaultDurationCurve: 'show',
+  defaultPlanTier: 0,
 }
 
 type PartialPrefs = Partial<Preferences>
@@ -67,8 +67,6 @@ function prefsOf(value: unknown): PartialPrefs {
   if (granularity === 'step' || granularity === 'turn') out.defaultGranularity = granularity
   const mode = raw.defaultTrendMode
   if (mode === 'total' || mode === 'delta') out.defaultTrendMode = mode
-  const deltaBase = raw.defaultDeltaBase
-  if (deltaBase === 'step' || deltaBase === 'turn') out.defaultDeltaBase = deltaBase
   const toolSort = raw.defaultToolSort
   if (toolSort === 'size' || toolSort === 'count' || toolSort === 'name') out.defaultToolSort = toolSort
   const fileSort = raw.defaultFileSort
@@ -77,6 +75,10 @@ function prefsOf(value: unknown): PartialPrefs {
   if (insights === 'show' || insights === 'hide') out.insightsEntry = insights
   const curve = raw.defaultDurationCurve
   if (curve === 'show' || curve === 'hide') out.defaultDurationCurve = curve
+  const planTier = raw.defaultPlanTier
+  if (typeof planTier === 'number' && Number.isFinite(planTier) && planTier >= 0) {
+    out.defaultPlanTier = Math.floor(planTier)
+  }
   return out
 }
 
@@ -88,7 +90,7 @@ export interface PreferencesStore {
   /** Bind the host scope. Returns the scope subscription's disposer. */
   attach(scope: SettingsScope): () => void
   /** Persist one preference. Echoes locally first so the card reacts immediately. */
-  set(field: PreferenceKey, value: string): void
+  set(field: PreferenceKey, value: unknown): void
 }
 
 /** Build the store at its schema defaults (no host scope yet). */
@@ -124,11 +126,11 @@ export function createPreferencesStore(): PreferencesStore {
       defaultPlacement: prefs.defaultPlacement ?? (raw?.defaultPlacement === undefined ? state.defaultPlacement : 'all'),
       defaultGranularity: prefs.defaultGranularity ?? state.defaultGranularity,
       defaultTrendMode: prefs.defaultTrendMode ?? state.defaultTrendMode,
-      defaultDeltaBase: prefs.defaultDeltaBase ?? state.defaultDeltaBase,
       defaultToolSort: prefs.defaultToolSort ?? state.defaultToolSort,
       defaultFileSort: prefs.defaultFileSort ?? state.defaultFileSort,
       insightsEntry: prefs.insightsEntry ?? (raw?.insightsEntry === undefined ? state.insightsEntry : 'show'),
       defaultDurationCurve: prefs.defaultDurationCurve ?? (raw?.defaultDurationCurve === undefined ? state.defaultDurationCurve : 'show'),
+      defaultPlanTier: prefs.defaultPlanTier ?? (raw?.defaultPlanTier === undefined ? state.defaultPlanTier : 0),
       writable: snapshot.writable,
     })
     return { defaultPlacement: prefs.defaultPlacement, insightsEntry: prefs.insightsEntry }
@@ -173,4 +175,4 @@ export function createPreferencesStore(): PreferencesStore {
 }
 
 /** Narrow the vocabulary types the settings card needs when it builds its field table. */
-export type { DeltaBase, DurationCurve, FileSort, Granularity, InsightsEntry, Placement, ToolSort, TrendMode }
+export type { DurationCurve, FileSort, Granularity, InsightsEntry, Placement, ToolSort, TrendMode }

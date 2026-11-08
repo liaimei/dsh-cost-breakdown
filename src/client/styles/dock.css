@@ -42,14 +42,16 @@ body[data-ds-dark-theme] .cb-dock-card {
   line-height: calc(20px + var(--dsh-content-font-delta-secondary, 0px));
   font-variant-numeric: tabular-nums;
   padding: 1px 8px;
-  corner-shape: round;
-  border-radius: 999px;
+  /* The official composer pills use `--dsw-radius-sm` on a plain box, not a capsule: matching them
+   * exactly is what makes this entry read as one of the harness's own stats. */
+  border-radius: var(--dsw-radius-sm, 6px);
   cursor: pointer;
   white-space: nowrap;
   transition: color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out),
     background-color var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out);
 }
-.cb-dock:hover {
+.cb-dock:hover,
+.cb-dock[aria-expanded='true'] {
   color: var(--dsw-alias-label-secondary);
   background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2));
 }
@@ -67,6 +69,14 @@ body[data-ds-dark-theme] .cb-dock-card {
 /* Each platform's segment: name, this session's spend, the remaining quota. Credits and money share one grey
  * tone — both are readouts, neither should shout. */
 .cb-dock-platform { display: inline-flex; align-items: center; gap: 6px; }
+/* A platform's stable tint, 7px like the composition legend's own dots. It is a square-with-radius,
+ * not a circle, to match the rest of this plugin's colour keys. */
+.cb-dock-platform-dot { flex: none; width: 7px; height: 7px; border-radius: 2px; display: inline-block; }
+.cb-dock-block-dot { flex: none; width: 7px; height: 7px; border-radius: 2px; display: inline-block; }
+/* The block title gains a trailing scope label: the dot alone would be ambiguous when two platforms
+ * exist, so the title says which one this block priced. */
+.cb-dock-block-title { display: flex; align-items: center; gap: 6px; }
+.cb-dock-block-scope { color: var(--dsw-alias-label-tertiary); font-weight: 400; margin-left: auto; }
 .cb-dock-platform-name { color: var(--dsw-alias-label-tertiary); }
 .cb-dock-spend { color: inherit; font-variant-numeric: tabular-nums; }
 .cb-dock-left { color: var(--dsw-alias-label-tertiary); font-variant-numeric: tabular-nums; }
@@ -113,12 +123,18 @@ body[data-ds-dark-theme] .cb-dock-card {
   /* A fixed width is load-bearing: nearly every block inside is a percentage width (`.cb-dock-cards >
    * .cb-card` is `width:100%`, so is the table, and `.cb-ov-sl` is an auto-fill grid), and percentage
    * children contribute no intrinsic width — sizing to content would collapse the card to its floor and
-   * squash it (the legend folds onto two lines, the rate table's model names truncate). 440px matches the
-   * official dialog's `max-width` and is the narrowest width at which the seven-row legend and the
-   * four-column rate table both stop wrapping. */
-  width: min(440px, calc(100vw - 24px));
-  min-width: 264px;
-  max-width: min(560px, calc(100vw - 24px));
+   * squash it (the legend folds onto two lines, the rate table's model names truncate).
+   *
+   * 560px is wider than the official stat dialog on purpose: this card carries three blocks the official
+   * one does not (the token ring with a two-column legend, the official rate table, and the plan quota
+   * bars), and at 440px the legend and the table both wrapped. 560px is the width at which all three
+   * stop wrapping, still inside the official dialog's own 440px→560px ceiling band. */
+  width: min(560px, calc(100vw - 24px));
+  /* 440px floor: narrower than this and the two-column legend and the four-column rate table both
+   * begin to truncate. Still clamped by the viewport, so a genuinely tiny window gets a card that
+   * fits rather than one that overflows the edge. */
+  min-width: min(440px, calc(100vw - 24px));
+  max-width: min(720px, calc(100vw - 24px));
   padding: 16px;
   background: var(--dsw-specific-menu, var(--dsw-alias-bg-layer-2));
   backdrop-filter: var(--dsw-menu-backdrop-filter, none);
@@ -128,6 +144,9 @@ body[data-ds-dark-theme] .cb-dock-card {
   color: var(--dsw-alias-label-secondary);
   font-size: 12px;
   line-height: 18px;
+  /* The card is its own inline-size container so its blocks can reflow on the width they really get
+   * (the placement clamps it to the viewport), not on the width it asked for. */
+  container: cb-dock-card / inline-size;
 }
 /* The title row matches the official `.title`: label-primary, space-between, a 16px gap, 8px below it,
  * weight 500, size inherited from the panel. */
@@ -184,11 +203,51 @@ body[data-ds-dark-theme] .cb-dock-card {
 .cb-dock-token-total { display: flex; align-items: baseline; gap: 8px; }
 .cb-dock-figure { font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .cb-dock-sub { color: var(--dsw-alias-label-tertiary); font-size: 11px; }
-.cb-dock-token-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 4px 10px; margin-top: 6px; }
-.cb-dock-token-cell { display: flex; justify-content: space-between; font-size: 11px; }
-.cb-dock-cell-label { color: var(--dsw-alias-label-secondary); }
-.cb-dock-cell-value { font-variant-numeric: tabular-nums; }
+/* The token block reads like the statistics page's own composition card: the ring on the left, the
+ * legend on the right, two legend columns when there is room. `minmax(0, 1fr)` on both sides is what
+ * lets the legend's ellipsis work instead of forcing the ring narrow. */
+.cb-dock-donut-row { display: flex; align-items: flex-start; gap: 14px; margin-top: 6px; min-width: 0; }
+.cb-dock-donut-row > .cb-ov-donut { flex: none; }
+.cb-dock-donut-row > .cb-ov-sl {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px 14px;
+}
+/* One column when the card cannot hold two: the dock card is 440px by default but may be clamped by
+ * the viewport, and a two-column legend at 300px would truncate every label. */
+@container cb-dock-card (max-width: 420px) {
+  .cb-dock-donut-row { flex-wrap: wrap; justify-content: center; }
+  .cb-dock-donut-row > .cb-ov-sl { grid-template-columns: minmax(0, 1fr); }
+}
+.cb-dock-donut-row .cb-ov-sl-row { padding: 1px 4px; margin: 0 -4px; }
+.cb-dock-donut-row .cb-ov-sl-pct { color: var(--dsw-alias-label-primary); font-weight: 600; }
+.cb-dock-donut-row .cb-ov-sl-sub { padding-left: 14px; }
+.cb-dock-tokens-note { margin-top: 6px; }
 .cb-dock-empty { color: var(--dsw-alias-label-tertiary); }
 .cb-dock-platforms { display: flex; flex-direction: column; gap: 4px; }
 .cb-dock-platform-line { display: flex; gap: 8px; align-items: baseline; font-size: 11px; }
 .cb-dock-platform-line .cb-dock-spend { margin-left: auto; }
+
+/* The plan block inside the card: the vendor's quota windows as slim bars, so "how much is left"
+ * reads at a glance instead of needing the two numbers compared by eye. */
+.cb-dock-plan { display: flex; flex-direction: column; gap: 6px; }
+.cb-dock-plan-head { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.cb-dock-plan-name { color: var(--dsw-alias-label-primary); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cb-dock-plan-tier { flex: none; padding: 0 6px; border-radius: var(--dsw-radius-sm, 6px); color: var(--dsw-alias-brand-primary); background: color-mix(in srgb, var(--dsw-alias-brand-primary) 14%, transparent); }
+.cb-dock-plan-windows { display: flex; flex-direction: column; gap: 4px; }
+.cb-dock-plan-window { display: grid; grid-template-columns: minmax(48px, auto) minmax(0, 1fr) auto; align-items: center; gap: 8px; }
+.cb-dock-plan-window-label { color: var(--dsw-alias-label-tertiary); white-space: nowrap; }
+.cb-dock-plan-bar { display: block; height: 6px; border-radius: 3px; background: var(--dsw-alias-bg-layer-2); overflow: hidden; }
+.cb-dock-plan-bar-fill { display: block; height: 100%; border-radius: 3px; background: var(--dsw-alias-brand-primary); transition: width var(--ds-transition-duration, 0.2s) var(--ds-ease-in-out, ease-in-out); }
+.cb-dock-plan-window-value { color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cb-dock-plan-fresh { color: var(--dsw-alias-label-tertiary); font-size: 11px; }
+.cb-dock-plan-unreadable { color: var(--dsw-alias-label-tertiary); }
+.cb-dock-plan-quota { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--dsw-alias-label-tertiary); font-variant-numeric: tabular-nums; }
+.cb-dock-plan-src { color: var(--dsw-alias-label-tertiary); font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cb-dock-plan-src a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+/* The row of the model actually in force: the table lists every official model, and the reader needs
+ * to find their own without reading all of them. */
+.cb-dock-row-active td { color: var(--dsw-alias-label-primary); font-weight: 500; }
+.cb-dock-row-active td:first-child::before { content: '● '; color: var(--dsw-alias-brand-primary); }

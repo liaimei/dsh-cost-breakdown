@@ -170,6 +170,7 @@ button.cb-ov-heat-cell:hover { box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--
 
 /* Platform spend cards: one per platform, each in its own unit. */
 .cb-ov-platform-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; }
+.cb-ov-platform-row > .cb-ov-pf-card { flex: 1 1 min(340px, 100%); max-width: 100%; min-width: min(300px, 100%); container: cb-card / inline-size; box-sizing: border-box; }
 .cb-ov-platform { display: flex; flex-direction: column; gap: 6px; }
 .cb-ov-platform-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .cb-ov-platform-name { font-weight: 600; }
@@ -264,7 +265,6 @@ button.cb-ov-heat-cell:hover { box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--
 /* The legend rows: label, share on one line; the second line carries the count. */
 .cb-ov-sl { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; }
 .cb-ov-sl-row { display: flex; flex-direction: column; gap: 0; border-radius: 4px; padding: 1px 3px; cursor: default; }
-.cb-ov-sl-row-on { background: var(--dsw-alias-bg-layer-2); }
 .cb-ov-sl-main { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
 .cb-ov-sl-dot { width: 8px; height: 8px; border-radius: 2px; flex: none; align-self: center; }
 .cb-ov-sl-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -364,7 +364,8 @@ button.cb-ov-heat-cell:hover { box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--
 .cb-ov-usage-swatch { flex: none; width: 10px; height: 8px; border-radius: 2px; }
 .cb-ov-usage-key-label { font-size: 9px; color: var(--dsw-alias-label-secondary); }
 /* The pair of wide cards folds to one column below 932px, where the seven day groups would otherwise crush. */
-.cb-ov-first { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 10px; }
+.cb-ov-first { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; margin-bottom: 10px; }
+.cb-ov-first > .cb-card { margin-bottom: 0; }
 @container cb-ov (max-width: 932px) { .cb-ov-first { grid-template-columns: minmax(0, 1fr); } }
 @container cb-ov (max-width: 640px) { .cb-ov-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
@@ -376,7 +377,9 @@ button.cb-ov-heat-cell:hover { box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--
 .cb-ov-spend-title { font-size: 15px; font-weight: 600; }
 .cb-ov-spend-sub { color: var(--dsw-alias-label-secondary); font-size: 12px; }
 .cb-ov-platform-row { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px; margin-bottom: 10px; }
-.cb-ov-platform-row > .cb-ov-pf-card { flex: auto; min-width: min(240px, 100%); container: cb-card / inline-size; }
+/* One card per platform in a responsive grid: cards fill their column, so a single platform no
+ * longer stretches edge-to-edge and three sit three-up (two-up, then one, as the column narrows). */
+.cb-ov-platform-row > .cb-ov-pf-card { flex: 1 1 min(340px, 100%); max-width: 100%; min-width: min(300px, 100%); container: cb-card / inline-size; box-sizing: border-box; }
 .cb-ov-pf-card { display: flex; flex-direction: column; min-width: 0; }
 /* The ring and its legend sit side by side in a wide card and stack in a narrow one, and the card's height is
  * its content's: without these the empty space below the legend pushed the model table off the card. */
@@ -446,6 +449,21 @@ button.cb-ov-heat-cell:hover { box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--
 .cb-ov-sc-period b { color: var(--dsw-alias-label-primary); font-variant-numeric: tabular-nums; }
 .cb-ov-sc-period em { font-style: normal; color: var(--dsw-alias-label-tertiary); font-variant-numeric: tabular-nums; }
 .cb-ov-sc-period-dim { opacity: 0.55; }
+/* --- subscription plan block (a plan-billed platform card) ----------------
+ * A subscription's real figure is quota consumed, so this block sits between the model table and the
+ * call totals and speaks in the plan's own unit. It is visually separated from the money cells: the
+ * two must never be read as one number. */
+.cb-ov-plan { margin-top: 8px; padding: 8px 9px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; background: var(--dsw-alias-bg-layer-1); display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.cb-ov-plan-head { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.cb-ov-plan-name { font-size: 12px; font-weight: 600; color: var(--dsw-alias-label-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cb-ov-plan-tier { flex: none; font-size: 11px; padding: 0 6px; border-radius: 4px; color: var(--dsw-alias-brand-primary); background: color-mix(in srgb, var(--dsw-alias-brand-primary) 14%, transparent); }
+.cb-ov-plan .cb-ov-sc-periods { margin-top: 0; padding-top: 0; border-top: 0; }
+.cb-ov-plan-note { font-size: 11px; color: var(--dsw-alias-label-tertiary); display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; min-width: 0; }
+.cb-ov-plan-note b { color: var(--dsw-alias-label-primary); font-variant-numeric: tabular-nums; }
+.cb-ov-plan-saving { color: var(--dsw-alias-state-success-primary); font-variant-numeric: tabular-nums; }
+.cb-ov-pf-relay-note { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--dsw-alias-border-l1); font-size: 11px; line-height: 16px; color: var(--dsw-alias-label-tertiary); }
+.cb-ov-plan-src { font-size: 10px; color: var(--dsw-alias-label-tertiary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cb-ov-plan-src a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
 /* The ring card inside a platform card: it stacks its ring above its table. */
 .cb-ov-card-donut { display: flex; flex-direction: column; }
 .cb-ov-card-donut .cb-donut-row { flex: 1; }

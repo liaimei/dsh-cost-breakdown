@@ -33,6 +33,13 @@ ledgers only** and never converts to a currency.
   never to "no holidays", which would bill every holiday at the peak rate and silently double those days.
 - **Per-platform, never summed**: CNY for DeepSeek, USD for third parties, credits for credit platforms.
   A model with no rate is labelled "no rate configured", never rendered as ¥0.
+- **Relay price lists**: relay routes such as `woyao` resell other vendors, so the public registry cannot
+  price them; the plugin reads the relay's own published list (USD per million tokens) while a user-declared
+  rate still wins per model.
+- **Subscriptions are quota, not money**: GLM Coding Plan, MiniMax M Plan, Kimi Code Plan, Alibaba Cloud
+  Token Plan and Xiaomi MiMo Token Plan (plus the Z.AI international GLM plan) bill in quota credits and are
+  never added to metered spend. Live remaining quota is shown when the vendor's usage API answers, and
+  labelled "quota unavailable" when it does not — never 0.
 - **Balance**: account login first, API key second; unreadable means nothing is shown — no guessing, no stale
   numbers.
 
@@ -50,13 +57,33 @@ scripts for git dependencies (`ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED`). Build exp
 Restart DSH after installing (the host half assembles at boot). The composer-row readout, the left-sidebar
 Statistics entry and the conversation Context tab then appear.
 
+Compatibility: verified against DSH **0.2.2-rc.1** (cordis 4.1); `dsh.compatibility.dshReleases` declares
+support from `0.1.7-rc.2`, and an older host takes the degraded path (zeroes plus an upgrade notice) instead
+of failing to load.
+
 ## Configuration
 
-Settings → Plugins → "Usage & Cost". Everything lives under the loader row id namespace
+Settings → Plugins → "Summary". Everything lives under the loader row id namespace
 `cost-breakdown`: retention bounds (`maxRequestSteps`, `maxKeptTurns`, `maxEvents`, `maxNodes`,
 `maxArchiveNodes`, `maxFileOps`), the `holidays` calendar, and the display preferences
-(`defaultPlacement`, `defaultGranularity`, `defaultTrendMode`, `defaultDeltaBase`, `defaultToolSort`,
-`defaultFileSort`, `insightsEntry`, `defaultDurationCurve`).
+(`defaultPlacement`, `defaultGranularity`, `defaultTrendMode`, `defaultToolSort`, `defaultFileSort`,
+`insightsEntry`, `defaultDurationCurve`, `defaultPlanTier`).
+
+`thirdPartyRates` and `creditRates` are hand-declared rate tables, currently edited only in
+`cordis.patch.yml` (there is no settings editor for them yet). Keys are flat `<provider>:<model>`:
+
+```yaml
+- id: cost-breakdown
+  name: dsh-cost-breakdown
+  config:
+    thirdPartyRates:
+      'woyao-pro-2:gpt-5': { input: 1, output: 4, cacheRead: 0.5 }
+    creditRates:
+      'workbuddy:glm-5.3': 2
+```
+
+The browser half re-validates both tables entry by entry, so one malformed rate is dropped instead of
+failing the whole row.
 
 ## Development
 
@@ -70,9 +97,9 @@ pnpm test           # vitest: core / wire / host / client / bundle
 | Directory | Contents |
 |---|---|
 | `src/wire/` | Wire contract: types, zod schemas, projection-key augmentation |
-| `src/core/` | Shared pure maths: Beijing calendar and peak windows, official rates, token estimation, file-op derivation, ledger |
-| `src/host/` | The Cordis plugin: fold engine, three projection units, HTTP channels, platform adapters, settings schema |
-| `src/client/` | Browser half: shell adapters, data layer, i18n, UI surfaces |
+| `src/core/` | Shared pure maths: Beijing calendar and peak windows, official rates, token estimation, file-op derivation, ledger, subscription plans and quotas |
+| `src/host/` | The Cordis plugin: fold engine, three projection units, seven HTTP channels, platform adapters, settings schema |
+| `src/client/` | Browser half: shell adapters, data layer (incl. relay price lists and plan quotas), i18n, UI surfaces |
 
 ## Verification
 
@@ -83,13 +110,14 @@ pnpm run typecheck && pnpm test
 The suite covers the shared maths, the wire schemas, the fold reducer (reference discipline, error
 containment, metering, retention), the three projection units and their degraded fallbacks, the browser data
 layer (price precedence, aggregation, boundary washers), and the **built artifacts'** loadability (client
-closure protocol, platform-module table, host `apply()` assembling three projections and five routes).
+closure protocol, platform-module table, host `apply()` assembling three projections and seven routes).
 
 ## Data and permissions
 
 Reads session logs (read-only), the account balance (login first, API key second; the plugin never touches
-tokens), the models.dev price table only for models the official table does not list, and remembers the last
-balance in `localStorage`. No telemetry, no files written.
+tokens), the models.dev price table only for models the official table does not list, relay-published price
+lists, subscription usage/quota APIs, and remembers the last balance in `localStorage`. No telemetry, no files
+written.
 
 ## Licence
 

@@ -15,7 +15,7 @@ import type { ContextSeatProps, ConversationNode } from '../shell/contracts'
 import { conversationNodesOf } from '../shell/contracts'
 import type { Translate } from '../i18n/dict'
 import type { Currency } from '../data/cost'
-import { estimateByBucket, formatCost, formatCredits } from '../data/cost'
+import { estimateByBucket, formatCost, formatCredits, toCurrency } from '../data/cost'
 import { creditRateOf } from '../../core/credits'
 import type { CreditRateTable, Snapshot, TurnEntry } from '../../wire/model'
 import { snapshotOf } from '../shell/washers'
@@ -46,9 +46,23 @@ export function TurnSpend(props: TurnSpendProps): ReactElement | null {
   return h('span', {
     className: 'cb-turn-spend',
     title: amount.credits ? t('turnSpend.creditsTip') : t('turnSpend.moneyTip'),
-  }, amount.credits
-    ? t('turnSpend.credits', { n: formatCredits(amount.value) })
-    : formatCost(amount.value, currency))
+  }, turnSpendText(amount, currency, t))
+}
+
+/**
+ * The pill's text.
+ *
+ * A money amount is computed in the USD accounting space, so it has to be **converted** into the
+ * display currency before formatting: `formatCost` only picks the symbol. Printing the USD number
+ * with a `¥` would understate a CNY reader's bill by the fixed USD/CNY rate.
+ */
+export function turnSpendText(
+  amount: { value: number; credits: boolean },
+  currency: Currency,
+  t: Translate,
+): string {
+  if (amount.credits) return t('turnSpend.credits', { n: formatCredits(amount.value) })
+  return formatCost(toCurrency(amount.value, currency), currency)
 }
 
 /** The turn a chat node belongs to. The harness records the turn on legacy nodes when it has one; a node

@@ -97,10 +97,13 @@ describe('sorting and paging', () => {
     expect(pageOf(rows, -5).index).toBe(0)
   })
 
-  it('groups rows by workspace and counts the ungrouped bucket', () => {
+  it('groups rows by workspace, labels chips with title, and counts the ungrouped bucket', () => {
     const workspaces = { items: [{ path: '/w', title: 'W', sessionIds: ['a'] }] }
     const chips = groupCountsOf([row('a'), row('b')], workspaces)
-    expect(chips).toEqual([{ key: '/w', count: 1 }, { key: UNGROUPED_KEY, count: 1 }])
+    expect(chips).toEqual([{ key: '/w', label: 'W', count: 1 }, { key: UNGROUPED_KEY, label: UNGROUPED_KEY, count: 1 }])
+    // A path-keyed workspace without a title falls back to the path's tail segment.
+    const tail = groupCountsOf([row('c')], { items: [{ path: '/Users/me/Docs/alpha', sessionIds: ['c'] }] })
+    expect(tail[0].label).toBe('alpha')
   })
 })
 

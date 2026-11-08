@@ -7,6 +7,7 @@
  */
 
 import { renderToStaticMarkup } from 'react-dom/server'
+import { resolveGlyph } from '../../src/client/ui/glyphs'
 import { createElement as h } from 'react'
 import { describe, expect, it } from 'vitest'
 import type { Snapshot } from '../../src/wire/model'
@@ -28,11 +29,11 @@ function preferences(): PreferencesStore {
     defaultPlacement: 'all' as const,
     defaultGranularity: 'step' as const,
     defaultTrendMode: 'total' as const,
-    defaultDeltaBase: 'step' as const,
     defaultToolSort: 'count' as const,
     defaultFileSort: 'count' as const,
     insightsEntry: 'show' as const,
     defaultDurationCurve: 'show' as const,
+    defaultPlanTier: 0,
   }
   return {
     store: { subscribe: () => () => {}, getSnapshot: () => state },
@@ -93,7 +94,7 @@ function seat(overrides: Partial<ContextSeatProps> = {}): ContextSeatProps {
 
 describe('dock readout', () => {
   it('renders the collapsed row from the session snapshot', () => {
-    const markup = renderToStaticMarkup(h(DockReadout, { ...seat(), t, locale: () => 'zh' }))
+    const markup = renderToStaticMarkup(h(DockReadout, { ...seat(), t, locale: () => 'zh', preferences: preferences() }))
     // The current route's spend and the peak/off badge are both present.
     expect(markup).toContain('cb-dock')
     expect(markup).toContain('dock.moneySpent')
@@ -166,9 +167,8 @@ describe('context view', () => {
       ctx: clientContext(),
       preferences: preferences(),
     }))
-    // Band 1: the overview and the plugin's identity.
+    // Band 1: the overview.
     expect(markup).toContain('stats.title')
-    expect(markup).toContain('plugin.title')
     // Band 2: the token and timing rings.
     expect(markup).toContain('tokens.title')
     expect(markup).toContain('timing.title')
@@ -209,5 +209,20 @@ describe('context view', () => {
     }))
     expect(markup).toContain('cb-root')
     expect(markup).toContain('loading')
+  })
+})
+
+describe('glyph resolution across harness releases', () => {
+  it('falls back through a candidate list when a release retires an icon', () => {
+    // 0.2.1 removed every Icon*Chart* export; a single hard-coded name would have silently blanked the
+    // Statistics glyph on that release.
+    const icons: Record<string, unknown> = { IconDataOutlineRegular: () => null }
+    const resolved = resolveGlyph(['IconChartBarOutlineRegular', 'IconDataOutlineRegular'], icons)
+    expect(resolved).toBe(icons.IconDataOutlineRegular)
+  })
+
+  it('renders nothing when no candidate exists, instead of throwing', () => {
+    const resolved = resolveGlyph(['GoneOne', 'GoneTwo'], {})
+    expect(resolved({})).toBeNull()
   })
 })

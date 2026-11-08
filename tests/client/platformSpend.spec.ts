@@ -8,7 +8,7 @@
 
 import { describe, expect, it } from 'vitest'
 import { mergePlatformSpends, modelSpendRowsOf, platformSpendsOf } from '../../src/client/data/platformSpend'
-import { buildRateIndex, type PriceBook } from '../../src/client/data/cost'
+import { buildRateIndex, moneyOnly, type PriceBook } from '../../src/client/data/cost'
 import type { CallLedger, CostLedger } from '../../src/wire/model'
 
 const book: PriceBook = {
@@ -89,5 +89,134 @@ describe('mergePlatformSpends', () => {
     expect(merged).toHaveLength(1)
     expect(merged[0].value).toBeCloseTo((a[0].value ?? 0) * 2)
     expect(merged[0].models).toEqual(['deepseek-flash'])
+  })
+})
+
+describe('subscription plans', () => {
+  /** One GLM Coding Plan model: 1M uncached input, 1M cached input, 1M output. */
+  const glm: CostLedger = {
+    'zai-coding-cn': {
+      'glm-5.3': {
+        peak: { uncached: 1_000_000, cacheRead: 1_000_000, cacheWrite: 0, output: 1_000_000 },
+      },
+    },
+  }
+
+  it('bills a subscription route in credits, never as a token price', () => {
+    const rows = platformSpendsOf(glm, { 'zai-coding-cn': { 'glm-5.3': 3 } }, book, null, null, 0)
+    const row = rows.find(entry => entry.provider === 'zai-coding-cn')
+    expect(row?.unit).toBe('plan')
+    expect(row?.plan?.family.id).toBe('glm-coding')
+    expect(row?.plan?.tier?.id).toBe('lite')
+    // (1M×6.9 + 1M×1.7 + 1M×24) / 10000 = 3260 credits, billed in full inside the peak window.
+    expect(row?.plan?.credits).toBeCloseTo(3260, 5)
+    // The ledger's CNY figure is quota, so no currency may be attached to it.
+    expect(row?.currency).toBeUndefined()
+  })
+
+  it('halves the credit charge for the off-peak period', () => {
+    const offPeak: CostLedger = {
+      'zai-coding-cn': {
+        'glm-5.3': { off: { uncached: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } },
+      },
+    }
+    const rows = platformSpendsOf(offPeak, null, book, null, null, 0)
+    const row = rows.find(entry => entry.provider === 'zai-coding-cn')
+    // 1M×6.9/10000 = 690, halved by the off-peak factor.
+    expect(row?.plan?.credits).toBeCloseTo(345, 5)
+  })
+
+  it('reports the tier the preference selects and the share of its monthly quota', () => {
+    const rows = platformSpendsOf(glm, null, book, null, null, 2)
+    const row = rows.find(entry => entry.provider === 'zai-coding-cn')
+    expect(row?.plan?.tier?.id).toBe('max')
+    // 3260 credits of a 140,000/week quota, converted to a month.
+    expect(row?.plan?.share).toBeCloseTo(3260 / (140000 * 4.3482), 6)
+    expect(row?.plan?.feeCny).toBeCloseTo(469 * (3260 / (140000 * 4.3482)), 4)
+  })
+
+  it('marks a model with no plan coefficient as uncomputable rather than free', () => {
+    const unknown: CostLedger = {
+      'zai-coding-cn': { 'glm-unknown': { peak: { uncached: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } } },
+    }
+    const rows = platformSpendsOf(unknown, null, book, null, null, 0)
+    const row = rows.find(entry => entry.provider === 'zai-coding-cn')
+    expect(row?.plan?.byModel[0].credits).toBeNull()
+    expect(row?.plan?.credits).toBe(0)
+  })
+
+  it('keeps an unpublished plan price unknown instead of inventing one', () => {
+    const rows = platformSpendsOf(glm, null, book, null, null, 0)
+    const minimax = platformSpendsOf(
+      { 'minimax-cn': { 'minimax-m3': { peak: { uncached: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } } } },
+      null, book, null, null, 0,
+    ).find(entry => entry.provider === 'minimax-cn')
+    expect(rows.length).toBe(1)
+    // M Plan publishes no fee and no credit table: both must stay null, not zero.
+    expect(minimax?.plan?.tier?.monthlyCny).toBeNull()
+    expect(minimax?.plan?.feeCny).toBeNull()
+    expect(minimax?.plan?.share).toBeNull()
+  })
+
+  it('leaves a metered route on the money path', () => {
+    const rows = platformSpendsOf(ledger('deepseek-official', 'deepseek-flash'), null, book, null, null, 0)
+    expect(rows[0]?.unit).toBe('money')
+    expect(rows[0]?.plan).toBeUndefined()
+  })
+})
+
+describe('every subscription route', () => {
+  const routes: Array<[string, string, string]> = [
+    ['zai-coding-cn', 'glm-coding', 'glm-5.3'],
+    ['zai', 'glm-coding-intl', 'glm-5.3'],
+    ['qwen-token-plan-cn', 'qwen-token-plan', 'qwen3.8-max'],
+    ['qwen-token-plan', 'qwen-token-plan', 'qwen3.8-max'],
+    ['minimax-cn', 'minimax-mplan', 'minimax-m3'],
+    ['kimi-coding', 'kimi-code', 'kimi-k2.5'],
+    ['xiaomi-token-plan-cn', 'xiaomi-token-plan', 'mimo-v2.6-pro'],
+  ]
+
+  for (const [route, familyId, model] of routes) {
+    it(`classifies ${route} as the ${familyId} plan, not a token price`, () => {
+      const usage: CostLedger = {
+        [route]: { [model]: { peak: { uncached: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } } },
+      }
+      const row = platformSpendsOf(usage, null, book, null, null, 0).find(entry => entry.provider === route)
+      expect(row?.unit).toBe('plan')
+      expect(row?.plan?.family.id).toBe(familyId)
+    })
+  }
+
+  it('keeps an unpublished fee unknown for every family that does not state one', () => {
+    for (const route of ['minimax-cn', 'kimi-coding', 'xiaomi-token-plan-cn', 'zai']) {
+      const model = route === 'zai' ? 'glm-5.3' : route === 'minimax-cn' ? 'minimax-m3' : 'kimi-k2.5'
+      const usage: CostLedger = {
+        [route]: { [model]: { peak: { uncached: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } } },
+      }
+      const row = platformSpendsOf(usage, null, book, null, null, 0).find(entry => entry.provider === route)
+      expect(row?.plan?.feeCny).toBeNull()
+    }
+  })
+
+  it('meters the Qwen Token Plan against its monthly quota', () => {
+    const usage: CostLedger = {
+      'qwen-token-plan-cn': { 'qwen3.8-max': { peak: { uncached: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } } },
+    }
+    const row = platformSpendsOf(usage, null, book, null, null, 0).find(entry => entry.provider === 'qwen-token-plan-cn')
+    // No published per-model credit coefficients, so credits stay uncomputable rather than invented.
+    expect(row?.plan?.credits).toBe(0)
+    expect(row?.plan?.byModel[0].credits).toBeNull()
+    // The tier itself is known: Lite at ¥60 with 11,500 credits a month.
+    expect(row?.plan?.tier?.label).toBe('Lite')
+    expect(row?.plan?.tier?.creditsMonth).toBe(11_500)
+  })
+
+  it('does not add a subscription route into a money total', () => {
+    const mixed: CostLedger = {
+      'deepseek-official': { 'deepseek-flash': { peak: { uncached: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } } },
+      'zai-coding-cn': { 'glm-5.3': { peak: { uncached: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 0 } } },
+    }
+    const kept = moneyOnly(mixed, null)
+    expect(Object.keys(kept ?? {})).toEqual(['deepseek-official'])
   })
 })

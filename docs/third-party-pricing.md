@@ -4,6 +4,22 @@
 以及如何把这些费用归属到**具体模型**。它从现有代码的实测行为出发，
 只描述已经能工作的机制与需要补齐的缺口，不发明新协议。
 
+## 0. 实现状态（2026-11）
+
+| 规范条目 | 状态 |
+|---|---|
+| 3.1 计价优先级（官方表 → 用户费率 → 中转站公开价目 → 注册表 → 唯一候选） | 已实现（`client/data/cost.ts`、`relayPrices.ts`） |
+| 3.2 第三方费率表的数据形状与逐条校验 | 已实现（`client/data/thirdPartyRates.ts`；宿主 schema 的 `thirdPartyRates`） |
+| 3.2 费率表**设置页编辑器** | **未实现**：目前只能在 profile 的 `cordis.patch.yml` 里手写（键为扁平的 `<provider>:<model>`） |
+| 3.2 从账本实测 provider 生成下拉 | 未实现（依赖上一项） |
+| 3.3 `credits` 不参与金额计算 | 已实现（`credits` 只用于界面提示，从不进入 `estimateByBucket`） |
+| 3.3 `free: true` 计 ¥0 | **未实现**：`free` 标记目前不进入计价，仍按「未配置费率」处理 |
+| 3.4 峰谷只属于官方表模型 | 已实现（`core/providers.ts` 的 `pricedByPeriod`） |
+| 3.5 按 provider → model 展开与显式「未配置费率」 | 已实现（费用卡与统计页） |
+
+> 订阅套餐（GLM / MiniMax / Kimi / 阿里云 / 小米）属于「按量计费之外」的第三种记账模型，
+> 见 `src/core/plans.ts` 与 README；它们不套用本文的 token 单价链。
+
 ## 1. 现状：数据从哪来
 
 | 环节 | 事实 |
@@ -61,10 +77,19 @@
 
 ### 3.2 第三方费率配置
 
-在插件设置里新增一个 provider → 模型的费率表。键的写死格式：
+费率表是宿主行 `config` 里的一个字段（`thirdPartyRates`），由浏览器半区逐条重校验；
+**设置页编辑器尚未实现**，目前通过编辑 profile 的 `cordis.patch.yml` 写入。键的写死格式：
 
 ```
 <provider>:<model>  →  { input, output, cacheRead, cacheWrite }   // 每 100 万 token，美元
+```
+
+```yaml
+- id: cost-breakdown
+  name: dsh-cost-breakdown
+  config:
+    thirdPartyRates:
+      'workbuddy-ai:glm-5.3': { input: 0.5, output: 2, cacheRead: 0.1 }
 ```
 
 约束：
@@ -110,11 +135,11 @@
 
 | # | 改动 | 文件 |
 |---|---|---|
-| 1 | 第三方费率表的类型与校验（不可信 wire 输入，逐字段重校验） | `src/wire/model.ts` + `src/client/data/thirdPartyRates.ts` |
-| 2 | 把费率表接进 `priceFaceOf` 的第 2 步 | `src/client/data/cost.ts` |
-| 3 | 设置项：按账本实测的 provider 列出可配模型 | `src/client/ui/settings.tsx`、`src/client/shell/preferences.ts` |
-| 4 | 费用卡按 provider → model 展开 | `src/client/ui/dock/blocks.tsx` + `src/client/ui/insights/spend.tsx` |
-| 5 | 测试：同名不同价必须不猜；配置命中；`credits` 不参与计算；`free: true` 计 ¥0 | `tests/` |
+| 1 | 第三方费率表的类型与校验（不可信 wire 输入，逐字段重校验） | 已完成：`src/client/data/thirdPartyRates.ts` + `src/host/settings.ts` |
+| 2 | 把费率表接进 `priceFaceOf` 的第 2 步 | 已完成：`src/client/data/cost.ts` |
+| 3 | 设置项：按账本实测的 provider 列出可配模型 | **未完成**：`src/client/ui/settings.tsx`、`src/client/shell/preferences.ts` |
+| 4 | 费用卡按 provider → model 展开 | 已完成：`src/client/ui/dock/blocks.tsx` + `src/client/ui/insights/spend.tsx` |
+| 5 | 测试：同名不同价必须不猜；配置命中；`credits` 不参与计算；`free: true` 计 ¥0 | 部分完成：前三项有测试，`free: true` 未实现 |
 
 ## 5. 不做的事
 

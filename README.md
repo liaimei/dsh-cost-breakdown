@@ -28,8 +28,13 @@ DeepSeek Harness（DSH）插件：把**上下文洞察**与**按平台计费的�
   还是第三方代理，都按北京时段分桶。
 - **节假日回退**：配置里的 `holidays` 给不出任何合法日期时退回内置表，绝不读作「没有节假日」
   （那会把每个节假日按峰价计费、静默翻倍）。可用 `holidays: ['2026-10-01', ...]` 覆盖。
-- **按平台拆分，不相加**：DeepSeek 显示 ¥、第三方显示 $、积分平台显示积分 / 剩余积分。
+- **按平台拆分，不相加**：DeepSeek 显示 ¥、第三方显示 $、积分平台显示 Credits / 剩余 Credits。
   定不出价的模型显式标注「未配置费率」，绝不显示 ¥0。
+- **中转站（relay）自定价**：`woyao` 一类中转路由不是任何厂商，公开注册表给不出它的真实价格；
+  插件读它自己发布的价目表（USD/百万 Token），用户声明的费率仍逐模型优先。
+- **订阅套餐单独成账**：GLM Coding Plan、MiniMax M Plan、Kimi Code Plan、阿里云 Token Plan、
+  小米 MiMo Token Plan（含 Z.AI 国际版）按**配额 Credits**计，不按 Token 单价，绝不和按量计费相加；
+  能读到平台用量接口时显示各窗口剩余额度（读不到就写「额度不可读」，不写 0）。
 - **余额**：优先读 DSH 账号登录，其次 API key；读不到就不显示，不猜、不缓存过期值。
 
 ## 安装
@@ -49,9 +54,12 @@ dsh plugin --profile <profile> add "dsh-cost-breakdown@link:/path/to/dsh-cost-br
 装好后**重启 DSH**（宿主半区在启动时装配）。之后输入框下方会出现常驻费用读数，
 左侧栏出现「统计」入口，对话区出现「上下文」标签页。
 
+兼容性：已在 DSH **0.2.2-rc.1**（cordis 4.1）上验证；`dsh.compatibility.dshReleases` 声明
+自 `0.1.7-rc.2`，更旧的宿主会走降级路径（全零 + 升级提示），不会崩溃。
+
 ## 配置
 
-设置页 → 插件 →「用量与费用」，全部设置都挂在 loader 行 id 命名空间 `cost-breakdown` 下：
+设置页 → 插件 →「汇总」，全部设置都挂在 loader 行 id 命名空间 `cost-breakdown` 下：
 
 | 字段 | 默认 | 含义 |
 |---|---|---|
@@ -59,9 +67,25 @@ dsh plugin --profile <profile> add "dsh-cost-breakdown@link:/path/to/dsh-cost-br
 | `maxEvents` / `maxNodes` / `maxArchiveNodes` / `maxFileOps` | 400 / 2000 / 400 / 400 | 各集合上限 |
 | `holidays` | 内置 2026 年 31 天 | 全天按谷价计费的日期（`YYYY-MM-DD`，北京时间） |
 | `defaultPlacement` | `all` | 入口位置：`all` / `tab` / `sidebar` |
-| `defaultGranularity` / `defaultTrendMode` / `defaultDeltaBase` | `step` / `total` / `step` | 趋势图与浏览器的默认口径 |
+| `defaultGranularity` / `defaultTrendMode` | `step` / `total` | 趋势图与浏览器的默认口径 |
 | `defaultToolSort` / `defaultFileSort` | `count` / `count` | 工具定义与文件活动的默认排序 |
 | `insightsEntry` / `defaultDurationCurve` | `show` / `show` | 统计入口与耗时曲线的默认开关 |
+| `defaultPlanTier` | `0` | 订阅套餐的档位序号（0=入门档，按各套餐家族自动夹取） |
+| `thirdPartyRates` / `creditRates` | 无 | 手写的第三方费率表（目前只在 `cordis.patch.yml` 里写，暂无设置页编辑器） |
+
+`thirdPartyRates` / `creditRates` 的形状是扁平的 `<provider>:<model>` 键：
+
+```yaml
+- id: cost-breakdown
+  name: dsh-cost-breakdown
+  config:
+    thirdPartyRates:
+      'woyao-pro-2:gpt-5': { input: 1, output: 4, cacheRead: 0.5 }
+    creditRates:
+      'workbuddy:glm-5.3': 2
+```
+
+浏览器半区会逐条重校验这两个表，单条写错只丢该条，不会让整行配置加载失败。
 
 ## 开发
 
@@ -77,9 +101,9 @@ pnpm test           # vitest：core / wire / host / client / bundle 五个套件
 | 目录 | 内容 |
 |---|---|
 | `src/wire/` | wire 契约：类型、zod schema、投影键增强 |
-| `src/core/` | 两侧共用的纯数学：北京日历与峰谷、官方价目、token 估算、文件操作解析、ledger |
-| `src/host/` | Cordis 插件：fold 引擎、三个投影单元、HTTP 通道、平台适配、设置 schema |
-| `src/client/` | 浏览器半区：shell 适配、数据层、i18n、UI 面 |
+| `src/core/` | 两侧共用的纯数学：北京日历与峰谷、官方价目、token 估算、文件操作解析、ledger、订阅套餐与配额 |
+| `src/host/` | Cordis 插件：fold 引擎、三个投影单元、七条 HTTP 通道、平台适配、设置 schema |
+| `src/client/` | 浏览器半区：shell 适配、数据层（含中转站价目、套餐配额）、i18n、UI 面 |
 
 - `src/host/fold/` 的 reducer 是纯函数：无变化时返回同一引用（注册表用 `Object.is` 判断是否推送），
   整条事件在 try/catch 内折叠（一条畸形事件被整体丢弃，绝不卡住推送流），state 必须是纯 JSON
@@ -93,10 +117,10 @@ pnpm test           # vitest：core / wire / host / client / bundle 五个套件
 pnpm run typecheck && pnpm test
 ```
 
-新测试套件覆盖：核心数学（日历 / 价目 / 估算 / ledger / 日键 / 版本比较）、wire schema、
+新测试套件覆盖：核心数学（日历 / 价目 / 估算 / ledger / 日键 / 版本比较 / 订阅套餐）、wire schema、
 fold reducer（引用纪律、错误吞并、计量、保留上限）、三个投影单元与降级单元、浏览器数据层
-（金额优先级、聚合、washer）、以及**构建产物**的可加载性（客户端闭包协议、平台模块表、
-宿主 `apply()` 装配出三个投影与五条路由）。
+（金额优先级、聚合、washer、中转站价目）、宿主配置 schema，以及**构建产物**的可加载性
+（客户端闭包协议、平台模块表、宿主 `apply()` 装配出三个投影与七条路由）。
 
 ## 数据与权限
 
@@ -104,7 +128,7 @@ fold reducer（引用纪律、错误吞并、计量、保留上限）、三个�
 |---|---|
 | 读会话日志 | 只读观测本机会话事件，用于统计 token 用量；不修改会话 |
 | 读账户余额 | 账号登录优先，其次 `api.deepseek.com/user/balance`；插件不接触令牌 |
-| 外部网络 | 仅 models.dev 价目表（官方表未收录的模型才需要）、余额查询、版本检查 |
+| 外部网络 | models.dev 价目表（官方表未收录的模型才需要）、余额查询、DSH 版本检查、中转站公开价目表、订阅平台用量/配额接口 |
 | 本地存储 | 只记住上次余额（`localStorage`）；不写文件、不建数据库 |
 | 遥测 | 无 |
 

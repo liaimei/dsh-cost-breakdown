@@ -13,7 +13,7 @@
  *    never take the plugin down: the route simply stays absent, which the client reads as
  *    "this capability is not available" rather than as a crash.
  *
- * The response helpers exist for the same reason: all five routes share one envelope shape
+ * The response helpers exist for the same reason: every route shares one envelope shape
  * (`{ ok: true, value }` / `{ ok: false, error: { code, message } }`) and one cache policy
  * (`no-store`), and having two spellings of either would be a wire divergence.
  */

@@ -19,8 +19,9 @@
 import { useState } from 'react'
 import { createElement as h } from 'react'
 import type { ReactElement } from 'react'
-import type { FileOp } from '../../../wire/model'
+import type { FileOp, FileSort } from '../../../wire/model'
 import type { Translate } from '../../i18n/dict'
+import type { PreferencesStore } from '../../shell/preferences'
 import { formatCount } from '../../i18n/format'
 import {
   absPathOf, aggregateOps, displayPathOf, glyphOf,
@@ -45,12 +46,14 @@ export interface FilesCardProps {
   onOpen?: (absolutePath: string) => void
   /** Pin the browser's file category to a path. */
   onLocate?: (path: string) => void
+  /** The preference store: the card's initial sort comes from the settings card's default. */
+  preferences?: PreferencesStore
 }
 
 /** The card. */
 export function FilesCard(props: FilesCardProps): ReactElement {
-  const { t, fileOps, floor, before, workspace, onPreview, onOpen, onLocate } = props
-  const [sort, setSort] = useState<'count' | 'latest' | 'path'>('count')
+  const { t, fileOps, floor, before, workspace, onPreview, onOpen, onLocate, preferences } = props
+  const [sort, setSort] = useState<FileSort>(initialSort(preferences))
   const [openPath, setOpenPath] = useState<string | null>(null)
 
   // An older host never folded the op log: say so rather than drawing an empty list that reads as "nothing
@@ -74,7 +77,7 @@ export function FilesCard(props: FilesCardProps): ReactElement {
           type: 'button',
           className: `cb-gran-btn${sort === key ? ' cb-gran-on' : ''}`,
           'aria-pressed': sort === key,
-          onClick: () => { setSort(key) },
+          onClick: () => { setSort(key); preferences?.set('defaultFileSort', key) },
         }, t(`files.sort.${key}`))))),
     floor !== undefined
       ? h('div', { className: 'cb-files-floor' }, t('files.scopeLatest'))
@@ -94,8 +97,14 @@ export function FilesCard(props: FilesCardProps): ReactElement {
   )
 }
 
+/** The card's initial sort: the settings card's default, narrowed to the card's own vocabulary. */
+function initialSort(preferences: PreferencesStore | undefined): FileSort {
+  const value = preferences?.get().defaultFileSort
+  return value === 'latest' || value === 'path' ? value : 'count'
+}
+
 /** Order the rows. */
-function sortEntries(entries: FileEntry[], sort: 'count' | 'latest' | 'path'): FileEntry[] {
+function sortEntries(entries: FileEntry[], sort: FileSort): FileEntry[] {
   const sorted = [...entries]
   if (sort === 'path') sorted.sort((left, right) => left.path.localeCompare(right.path))
   else if (sort === 'latest') {

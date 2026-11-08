@@ -199,6 +199,17 @@ function workspaceKey(workspace: WorkspaceLike): string {
   return typeof workspace.title === 'string' ? workspace.title : ''
 }
 
+/** The chip label for a workspace key: a path collapses to its tail segment (the space name),
+ * a title prints as-is. Matching still uses the full key, so membership is unchanged. */
+function workspaceLabel(key: string, workspaces: WorkspaceLike[]): string {
+  const workspace = workspaces.find(entry => workspaceKey(entry) === key)
+  const title = typeof workspace?.title === 'string' ? workspace.title : undefined
+  if (title !== undefined && title !== '') return title
+  const parts = key.split(/[\\/]+/).filter(part => part !== '')
+  const tail = parts.length > 0 ? parts[parts.length - 1] : undefined
+  return tail !== undefined && tail !== '' ? tail : key
+}
+
 /** Session id → the workspace key that claims it. */
 export function sessionGroupsOf(rows: OverviewRow[], workspaces: unknown): Map<string, string> {
   const groups = new Map<string, string>()
@@ -219,14 +230,17 @@ export function sessionGroupsOf(rows: OverviewRow[], workspaces: unknown): Map<s
   return groups
 }
 
-/** A group chip: a workspace key and how many of the scoped rows it claims. */
+/** A group chip: a workspace key, its display label, and how many of the scoped rows it claims. */
 export interface GroupCount {
   key: string
+  /** The short label the chip prints: the workspace title, else the path's tail segment. */
+  label: string
   count: number
 }
 
 /** Group chips for the scoped rows, in workspace registry order, with the ungrouped bucket last. */
 export function groupCountsOf(rows: OverviewRow[], workspaces: unknown): GroupCount[] {
+  const registry = workspacesOf(workspaces)
   const membership = sessionGroupsOf(rows, workspaces)
   const counts = new Map<string, number>()
   for (const row of rows) {
@@ -234,12 +248,12 @@ export function groupCountsOf(rows: OverviewRow[], workspaces: unknown): GroupCo
     counts.set(key, (counts.get(key) ?? 0) + 1)
   }
   const order: string[] = []
-  for (const workspace of workspacesOf(workspaces)) {
+  for (const workspace of registry) {
     const key = workspaceKey(workspace)
     if (key !== '' && counts.has(key) && !order.includes(key)) order.push(key)
   }
-  const out: GroupCount[] = order.map(key => ({ key, count: counts.get(key) ?? 0 }))
-  if (counts.has(UNGROUPED_KEY)) out.push({ key: UNGROUPED_KEY, count: counts.get(UNGROUPED_KEY) ?? 0 })
+  const out: GroupCount[] = order.map(key => ({ key, label: workspaceLabel(key, registry), count: counts.get(key) ?? 0 }))
+  if (counts.has(UNGROUPED_KEY)) out.push({ key: UNGROUPED_KEY, label: UNGROUPED_KEY, count: counts.get(UNGROUPED_KEY) ?? 0 })
   return out
 }
 
@@ -388,12 +402,13 @@ export function billedTotalsOf(
   book: PriceBook | null,
   credits: CreditRateTable | null,
   moneyRates: ThirdPartyRates | null,
+  planTier = 0,
 ): BilledTotals {
   const ledger = mergeLedgers(...rows.map(row => row.familyCost))
   const calls = mergeCalls(...rows.map(row => row.familyCalls))
   const tokens = usageTotalsOf(ledger) ?? { uncached: 0, cacheRead: 0, cacheWrite: 0, output: 0, total: 0, any: false }
   const costByBucket = estimateByBucket(ledger, book, moneyRates)
-  const platforms = platformSpendsOf(ledger, calls, book, moneyRates, credits)
+  const platforms = platformSpendsOf(ledger, calls, book, moneyRates, credits, planTier)
   return { tokens, costByBucket, platforms }
 }
 
@@ -472,9 +487,10 @@ export function kpisOf(
   credits: CreditRateTable | null,
   moneyRates: ThirdPartyRates | null,
   currency: Currency,
+  planTier = 0,
 ): OverviewKpis {
   const ledger = mergeLedgers(...rows.map(row => row.familyCost))
-  const billed = billedTotalsOf(rows, book, credits, moneyRates)
+  const billed = billedTotalsOf(rows, book, credits, moneyRates, planTier)
   const tokens = usageTotalsOf(ledger)
   let usageSessions = 0
   let costSessions = 0

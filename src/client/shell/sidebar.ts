@@ -15,6 +15,7 @@ import type { ReactElement } from 'react'
 import type { ClientContext, ContextSeatProps, SidebarTabsFace } from './contracts'
 import type { Translate } from '../i18n/dict'
 import { makeTabTitle } from '../ui/mark'
+import { SidebarMark } from '../ui/mark'
 
 /** This tab kind's identity inside the sidebar tab system (also the key of its body seat). */
 export const SIDEBAR_ID = 'dsh-cost-breakdown'
@@ -59,7 +60,9 @@ export function watchSidebarTab(
           order: GUIDE_ORDER,
           title: () => t('sidebar.title'),
           description: () => t('sidebar.guideDescription'),
-          icon: undefined,
+          // The plugin's own three-segment gauge mark, in mono so the shell's hover/active state
+          // owns the colour, like a bundled entry.
+          icon: (props: { size?: number }) => SidebarMark({ size: props.size ?? 16 }),
         }],
       }))
       own(injected.slots.inject('sidebar.right.pane.tab', () => injected.slots.register(

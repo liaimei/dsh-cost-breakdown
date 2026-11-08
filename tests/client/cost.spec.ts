@@ -4,10 +4,13 @@
  */
 
 import { describe, expect, it } from 'vitest'
+import { isRelayRoute } from '../../src/core/providers'
 import {
   USD_PER_CNY, billedTokens, buildRateIndex, estimateByBucket, estimateSessionCost, formatCost, formatCredits,
   formatNativeSpend, fromCny, mergeLedgers, moneyOnly, officialRateOf, priceFaceOf, rateOf, symbolOf, toCurrency,
+  unitWordOf,
 } from '../../src/client/data/cost'
+import type { PriceBook } from '../../src/client/data/cost'
 import type { CostLedger } from '../../src/wire/model'
 
 const ledger: CostLedger = {
@@ -103,9 +106,10 @@ describe('ledger helpers', () => {
 
 describe('formatting', () => {
   it('formats costs with two decimals at or above one, and precision below', () => {
-    expect(formatCost(1.234, 'usd')).toBe('$1.23')
-    expect(formatCost(12, 'cny')).toBe('¥12.00')
-    expect(formatCost(0.123, 'usd')).toBe('$0.12')
+    // The unit symbol follows the number, so a money figure and a credit figure read the same way.
+    expect(formatCost(1.234, 'usd')).toBe('1.23 $')
+    expect(formatCost(12, 'cny')).toBe('12.00 ¥')
+    expect(formatCost(0.123, 'usd')).toBe('0.12 $')
   })
 
   it('trims credit trailing zeros', () => {
@@ -114,9 +118,41 @@ describe('formatting', () => {
     expect(formatCredits(0)).toBe('0')
   })
 
-  it('renders a platform-native spend in its own currency', () => {
+  it('renders a platform-native spend in its own currency, symbol after the amount', () => {
     // 1 USD is ¥6.666… at the fixed rate.
-    expect(formatNativeSpend(1, 'CNY')).toBe('¥6.67')
-    expect(formatNativeSpend(1, 'USD')).toBe('$1.00')
+    expect(formatNativeSpend(1, 'CNY')).toBe('6.67 ¥')
+    expect(formatNativeSpend(1, 'USD')).toBe('1.00 $')
+  })
+
+  it('uses the familiar currency symbols as the trailing unit', () => {
+    expect(unitWordOf('CNY')).toBe('¥')
+    expect(unitWordOf('USD')).toBe('$')
+  })
+})
+
+describe('relay routes', () => {
+  it('recognises a relay and its numbered account rows', () => {
+    expect(isRelayRoute('woyao-pro-1')).toBe(true)
+    expect(isRelayRoute('woyao-pro-2')).toBe(true)
+    expect(isRelayRoute('woyao')).toBe(true)
+    expect(isRelayRoute('deepseek-official')).toBe(false)
+    // A prefix must end at a dash: `woyaosomething` is not this relay.
+    expect(isRelayRoute('woyaosomething')).toBe(false)
+  })
+
+  it('refuses to price a relay model from the public book', () => {
+    // The relay resells other vendors' models, so the registry book has rates for these models under
+    // their real vendors — pricing from it would report a list price the relay never charges.
+    const book: PriceBook = {
+      prices: { openai: { 'gpt-5': { hit: 1, miss: 2, write: 2, out: 8 } } },
+      index: buildRateIndex({ openai: { 'gpt-5': { hit: 1, miss: 2, write: 2, out: 8 } } }, { openai: '@ai-sdk/openai' }),
+    }
+    expect(priceFaceOf(book, 'woyao-pro-2', 'gpt-5')).toBeNull()
+  })
+
+  it('prices a relay model from a declared rate', () => {
+    const book: PriceBook = { prices: {}, index: buildRateIndex({}, {}) }
+    const rates = { 'woyao-pro-2': { 'gpt-5': { hit: 0.5, miss: 1, write: 1, out: 4 } } }
+    expect(priceFaceOf(book, 'woyao-pro-2', 'gpt-5', rates)?.rate.miss).toBe(1)
   })
 })

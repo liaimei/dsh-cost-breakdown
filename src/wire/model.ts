@@ -72,8 +72,6 @@ export interface SkillEntry {
 export type Granularity = 'step' | 'turn'
 /** Whether the cost curve is cumulative or per-step delta. */
 export type TrendMode = 'total' | 'delta'
-/** Delta baseline: previous row, or last step of the previous turn. */
-export type DeltaBase = 'step' | 'turn'
 /** File table ordering. */
 export type FileSort = 'count' | 'latest' | 'path'
 /** Tool ranking ordering. */
@@ -84,17 +82,20 @@ export type Placement = 'all' | 'tab' | 'sidebar'
 export type InsightsEntry = 'show' | 'hide'
 /** Whether the session time strip draws the duration curve. */
 export type DurationCurve = 'show' | 'hide'
+/** Which subscription tier the user pays for, as a 0-based index into the plan family's tier list.
+ * One number across families whose tier counts differ: 0 is the entry tier everywhere. */
+export type PlanTierIndex = number
 
 /** User preferences persisted through the settings service (host config, volatile layer). */
 export interface Preferences {
   defaultPlacement: Placement
   defaultGranularity: Granularity
   defaultTrendMode: TrendMode
-  defaultDeltaBase: DeltaBase
   defaultToolSort: ToolSort
   defaultFileSort: FileSort
   insightsEntry: InsightsEntry
   defaultDurationCurve: DurationCurve
+  defaultPlanTier: PlanTierIndex
 }
 
 /** Editable preference keys (derived so a rename cannot silently drop a form field). */
@@ -381,6 +382,51 @@ export type Period = 'peak' | 'off'
 /** Credit rates: provider → model → credits charged per request. Normalised by
  * `core/credits.ts`; carried on the timeline head so the browser never guesses a rate. */
 export type CreditRateTable = Record<string, Record<string, number>>
+
+/** One relay price row: the relay's own published price for one model. */
+export interface RelayPrice {
+  model: string
+  platform: string
+  group: string
+  mode: 'token' | 'image'
+  input?: number
+  output?: number
+  cacheRead?: number
+  cacheWrite?: number
+  perImage?: number
+  multiplier?: number
+  tiers?: Array<{ minTokens: number; input?: number; output?: number }>
+}
+
+/** A relay's published price table, plus when the host read it. */
+export interface RelayPriceTable {
+  relays: Record<string, Record<string, RelayPrice>>
+  at: number
+}
+
+/** One quota window of a subscription plan, as the vendor reports it. */
+export interface PlanQuotaWindow {
+  /** The vendor's own label for the window (`5h`, `weekly`, `monthly`, …), printed verbatim. */
+  label: string
+  /** The window's ceiling. */
+  total: number
+  /** How much of the ceiling is consumed; never above `total`. */
+  used: number
+}
+
+/** One subscription plan's live quota, relayed by the host's plan-quota route. */
+export interface PlanQuota {
+  /** The harness route id the quota belongs to. */
+  provider: string
+  /** The plan family this route bills through. */
+  familyId: string
+  windows: PlanQuotaWindow[]
+  /** When the host read it (epoch ms), so the panel can say how fresh the figure is. */
+  at: number
+}
+
+/** Route id → that plan's quota. A plan the host could not read is simply absent. */
+export type PlanQuotaTable = Record<string, PlanQuota>
 
 /** One credit edition's remaining balance, relayed by the host's credits route. */
 export interface PlatformCredits {

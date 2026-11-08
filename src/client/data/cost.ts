@@ -14,9 +14,10 @@
 
 import type { BucketTotals, CallLedger, CostLedger, RateQuad } from '../../wire/model'
 import { findOfficialModel, OFFICIAL_TABLE } from '../../core/clock'
-import { pricedByPeriod, vendorOf } from '../../core/providers'
+import { isRelayRoute, pricedByPeriod, vendorOf } from '../../core/providers'
 import { billedTokensOf } from '../../core/ledger'
 import { configuredRateOf, type ThirdPartyRates } from './thirdPartyRates'
+import { planFamilyOf } from '../../core/plans'
 
 /** Display currency. The wire and all arithmetic stay in USD; only formatting converts. */
 export type Currency = 'usd' | 'cny'
@@ -227,6 +228,10 @@ export function priceFaceOf(
   if (official !== null) return { pid: 'deepseek', mid: officialLabelOf(model), rate: official, official: true }
   const configured = configuredRateOf(rates, provider, model)
   if (configured !== null) return { pid: provider, mid: model, rate: configured }
+  // A relay resells other vendors' models, so the registry has no branch for it and the model-side
+  // index would hand back some other vendor's list price — a number the relay never charges. Its own
+  // price is not public (it varies by account group), so without a declared rate it stays unpriceable.
+  if (isRelayRoute(provider)) return null
   if (book === null || book === undefined) return null
   const registryProvider = vendorOf(provider)
   const direct = book.prices[registryProvider]
@@ -431,9 +436,8 @@ export function symbolOf(currency: string): string {
  * does not read as `0.00`); above 1 keeps two decimals. No locale grouping: the value is a cost, not
  * a quantity. */
 export function formatCost(amount: number, currency: Currency): string {
-  const symbol = currency === 'cny' ? '¥' : '$'
   const value = amount < 1 ? trimPrecision(amount) : amount.toFixed(2)
-  return `${symbol}${value}`
+  return `${value} ${unitWordOf(currency === 'cny' ? 'CNY' : 'USD')}`
 }
 
 function trimPrecision(amount: number): string {
@@ -449,10 +453,25 @@ export function formatRate(amount: number, currency: Currency): string {
 /** A platform's own billing currency code. */
 export type SpendCurrency = 'CNY' | 'USD'
 
+/**
+ * The **unit** printed after an amount: `¥` for yuan, `$` for dollars.
+ *
+ * The symbol follows the number here rather than leading it. Every figure on these surfaces is a cost
+ * and each row already prints the platform name beside it, so a leading symbol buys nothing; placing
+ * it after the number instead makes a money figure line up with a credit figure ("6.05 Credits"), which
+ * is the one other unit these rows carry. The unit itself stays the familiar symbol — "元"/"美元"
+ * read as prose in a table cell, while `¥`/`$` read as money at a glance.
+ */
+export function unitWordOf(currency: SpendCurrency): string {
+  return currency === 'CNY' ? '¥' : '$'
+}
+
 /** Render an amount in a **platform's own** billing currency, independent of the UI language: a
- * DeepSeek balance is always ¥ and a third-party balance always $, whatever the interface says. */
+ * DeepSeek figure is always in yuan and a third-party figure always in dollars, whatever the
+ * interface says. The unit word follows the number (see {@link unitWordOf}). */
 export function formatNativeSpend(usd: number, currency: SpendCurrency): string {
-  return `${symbolOf(currency)}${(currency === 'CNY' ? toCurrency(usd, 'cny') : usd).toFixed(2)}`
+  const value = currency === 'CNY' ? toCurrency(usd, 'cny') : usd
+  return `${value.toFixed(2)} ${unitWordOf(currency)}`
 }
 
 /** Format a credit count: trim trailing zeros so an exact `0.1` does not print `0.10`. */
@@ -461,18 +480,26 @@ export function formatCredits(value: number): string {
   return fixed.replace(/\.?0+$/, '') || '0'
 }
 
-/** Drop every provider that bills per request (credits) from a ledger, so a money total never adds a
- * credit count to a currency. A provider is uniform: any credit model drops the whole provider. */
+/** Drop every provider that does **not** bill per token from a ledger, so a money total never adds a
+ * credit count or a subscription's quota to a currency.
+ *
+ * Two kinds of provider are dropped:
+ *   - a per-request credit platform (it bills requests, not tokens);
+ *   - a subscription route (`zai-coding-cn`, `qwen-token-plan*`, …). Its ledger carries real token
+ *     counts, but those tokens were already paid for by the monthly fee, so pricing them at the list
+ *     rate would report a bill the user never receives.
+ *
+ * A provider is uniform: one credit model or a plan route drops the whole provider. */
 export function moneyOnly(
   usage: CostLedger | null | undefined,
   creditRates: Record<string, Record<string, number>> | null | undefined,
 ): CostLedger | null {
   if (usage === null || usage === undefined) return null
-  if (creditRates === null || creditRates === undefined) return usage
   const out: CostLedger = {}
   let any = false
   for (const [provider, models] of Object.entries(usage)) {
-    const creditModels = creditRates[provider]
+    if (planFamilyOf(provider) !== null) continue
+    const creditModels = creditRates?.[provider]
     if (creditModels !== undefined && Object.keys(creditModels).length > 0) continue
     out[provider] = models
     any = true

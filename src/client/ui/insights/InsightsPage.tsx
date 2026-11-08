@@ -37,7 +37,6 @@ import { daySpanOf } from '../../../core/day'
 import { DateRange } from './dateRange'
 import { PlatformCards, platformDisplayName } from './spend'
 import { SessionCard } from './sessionCard'
-import { PluginInfoCard } from './pluginInfo'
 import { UpgradeGate } from './upgradeGate'
 import type { DayRange } from '../../data/aggregate'
 
@@ -95,7 +94,8 @@ export function InsightsPage(props: InsightsProps): ReactElement {
     () => (group === null ? scopedAll : scopedAll.filter(row => inGroup(row, group, workspaces))),
     [scopedAll, group, workspaces],
   )
-  const kpis = useMemo(() => kpisOf(ranged, rows.length, book, credits, money, currency), [ranged, rows.length, book, credits, money])
+  const planTier = props.preferences.get().defaultPlanTier
+  const kpis = useMemo(() => kpisOf(ranged, rows.length, book, credits, money, currency, planTier), [ranged, rows.length, book, credits, money, planTier])
   // The bar chart's column count follows the picked range; an explicit custom span uses its own length. It is
   // declared first because the aggregate below consumes it.
   const usageSpan = custom !== null
@@ -174,7 +174,9 @@ export function InsightsPage(props: InsightsProps): ReactElement {
         h('span', { className: 'cb-card-sub' }, t('ov.spend.sub'))),
       kpis.billed === null || kpis.billed.platforms.length === 0
         ? h('div', { className: 'cb-empty' }, t('ov.spend.empty'))
-        : h(PlatformCards, { rows: kpis.billed.platforms, currency, t })),
+        : h('div', { className: 'cb-ov-platform-row' },
+          h(PlatformCards, { rows: kpis.billed.platforms, currency, t })
+            ?? null)),
     h('div', { className: 'cb-ov-body' },
       h('div', { className: 'cb-ov-left' },
         h('div', { className: 'cb-card cb-ov-heat-card' },
@@ -222,13 +224,13 @@ export function InsightsPage(props: InsightsProps): ReactElement {
             'aria-pressed': chip.key === group,
             title: t('ov.group.label'),
             onClick: () => { setGroup(chip.key === group ? null : chip.key) },
-          }, `${chip.key === '__ungrouped__' ? t('ov.group.ungrouped') : chip.key} ${chip.count}`)))
+          }, `${chip.key === '__ungrouped__' ? t('ov.group.ungrouped') : chip.label} ${chip.count}`)))
           : null,
         h('div', { className: 'cb-ov-grid' },
           paged.rows.map(row => h(SessionCard, {
             key: row.id,
             row,
-            costLabel: costLabelOf(row, book, credits, money, currency),
+            costLabel: costLabelOf(row, book, credits, money, currency, planTier),
             now,
             t,
             onOpen: (id: string) => { openSessionWith(ctx, id) },
@@ -242,7 +244,6 @@ export function InsightsPage(props: InsightsProps): ReactElement {
             h('span', { className: 'cb-ov-page-label' }, t('ov.list.page', { n: paged.index + 1, total: paged.count })),
             h('button', { type: 'button', className: 'cb-gran-btn', disabled: paged.index >= paged.count - 1, onClick: () => { setPage(paged.index + 1) } }, '›'))
           : null)),
-    h(PluginInfoCard, { t }),
     h(UpgradeGate, { t, sessionId: props.sessionId, current: '', minimum: '' }))))
 }
 
@@ -255,11 +256,11 @@ function kpi(label: string, value: string, sub: string): ReactElement {
 }
 
 /** The session card's cost label: a dash when the family cannot be priced, never a zero. */
-function costLabelOf(row: OverviewRow, book: ReturnType<typeof usePriceBook>, credits: ReturnType<typeof mergeCreditRatesAll>, money: ReturnType<typeof moneyRates>, currency: Currency): string {
+function costLabelOf(row: OverviewRow, book: ReturnType<typeof usePriceBook>, credits: ReturnType<typeof mergeCreditRatesAll>, money: ReturnType<typeof moneyRates>, currency: Currency, planTier = 0): string {
   if (row.familyCost === null) return '—'
   const usable = moneyOnly(row.familyCost, credits)
   if (usable === null) return '—'
-  const totals = billedTotalsOf([row], book, credits, money)
+  const totals = billedTotalsOf([row], book, credits, money, planTier)
   if (!totals.costByBucket.any) return '—'
   void currency
   return formatCost(totals.costByBucket.total, 'usd')

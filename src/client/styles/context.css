@@ -433,15 +433,22 @@
 
 /* --- the surface's five-band layout ------------------------------------- */
 /* Two-column band: the left column stacks the composition and the trend, the right holds the browser. The
- * browser is stretched to the left column's height so the band reads as one flat strip. */
-.cb-cols-main { align-items: stretch; }
+ * browser is stretched to the left column's height so the band reads as one flat strip.
+ * Widths adapt instead of splitting the row evenly: the browser keeps a working width of roughly a
+ * third of the band (360px floor, 560px cap) and the composition/trend column takes the rest, so a wide
+ * window feeds the trend chart rather than padding an already-wide bucket list. */
+.cb-cols-main { display: grid; align-items: stretch; grid-template-columns: minmax(0, 1fr) clamp(400px, 36%, 720px); container: cb-main / inline-size; }
 .cb-col { display: flex; flex-direction: column; gap: 14px; min-width: min(360px, 100%); flex: 1 1 0; }
+.cb-cols-main > .cb-col { min-width: 0; }
 .cb-col .cb-card:last-child { margin-bottom: 0; }
 .cb-col-browser { flex: 1 1 0; }
 .cb-col-browser > .cb-card { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 .cb-col-browser .cb-browser-cats { overflow-y: auto; min-height: 0; }
-@container cb-card (max-width: 559px) {
-  .cb-cols-main > .cb-col { flex-basis: 100%; }
+/* The browser column folds below the full row — the grid becomes a single track, which is the same
+ * fold the old flex-wrap performed once the columns' widths no longer fit. */
+/* The band folds when the band itself (not an inner card) runs out of room for both tracks. */
+@container cb-main (max-width: 799px) {
+  .cb-cols-main { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* Band 1-2: the header cards pair up 3:1 and 1:1, folding to full width at their own minimums. */
@@ -497,17 +504,46 @@
 .cb-plugin-link { font-size: 12px; }
 
 /* --- sidebar summary ---------------------------------------------------- */
-.cb-sidebar-tokens { display: flex; flex-direction: column; gap: 3px; }
-.cb-sidebar-token-row { display: flex; align-items: baseline; gap: 6px; font-size: 12px; }
-.cb-sidebar-token-dot { width: 8px; height: 8px; border-radius: 2px; flex: none; }
-.cb-sidebar-token-label { color: var(--dsw-alias-label-secondary); }
-.cb-sidebar-token-value { margin-left: auto; font-variant-numeric: tabular-nums; }
-.cb-sidebar-total { display: flex; justify-content: space-between; border-top: 1px solid var(--dsw-alias-border-l2); margin-top: 6px; padding-top: 6px; font-variant-numeric: tabular-nums; }
-.cb-sidebar-platforms { display: flex; flex-direction: column; gap: 6px; }
-.cb-sidebar-platform { display: flex; align-items: baseline; gap: 8px; font-size: 12px; flex-wrap: wrap; }
-.cb-sidebar-platform-name { font-weight: 500; }
-.cb-sidebar-platform b { margin-left: auto; font-variant-numeric: tabular-nums; }
-.cb-sidebar-note { font-size: 11px; color: var(--dsw-alias-label-tertiary); margin-top: 4px; }
+.cb-sidebar-summary { display: flex; flex-direction: column; gap: 8px; }
+.cb-root .cb-sidebar-card { margin-bottom: 0; }
+.cb-sidebar-donut-row { align-items: flex-start; }
+/* The ring and the legend share the card width; the legend keeps two visual columns when it fits,
+ * collapsing to one on the narrow sidebar. */
+/* Higher specificity than insights.css's later `.cb-ov-sl` auto-fill rule, which would otherwise
+ * collapse this legend to one column whenever the sidebar card narrows. */
+.cb-root .cb-sidebar-donut-row .cb-ov-sl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px 10px; }
+@container cb-card (max-width: 300px) { .cb-root .cb-sidebar-donut-row .cb-ov-sl { grid-template-columns: minmax(0, 1fr); } }
+.cb-sidebar-donut-row .cb-ov-sl-row { padding: 1px 4px; margin: 0 -4px; }
+.cb-sidebar-donut-row .cb-ov-sl-pct { color: var(--dsw-alias-label-primary); font-weight: 600; }
+.cb-sidebar-donut-row .cb-ov-sl-sub { padding-left: 14px; }
+/* One row per platform. The layout is a grid, not a flex row, because the three cells have different
+ * jobs: the name may ellipsize, the amount is a number that must stay whole, and the call count is a
+ * quiet suffix that can drop to the next line. `minmax(0, 1fr)` on the name is what lets the ellipsis
+ * work; without it a long route id pushes the amount off the card.
+ *
+ * The card is already an inline-size container (`cb-card`), so the narrow variant below reflows on the
+ * width the card really has — which in this sidebar pane is routinely under 300px. */
+.cb-sidebar-platforms { display: flex; flex-direction: column; gap: 5px; }
+.cb-sidebar-platform {
+  display: grid;
+  grid-template-columns: 7px minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 2px 6px;
+  font-size: 12px;
+  min-width: 0;
+}
+.cb-sidebar-platform-dot { align-self: center; width: 7px; height: 7px; border-radius: 2px; display: inline-block; }
+.cb-sidebar-platform-name { font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cb-sidebar-platform b { font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* The call count rides under the name rather than on its own line: in the sidebar pane a fourth row
+ * per platform would triple the card's height. */
+.cb-sidebar-platform .cb-card-sub { grid-column: 2 / -1; }
+/* Narrow card: the amount takes its own line under the name, so neither truncates. */
+@container cb-card (max-width: 300px) {
+  .cb-sidebar-platform { grid-template-columns: 7px minmax(0, 1fr); }
+  .cb-sidebar-platform b { grid-column: 2; justify-self: start; }
+}
+.cb-sidebar-note { font-size: 11px; color: var(--dsw-alias-label-tertiary); margin-top: 2px; }
 
 /* Small missing pieces: a card subtitle used by several headers, the composition legend's label cell, and
  * the two column wrappers the five-band layout names. */
@@ -518,7 +554,6 @@
 .cb-browser-cat-name { flex: 1; }
 .cb-browser-block-raw { font-family: var(--ds-font-family-code, ui-monospace, monospace); white-space: pre-wrap; overflow-wrap: anywhere; }
 .cb-modal-composition { margin-bottom: 12px; }
-.cb-sidebar-summary { display: flex; flex-direction: column; gap: 12px; }
 
 /* Card-level hooks kept for targeting: these two cards are the tall ones in the middle band. */
 .cb-browser-card { min-height: 0; }
@@ -569,7 +604,7 @@
   .cb-head > .cb-tokens-card,
   .cb-head > .cb-timing-card { flex-basis: 100%; }
   .cb-col { flex-basis: 100%; }
-  .cb-cols-main > .cb-col { flex-basis: 100%; }
+  .cb-cols-main { grid-template-columns: minmax(0, 1fr); }
 }
 /* Per-card reflow: the grids inside a card are what overflow once the card narrows. */
 @container cb-card (max-width: 420px) {

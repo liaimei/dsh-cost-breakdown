@@ -45,7 +45,11 @@ export function UsageBars(props: UsageBarsProps): ReactElement {
   let peak = 0
   for (const day of days) if (day.tokens > peak) peak = day.tokens
   return (
-    <div className="cb-ov-usage">
+    <div className="cb-card cb-ov-usage-card">
+      <div className="cb-card-title">
+        <span className="cb-card-title-text">{t('ov.usage.title')}</span>
+      </div>
+      <div className="cb-ov-usage">
       {empty
         ? <div className="cb-ov-empty">{t('ov.usage.empty')}</div>
         : (
@@ -103,6 +107,7 @@ export function UsageBars(props: UsageBarsProps): ReactElement {
             </div>
           </>
         )}
+      </div>
     </div>
   )
 }

@@ -103,8 +103,11 @@ export interface CardPlacement {
   flip: boolean
 }
 
-/** Minimum card width: the official context meter's own floor. */
-export const CARD_MIN_WIDTH = 264
+/** Minimum card width. Wider than the official context meter's own floor (264px) because this card
+ * carries the token ring, the four-column rate table and the plan quota bars; below 440px those start
+ * truncating. The placement still clamps the result to the viewport, so a tiny window gets a
+ * viewport-sized card instead of one that runs off the edge. */
+export const CARD_MIN_WIDTH = 440
 /** Distance between the card and the trigger. */
 const CARD_GAP = 8
 /** Keep the card off the viewport edge. */
@@ -128,25 +131,34 @@ export function placeCard(input: CardPlacementInput): CardPlacement {
   const room = flip ? roomBelow : roomAbove
   const maxHeight = Math.max(CARD_MIN_HEIGHT, room)
   const top = flip ? trigger.bottom + CARD_GAP : trigger.top - Math.min(natural, maxHeight) - CARD_GAP
-  const width = Math.min(
-    Math.max(input.cardWidth, CARD_MIN_WIDTH),
-    Math.max(CARD_MIN_WIDTH, viewport.width - VIEWPORT_GUTTER * 2),
-  )
+  // Clamp the floor itself to the viewport: `Math.max(CARD_MIN_WIDTH, room)` would force a 440px card
+  // into a 400px window and push it off the edge. The card is allowed to be narrower than its floor
+  // only when the viewport cannot hold the floor.
+  const usable = Math.max(1, viewport.width - VIEWPORT_GUTTER * 2)
+  const width = Math.min(Math.max(input.cardWidth, CARD_MIN_WIDTH), usable)
   const left = Math.max(VIEWPORT_GUTTER, Math.min(trigger.left, viewport.width - width - VIEWPORT_GUTTER))
   return { left, top, width, maxHeight, flip }
 }
 
 /**
- * Whether an official overlay is currently open at the plugin's own layer.
+ * Whether an **official** overlay is currently open at the plugin's own layer.
  *
  * Both live at `z-index: 1100`, so the later mount wins; the plugin therefore **yields** instead of
- * raising its layer. The official overlays (the context meter's panel and the stat dialog) are portalled
- * to `body` with `role="dialog"`, so they are found by that role plus the shared z-index.
+ * raising its layer. The official overlays (the context meter's panel and the stat dialog) are
+ * portalled to `body` with `role="dialog"`, so they are found by that role plus the shared z-index.
+ *
+ * **This plugin's own card is excluded.** It carries the same role and the same layer (it is styled to
+ * match the official dialog), so without the exclusion the check finds the plugin's own card the moment
+ * it opens, concludes an official overlay is up, and closes the card — the card could never stay open.
+ * The card is recognised by its own class, which no official overlay carries.
  */
+const OWN_CARD_CLASS = 'cb-dock-card'
+
 export function officialOverlayOpen(): boolean {
   if (typeof document === 'undefined') return false
   try {
     for (const element of document.body.querySelectorAll('[role="dialog"]')) {
+      if (element.classList.contains(OWN_CARD_CLASS)) continue
       if (getComputedStyle(element).zIndex !== '1100') continue
       if (!(element instanceof HTMLElement)) continue
       if (element.style.display === 'none' || getComputedStyle(element).visibility === 'hidden') continue

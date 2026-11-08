@@ -22,6 +22,30 @@ export function vendorOf(route: string): string {
   return VENDOR_BY_ROUTE[route] ?? route
 }
 
+/**
+ * Relay prefixes: routes that are an OpenAI-compatible **reseller** rather than a vendor.
+ *
+ * A relay (woyao.pro and its `woyao-pro-*` account rows are the observed case) resells other
+ * vendors' models through one endpoint. Two consequences drive this list:
+ *
+ *   - the registry has **no** price branch for it — `api.iiiiitoken.com` is not a vendor — so a
+ *     registry lookup would fall through to the model-side index and price the model at *some*
+ *     other vendor's list rate;
+ *   - the number the user actually pays is the relay's own price, which is not public: it depends on
+ *     the account's group multiplier.
+ *
+ * So a relay route is recognised here and priced only from the user's declared rates. Without a
+ * declared rate the model stays unpriceable, which the UI says outright — a guessed list price would
+ * be a plausible wrong number.
+ */
+const RELAY_PREFIXES: readonly string[] = ['woyao']
+
+/** Whether a route is a reselling relay rather than a first-party vendor. */
+export function isRelayRoute(route: string): boolean {
+  const needle = route.trim().toLowerCase()
+  return RELAY_PREFIXES.some(prefix => needle === prefix || needle.startsWith(`${prefix}-`))
+}
+
 /** Whether a route bills on DeepSeek's own table and period windows. */
 export function isDeepSeekRoute(route: string): boolean {
   return vendorOf(route) === 'deepseek'

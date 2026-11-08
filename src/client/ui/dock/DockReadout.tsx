@@ -12,17 +12,18 @@
  * See `measure.ts` for the arithmetic and why it uses needed (not squashed) sibling widths.
  */
 
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createElement as h, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { createPortal } from 'react-dom'
 import type { ReactElement } from 'react'
 import type { DockSeatProps } from '../../shell/contracts'
+import type { PreferencesStore } from '../../shell/preferences'
 import { balanceTextOf, readingOf, usePeriod, useSnapshot, useWallet } from './reading'
 import type { DockReading, PeriodView } from './reading'
 import { usePriceBook } from '../insights/priceBook'
 import { moneyRates } from '../../shell/rateTables'
 import type { Currency } from '../../data/cost'
 import {
-  fromCny, formatCost, formatCredits, formatNativeSpend, officialRows, symbolOf, toCurrency,
+  fromCny, formatCost, formatCredits, formatNativeSpend, officialRows, toCurrency, unitWordOf,
 } from '../../data/cost'
 import { formatCountdown, formatCountdownCompact } from '../../i18n/format'
 import { peakWindowsText } from '../../../core/clock'
@@ -30,7 +31,8 @@ import type { Translate } from '../../i18n/dict'
 import { OFFICIAL_TABLE } from '../../../core/clock'
 import { GlyphClock, GlyphInsights } from '../glyphs'
 import { neededWidthOf, officialOverlayOpen, placeCard, roomForEntry, CARD_MIN_WIDTH } from './measure'
-import { StatsCostBlock, StatsPlatformBlock, StatsTokenBlock } from './blocks'
+import { PlanQuotaBlock, StatsCostBlock, StatsPlatformBlock, StatsTokenBlock } from './blocks'
+import { platformTintOf } from '../insights/donut'
 
 /** The active locale's display currency: Chinese yuan for zh, dollars otherwise. */
 function currencyOf(locale: () => string): Currency {
@@ -45,6 +47,24 @@ function currencyOf(locale: () => string): Currency {
 export interface DockProps extends DockSeatProps {
   t: Translate
   locale?: () => string
+  /** The preferences store, so the card's subscription block prices the tier the user actually
+   * pays for. Absent only in tests. */
+  preferences?: PreferencesStore
+}
+
+/** The subscription tier index from the preferences, or 0 when no store is bound. */
+export function planTierOf(preferences: PreferencesStore | undefined): number {
+  return preferences?.get().defaultPlanTier ?? 0
+}
+
+/** Subscribe to the tier index, so a settings write repriced the card without a remount. */
+export function usePlanTier(preferences: PreferencesStore | undefined): number {
+  const subscribe = useCallback(
+    (onChange: () => void) => preferences?.store.subscribe(onChange) ?? (() => {}),
+    [preferences],
+  )
+  const snapshot = useCallback(() => planTierOf(preferences), [preferences])
+  return useSyncExternalStore(subscribe, snapshot, snapshot)
 }
 
 /** The composer-row readout. */
@@ -52,7 +72,10 @@ export function DockReadout(props: DockProps): ReactElement | null {
   const t = props.t
   const snapshot = useSnapshot(props)
   const book = usePriceBook()
-  const reading = readingOf(snapshot, book, moneyRates())
+  const planTier = usePlanTier(props.preferences)
+  // The tier is part of the read, not a formatting detail: the plan block and the quota share are
+  // computed against it, so passing it here is what makes the card agree with the settings page.
+  const reading = readingOf(snapshot, book, moneyRates(), planTier)
   const period = usePeriod()
   const wallet = useWallet()
   const currency = currencyOf(props.locale ?? (() => 'en'))
@@ -196,11 +219,16 @@ function Readout(props: {
           : shown.map((row, index) => (
             <span key={row.provider} className="cb-dock-platform" data-unit={row.unit}>
               {index > 0 ? <span className="cb-dock-sep">·</span> : null}
+              <i className="cb-dock-platform-dot" style={{ background: platformTintOf(row.provider) }} />
               <span className="cb-dock-platform-name">{platformLabel(row.provider, t)}</span>
               <span className="cb-dock-spend">
-                {row.unit === 'credits'
-                  ? t('dock.creditsSpent', { n: formatCredits(row.value) })
-                  : t('dock.moneySpent', { n: formatNativeSpend(row.value, row.currency ?? 'USD') })}
+                {row.unit === 'plan'
+                  // A subscription's figure is quota consumed: printing it as money would claim a
+                  // bill that never arrives.
+                  ? t('dock.planSpent', { n: formatCredits(row.value) })
+                  : row.unit === 'credits'
+                    ? t('dock.creditsSpent', { n: formatCredits(row.value) })
+                    : t('dock.moneySpent', { n: formatNativeSpend(row.value, row.currency ?? 'USD') })}
               </span>
               <BalanceCell row={row} wallet={wallet} currency={currency} t={t} />
             </span>
@@ -255,9 +283,11 @@ function Readout(props: {
 function probeText(t: Translate, reading: DockReading, period: PeriodView): string {
   const parts: string[] = []
   for (const row of reading.shown) {
-    parts.push(row.unit === 'credits'
-      ? t('dock.creditsSpent', { n: formatCredits(row.value) })
-      : t('dock.moneySpent', { n: formatNativeSpend(row.value, row.currency ?? 'USD') }))
+    parts.push(row.unit === 'plan'
+      ? t('dock.planSpent', { n: formatCredits(row.value) })
+      : row.unit === 'credits'
+        ? t('dock.creditsSpent', { n: formatCredits(row.value) })
+        : t('dock.moneySpent', { n: formatNativeSpend(row.value, row.currency ?? 'USD') }))
   }
   if (reading.onOfficialRates) parts.push(t(period.peak ? 'dock.peak' : 'dock.off'))
   return parts.join(' · ')
@@ -271,8 +301,8 @@ function platformLabel(provider: string, t: Translate): string {
 }
 
 /** The remaining-balance cell, or nothing at all when no figure is known. */
-function BalanceCell(props: { row: { provider: string; unit: 'money' | 'credits'; currency?: 'CNY' | 'USD' }; wallet: ReturnType<typeof useWallet>; currency: Currency; t: Translate }): ReactElement | null {
-  const known = balanceTextOf(props.row, props.wallet, props.currency, symbolOf)
+function BalanceCell(props: { row: { provider: string; unit: 'money' | 'credits' | 'plan'; currency?: 'CNY' | 'USD' }; wallet: ReturnType<typeof useWallet>; currency: Currency; t: Translate }): ReactElement | null {
+  const known = balanceTextOf(props.row, props.wallet, props.currency)
   if (known === null) return null
   return known.credits
     ? <span className="cb-dock-left">{props.t('dock.creditsLeft', { n: known.text })}</span>
@@ -365,10 +395,13 @@ function DockCard(props: {
           : null}
         <StatsPlatformBlock t={t} reading={reading} wallet={wallet} />
       </div>
+      {/* The model in force and its official price, which is the question this card exists to
+          answer: "what am I on, and what does it cost?" A subscription route has no per-token price
+          to print, so the block falls back to the plan's own tier and quota. */}
       {reading.onOfficialRates
         ? (
           <div className="cb-dock-card-block">
-            <div className="cb-dock-block-title">{t('dock.rates')}</div>
+            <div className="cb-dock-block-title">{t('dock.modelRates')}</div>
             <table className="cb-dock-table">
               <thead>
                 <tr>
@@ -381,19 +414,21 @@ function DockCard(props: {
               <tbody>
                 {OFFICIAL_TABLE.map((row, index) => {
                   const rate = rows[index]
-                  return (
-                    <tr key={row.id}>
-                      <td>{row.label}</td>
-                      <td className="cb-dock-rate-hit">{formatRateCell(rate.hit, currency)}</td>
-                      <td className="cb-dock-rate-miss">{formatRateCell(rate.miss, currency)}</td>
-                      <td className="cb-dock-rate-out">{formatRateCell(rate.out, currency)}</td>
-                    </tr>
-                  )
+                  const activeModel = reading.active?.model
+                  const isActive = activeModel !== undefined && activeModel.toLowerCase() === row.id
+                  return h('tr', { key: row.id, className: isActive ? 'cb-dock-row-active' : undefined },
+                    h('td', null, row.label),
+                    h('td', { className: 'cb-dock-rate-hit' }, formatRateCell(rate.hit, currency)),
+                    h('td', { className: 'cb-dock-rate-miss' }, formatRateCell(rate.miss, currency)),
+                    h('td', { className: 'cb-dock-rate-out' }, formatRateCell(rate.out, currency)))
                 })}
               </tbody>
             </table>
           </div>
         )
+        : null}
+      {reading.plan !== null
+        ? h(PlanQuotaBlock, { t, reading, wallet })
         : null}
       {reading.usage !== null
         ? <div className="cb-dock-note">{t('dock.note')}</div>
@@ -402,10 +437,11 @@ function DockCard(props: {
   )
 }
 
-/** One official rate cell: the table quotes CNY, so a USD display converts it. */
+/** One official rate cell: the table quotes CNY, so a USD display converts it. The unit follows the
+ * number, matching every other money figure on these surfaces. */
 function formatRateCell(cny: number, currency: Currency): string {
   const value = currency === 'cny' ? cny : fromCny(cny, 'usd')
-  return `${currency === 'cny' ? '¥' : '$'}${value.toFixed(2)}`
+  return `${value.toFixed(2)} ${unitWordOf(currency === 'cny' ? 'CNY' : 'USD')}`
 }
 
 export { officialRows, toCurrency, formatCost }

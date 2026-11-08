@@ -44,7 +44,26 @@ export type FoldBounds = typeof DEFAULT_BOUNDS
  * the schema fills the rest. Consumers never read fields directly — they call
  * {@link resolveBounds}, so a field added here cannot silently miss a default.
  */
-export type Config = Partial<FoldBounds> & Partial<Preferences>
+export type Config = Partial<FoldBounds> & Partial<Preferences> & Partial<RateTables>
+
+/**
+ * Hand-declared rate tables, forwarded to the browser half as-is.
+ *
+ * Both payloads are untrusted by contract: `thirdPartyRatesOf` and `creditRatesOf` in the browser
+ * half re-validate every entry and drop a bad one, so one typo cannot fail the row load. They are
+ * `z.any()` rather than a nested schema for exactly that reason — a strict host-side schema would
+ * turn a single malformed rate into "the whole plugin refuses to load", which is the opposite of
+ * what a hand-edited `cordis.patch.yml` needs.
+ *
+ * There is no settings UI for these yet; they are edited in the profile's `cordis.patch.yml`
+ * (see README, "配置").
+ */
+export interface RateTables {
+  /** `<provider>:<model>` → `{ input, output, cacheRead?, cacheWrite? }`, USD per million tokens. */
+  thirdPartyRates?: unknown
+  /** `<provider>:<model>` → credits per request, or a nested `{ provider: { model: credits } }`. */
+  creditRates?: unknown
+}
 
 /**
  * Mark a field as live-editable when the harness's schemastery ships `.volatile()`.
@@ -83,11 +102,18 @@ export const Config = z.object({
   defaultPlacement: volatileField(z.union(['all', 'tab', 'sidebar']).default('all').loose()),
   defaultGranularity: volatileField(z.union(['step', 'turn']).default('step').loose()),
   defaultTrendMode: volatileField(z.union(['total', 'delta']).default('total').loose()),
-  defaultDeltaBase: volatileField(z.union(['step', 'turn']).default('step').loose()),
   defaultToolSort: volatileField(z.union(['size', 'count', 'name']).default('count').loose()),
   defaultFileSort: volatileField(z.union(['count', 'latest', 'path']).default('count').loose()),
   insightsEntry: volatileField(z.union(['show', 'hide']).default('show').loose()),
   defaultDurationCurve: volatileField(z.union(['show', 'hide']).default('show').loose()),
+  /** The subscription tier index: 0 = entry tier, 1 = middle, 2 = top. Clamped per family at read
+   * time, so one number works for GLM (3 tiers) and MiniMax (3 tiers) alike. */
+  defaultPlanTier: volatileField(z.number().min(0).step(1).default(0).loose()),
+
+  // Hand-declared rate tables (see {@link RateTables}). Deliberately `any`: the browser half owns
+  // validation so a single malformed rate cannot fail the row load.
+  thirdPartyRates: z.any<unknown>(),
+  creditRates: z.any<unknown>(),
 })
 
 /** Every preference key, in schema order. Derived so a rename cannot leave one behind. */
@@ -95,11 +121,11 @@ export const PREFERENCE_KEYS: readonly PreferenceKey[] = [
   'defaultPlacement',
   'defaultGranularity',
   'defaultTrendMode',
-  'defaultDeltaBase',
   'defaultToolSort',
   'defaultFileSort',
   'insightsEntry',
   'defaultDurationCurve',
+  'defaultPlanTier',
 ]
 
 /**

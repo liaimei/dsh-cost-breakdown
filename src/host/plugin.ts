@@ -23,6 +23,8 @@ import { watchActivityBackfill } from './http/backfill'
 import { watchBalanceChannel } from './http/balance'
 import { makeColdReadGate } from './http/cold'
 import { watchCreditsChannel } from './http/credits'
+import { watchPlanQuotaChannel } from './http/planQuota'
+import { watchRelayPricesChannel } from './http/relayPrices'
 import { watchDetailChannel } from './http/detail'
 import { watchSkillsChannel } from './http/skills'
 import { createToolAttribution } from './platform/attribution'
@@ -86,6 +88,8 @@ export function apply(ctx: Context, config: Config): void {
   // 1. Always-on channels: read-only runtime interfaces, valid on both sides of the gate.
   watchBalanceChannel(ctx)
   watchCreditsChannel(ctx)
+  watchPlanQuotaChannel(ctx)
+  watchRelayPricesChannel(ctx)
   watchSkillsChannel(ctx)
 
   // 2. Baseline gate. A below-baseline harness never gets the real fold (its log dialect and seam
@@ -131,6 +135,7 @@ export type {
   BucketTotals,
   CallLedger,
   CostLedger,
+  CreditRateTable,
   FileOp,
   HeaderedTool,
   HeaderEpoch,
@@ -139,7 +144,12 @@ export type {
   LedgerEvent,
   Period,
   PlatformBalance,
+  PlanQuota,
+  PlanQuotaTable,
+  PlanQuotaWindow,
   Preferences,
+  RelayPrice,
+  RelayPriceTable,
   RequestRow,
   SkillEntry,
   Snapshot,

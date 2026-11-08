@@ -17,6 +17,25 @@ import type { Translate } from '../../i18n/dict'
 /** The boundary's own state: the first error it saw, or `null`. */
 interface BoundaryState { error: Error | null }
 
+/**
+ * One boundary class per translator.
+ *
+ * A boundary created inside a render body is a **new component type** on every render, and React
+ * remounts a subtree whose element type changed — so the boundary's children would lose their local
+ * state (granularity, selected step, scroll position) whenever the parent re-rendered. The class is
+ * therefore created once per translator and reused.
+ */
+const BOUNDARIES = new WeakMap<Translate, ComponentType<{ children?: ReactNode }>>()
+
+/** The boundary for one translator, stable across calls with the same translator. */
+export function boundaryFor(t: Translate): ComponentType<{ children?: ReactNode }> {
+  const known = BOUNDARIES.get(t)
+  if (known !== undefined) return known
+  const boundary = makeErrorBoundary(t)
+  BOUNDARIES.set(t, boundary)
+  return boundary
+}
+
 /** Build the boundary for one translator. */
 export function makeErrorBoundary(t: Translate): ComponentType<{ children?: ReactNode }> {
   return class ContextErrorBoundary extends Component<{ children?: ReactNode }, BoundaryState> {

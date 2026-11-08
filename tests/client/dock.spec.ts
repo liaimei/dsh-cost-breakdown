@@ -8,7 +8,8 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { CARD_MIN_WIDTH, neededWidthOf, placeCard, roomForEntry } from '../../src/client/ui/dock/measure'
+import { CARD_MIN_WIDTH, neededWidthOf, officialOverlayOpen, placeCard, roomForEntry } from '../../src/client/ui/dock/measure'
+import { platformTintOf } from '../../src/client/ui/insights/donut'
 
 describe('roomForEntry', () => {
   it('returns null when the row cannot be measured', () => {
@@ -77,7 +78,20 @@ describe('placeCard', () => {
     expect(placement.maxHeight).toBeGreaterThanOrEqual(160)
   })
 
-  it('clamps the width into the viewport and the floor', () => {
+  it('honours the floor while the viewport can hold it', () => {
+    const placement = placeCard({
+      trigger: { left: 10, top: 400, bottom: 420 },
+      viewport: { width: 1200, height: 700 },
+      natural: 200,
+      cardWidth: 200,
+    })
+    // Below the floor the card is widened to it, not left squashed.
+    expect(placement.width).toBe(CARD_MIN_WIDTH)
+  })
+
+  it('gives up the floor rather than overflow a narrow viewport', () => {
+    // The floor is a preference, the edge is a hard limit: forcing 440px into a 320px window would put
+    // most of the card off-screen, which is worse than a wrapped legend.
     const narrow = placeCard({
       trigger: { left: 10, top: 400, bottom: 420 },
       viewport: { width: 320, height: 700 },
@@ -85,6 +99,72 @@ describe('placeCard', () => {
       cardWidth: 440,
     })
     expect(narrow.width).toBeLessThanOrEqual(320 - 24)
-    expect(narrow.width).toBeGreaterThanOrEqual(CARD_MIN_WIDTH)
+    expect(narrow.width).toBe(320 - 24)
+    expect(narrow.left).toBeGreaterThanOrEqual(12)
+  })
+})
+
+describe('officialOverlayOpen', () => {
+  /** Build a dialog element with the layer and box an official overlay has. */
+  function dialog(zIndex: string, width = 200, height = 100): HTMLElement {
+    const element = document.createElement('div')
+    element.setAttribute('role', 'dialog')
+    element.style.zIndex = zIndex
+    element.getBoundingClientRect = () => ({ width, height, top: 0, left: 0, bottom: height, right: width, x: 0, y: 0, toJSON: () => ({}) })
+    return element
+  }
+
+  it('reports an official dialog at the shared layer', () => {
+    const element = dialog('1100')
+    document.body.appendChild(element)
+    try {
+      expect(officialOverlayOpen()).toBe(true)
+    } finally {
+      element.remove()
+    }
+  })
+
+  it('ignores this plugin own card, so opening it cannot close itself', () => {
+    // The card carries role="dialog" and z-index 1100 by design (it mirrors the official dialog), which
+    // is exactly what made the previous version close itself the moment it opened.
+    const own = dialog('1100')
+    own.classList.add('cb-dock-card')
+    document.body.appendChild(own)
+    try {
+      expect(officialOverlayOpen()).toBe(false)
+    } finally {
+      own.remove()
+    }
+  })
+
+  it('ignores a dialog at another layer', () => {
+    const element = dialog('900')
+    document.body.appendChild(element)
+    try {
+      expect(officialOverlayOpen()).toBe(false)
+    } finally {
+      element.remove()
+    }
+  })
+})
+
+describe('platformTintOf', () => {
+  it('gives one platform the same colour everywhere', () => {
+    // Stability is the whole point: a colour that depended on render order would make the same platform
+    // change colour between sessions, which is what this mapping exists to prevent.
+    expect(platformTintOf('workbuddy')).toBe(platformTintOf('workbuddy'))
+    expect(platformTintOf('deepseek-official')).toBe(platformTintOf('deepseek-account'))
+  })
+
+  it('gives different platforms different colours', () => {
+    const tints = ['workbuddy', 'workbuddy-ai', 'deepseek-official', 'zai-coding-cn', 'minimax-cn']
+      .map(platformTintOf)
+    expect(new Set(tints).size).toBe(tints.length)
+  })
+
+  it('still tints a route it does not list, and does so stably', () => {
+    const first = platformTintOf('brand-new-route')
+    expect(first).toMatch(/^var\(--cb-ov-/)
+    expect(platformTintOf('brand-new-route')).toBe(first)
   })
 })

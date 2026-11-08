@@ -14,14 +14,16 @@
  */
 
 import { useEffect, useState } from 'react'
-import type { CreditRateTable, Snapshot } from '../../../wire/model'
+import type { CreditRateTable, PlanQuotaTable, Snapshot } from '../../../wire/model'
+import { planFamilyOf, tierAt, type PlanFamily, type PlanTier } from '../../../core/plans'
 import { countdownOf, msUntilFlip, offDayReason, periodAt, type Period } from '../../../core/clock'
 import { isDeepSeekRoute } from '../../../core/providers'
-import { billedTokens, mergeLedgers, type Currency, type PriceBook } from '../../data/cost'
+import { billedTokens, mergeLedgers, unitWordOf, type Currency, type PriceBook } from '../../data/cost'
 import type { PlatformSpend } from '../../data/platformSpend'
 import type { PlatformBalance, PlatformCredits } from '../../../wire/model'
 import { balanceEntryOf, readBalance } from '../../data/balance'
 import { readCredits, type CreditsTable } from '../../data/credits'
+import { readPlanQuotas } from '../../data/planQuota'
 import { creditRates, moneyRates } from '../../shell/rateTables'
 import type { SessionSeatProps } from '../../shell/contracts'
 import { snapshotOf } from '../../shell/washers'
@@ -76,7 +78,8 @@ export function countdownPartsOf(period: PeriodView): { hours: number; minutes: 
 /** What the collapsed row renders for one platform. */
 export interface DockRow {
   provider: string
-  unit: 'money' | 'credits'
+  /** `plan` is a subscription: its figure is quota consumed, not a bill. */
+  unit: 'money' | 'credits' | 'plan'
   currency?: 'CNY' | 'USD'
   value: number
   calls: number
@@ -100,6 +103,8 @@ export interface DockReading {
   onOfficialRates: boolean
   /** Credit rates from the platform's catalogue, for per-request platforms. */
   creditRates: CreditRateTable | null
+  /** The plan family the current route bills through, when it is a subscription. */
+  plan: { family: PlanFamily; tier: PlanTier | null } | null
 }
 
 /** Read the session's snapshot from the seat. */
@@ -111,17 +116,18 @@ export function useSnapshot(props: SessionSeatProps): Snapshot | null {
 }
 
 /** Derive the dock reading from a snapshot. Pure so the card and the row cannot disagree. */
-export function readingOf(snapshot: Snapshot | null, book: PriceBook | null, money: ReturnType<typeof moneyRates>): DockReading {
+export function readingOf(snapshot: Snapshot | null, book: PriceBook | null, money: ReturnType<typeof moneyRates>, planTier = 0): DockReading {
   const usage = mergeLedgers(snapshot?.cost ?? null)
   const calls = snapshot?.calls ?? null
   const credits = snapshot?.creditRates ?? mergeCreditRates(null, creditRates())
-  const platforms = platformSpendsOf(usage, calls, book, money, credits)
+  const platforms = platformSpendsOf(usage, calls, book, money, credits, planTier)
   const active = snapshot?.provider !== undefined
     ? { provider: snapshot.provider, ...(snapshot.model !== undefined ? { model: snapshot.model } : {}) }
     : undefined
   // The plugin only knows a route once a header has been folded; before that it assumes the official
   // table, because that is the only source of the peak/off split.
   const onOfficialRates = active === undefined || isDeepSeekRoute(active.provider)
+  const family = active === undefined ? null : planFamilyOf(active.provider)
   const activeRow = active === undefined ? undefined : platforms.find(row => row.provider === active.provider)
   const shown = active === undefined ? platforms : activeRow === undefined ? [] : [activeRow]
   return {
@@ -133,18 +139,26 @@ export function readingOf(snapshot: Snapshot | null, book: PriceBook | null, mon
     ...(active !== undefined ? { active } : {}),
     onOfficialRates,
     creditRates: credits,
+    plan: family === null ? null : { family, tier: tierAt(family, planTier) },
   }
 }
 
-/** The balance and the credit wallet, read on mount and then once a minute. */
+/** The balance, the credit wallet, and every subscription plan's live quota, read on mount and then
+ * once a minute. */
 export interface WalletState {
   balance: PlatformBalance | null
   credits: CreditsTable | null
+  /** Route id → that plan's live quota; a plan the host could not read is absent. */
+  planQuotas: PlanQuotaTable | null
 }
 
 /** Poll the two wallet channels while mounted. The first frame paints the remembered figure. */
 export function useWallet(): WalletState {
-  const [state, setState] = useState<WalletState>(() => ({ balance: readBalance(() => {}), credits: readCredits(() => {}) }))
+  const [state, setState] = useState<WalletState>(() => ({
+    balance: readBalance(() => {}),
+    credits: readCredits(() => {}),
+    planQuotas: readPlanQuotas(() => {}),
+  }))
   useEffect(() => {
     let live = true
     const refresh = (): void => {
@@ -154,7 +168,14 @@ export function useWallet(): WalletState {
       const credits = readCredits((value) => {
         if (live) setState(previous => (previous.credits === value ? previous : { ...previous, credits: value }))
       })
-      if (live) setState(previous => (previous.balance === balance && previous.credits === credits ? previous : { balance, credits }))
+      const planQuotas = readPlanQuotas((value) => {
+        if (live) setState(previous => (previous.planQuotas === value ? previous : { ...previous, planQuotas: value }))
+      })
+      if (live) {
+        setState(previous => (previous.balance === balance && previous.credits === credits && previous.planQuotas === planQuotas
+          ? previous
+          : { balance, credits, planQuotas }))
+      }
     }
     refresh()
     const timer = setInterval(refresh, BALANCE_POLL_MS)
@@ -172,8 +193,10 @@ export function balanceTextOf(
   row: Pick<DockRow, 'provider' | 'unit' | 'currency'>,
   wallet: WalletState,
   currency: Currency,
-  symbolOf: (code: string) => string,
 ): { text: string; credits: boolean } | null {
+  // A subscription reports its own quota on the platform's usage page, not a wallet balance, so the
+  // dock shows no balance cell for it rather than a figure from an unrelated account.
+  if (row.unit === 'plan') return null
   if (row.unit === 'credits') {
     const credits = wallet.credits?.[row.provider]
     if (credits === undefined) return null
@@ -181,7 +204,9 @@ export function balanceTextOf(
   }
   const entry = balanceEntryOf(wallet.balance, currency)
   if (entry === null) return null
-  return { text: `${symbolOf(entry.currency)}${entry.total.toFixed(2)}`, credits: false }
+  // The unit follows the number here too, for the same reason as `formatNativeSpend`: a balance and a
+  // spend read the same way, and a credit figure already puts its unit after its number.
+  return { text: `${entry.total.toFixed(2)} ${unitWordOf(entry.currency === 'CNY' ? 'CNY' : 'USD')}`, credits: false }
 }
 
 /** The credit wallet for one provider, when the platform reports one. */

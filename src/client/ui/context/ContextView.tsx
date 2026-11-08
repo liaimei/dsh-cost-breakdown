@@ -17,6 +17,7 @@ import type { Translate } from '../../i18n/dict'
 import type { PreferencesStore } from '../../shell/preferences'
 import { useTimelineSource } from '../../data/timeline'
 import { formatCount, formatShare } from '../../i18n/format'
+import { Donut, SliceList, platformTintOf, type SliceRow } from '../insights/donut'
 import { headlineOf, STAGES, stageLabel, STAGE_COLOR } from './derive'
 import { TrendChart } from './TrendChart'
 import { attachMarkers, assemble } from './assemble'
@@ -28,18 +29,17 @@ import { platformSpendsOf } from '../../data/platformSpend'
 import { formatCredits, formatNativeSpend } from '../../data/cost'
 import { moneyRates } from '../../shell/rateTables'
 import { creditRates } from '../../shell/rateTables'
-import { makeErrorBoundary } from './ErrorBoundary'
+import { boundaryFor } from './ErrorBoundary'
 import { BrowserCard } from './Browser'
 import { AgentNetwork } from './AgentNetwork'
-import { OverviewCard, PluginCard, TimingCard, TokensCard } from './HeaderCards'
+import { OverviewCard, TimingCard, TokensCard } from './HeaderCards'
 import { EventsCard } from './Events'
-import { buildInfo } from './buildInfo'
 import { FilesCard } from './Files'
 import {
   canOpenPaths, openPathWith, openSessionWith, resourceOpenerOf, serviceOf, workspaceOf,
   type SessionsFace,
 } from '../../shell/contracts'
-import type { HeaderTimeline, RequestRow, Snapshot } from '../../../wire/model'
+import type { HeaderTimeline, RequestRow, Snapshot, ToolSort } from '../../../wire/model'
 
 /** The view's props: the seat plus the closures the entry supplies. */
 export interface ContextViewProps extends ContextSeatProps {
@@ -51,7 +51,9 @@ export interface ContextViewProps extends ContextSeatProps {
 /** The component the entry mounts: the body behind a boundary, so one throwing card degrades to a
  * readable, retryable error instead of a blank conversation view. */
 export function ContextView(props: ContextViewProps): ReactElement {
-  const Boundary = makeErrorBoundary(props.t)
+  // One boundary *type* for the life of this translator: a class made in this body would change the
+  // element type on every parent render and remount the whole ContextBody subtree.
+  const Boundary = boundaryFor(props.t)
   return h(Boundary, null, h(ContextBody, props))
 }
 
@@ -91,40 +93,67 @@ function SidebarSummary(props: {
   ctx: ClientContext
   snapshot: Snapshot
   sessionId: string
+  /** The subscription tier index, so a plan-billed platform reports quota against the tier the user
+   * actually pays for. */
+  planTier: number
 }): ReactElement {
-  const { t, snapshot } = props
+  const { t, snapshot, planTier } = props
+  const [hover, setHover] = useState<string | null>(null)
   const rows = useMemo(() => {
     const ledger = snapshot.cost ?? null
     const calls = snapshot.calls ?? null
-    return platformSpendsOf(ledger, calls, null, moneyRates(), snapshot.creditRates ?? creditRates())
-  }, [snapshot])
+    return platformSpendsOf(ledger, calls, null, moneyRates(), snapshot.creditRates ?? creditRates(), planTier)
+  }, [snapshot, planTier])
+  const tokens = snapshot.current
+  const total = tokens.total
+  const shown = STAGES.map(stage => ({ key: stage, label: stageLabel(t, stage), value: tokens[stage] }))
+    .filter(row => row.value > 0)
+    // Reading order by size puts the dominant stages first, which is how the reference legend reads.
+    .sort((left, right) => right.value - left.value)
+  const sliceRows: SliceRow[] = shown.map(row => ({
+    key: row.key,
+    color: STAGE_COLOR[row.key],
+    label: row.label,
+    pct: total > 0 ? formatShare(row.value, total) : '—',
+    count: '≈' + formatCount(row.value),
+  }))
   return h('div', { className: 'cb-sidebar-summary' },
-    h('div', { className: 'cb-card' },
+    h('div', { className: 'cb-card cb-sidebar-card' },
       h('div', { className: 'cb-card-title' },
         h('span', { className: 'cb-card-title-text' }, t('sidebar.title')),
         h('span', { className: 'cb-card-sub' }, t('sidebar.tokensSub'))),
-      h('div', { className: 'cb-sidebar-tokens' }, STAGES.map(stage => h('div', {
-        key: stage,
-        className: 'cb-sidebar-token-row',
-      },
-        h('span', { className: 'cb-sidebar-token-dot', style: { background: STAGE_COLOR[stage] } }),
-        h('span', { className: 'cb-sidebar-token-label' }, stageLabel(t, stage)),
-        h('b', { className: 'cb-sidebar-token-value' }, formatCount(snapshot.current[stage]))))),
-      h('div', { className: 'cb-sidebar-total' },
-        h('span', { className: 'cb-card-sub' }, t('tokens.total')),
-        h('b', null, formatCount(snapshot.current.total)))),
-    h('div', { className: 'cb-card' },
+      h('div', { className: 'cb-donut-row cb-sidebar-donut-row' },
+        h(Donut, {
+          segments: shown.map(row => ({ key: row.key, color: STAGE_COLOR[row.key], value: row.value })),
+          size: 88,
+          centerTop: formatCount(total),
+          centerSub: t('tokens.total'),
+          hoverKey: hover,
+          onHoverKey: setHover,
+        }),
+        h(SliceList, { rows: sliceRows, hoverKey: hover, onHoverKey: setHover }))),
+    h('div', { className: 'cb-card cb-sidebar-card' },
       h('div', { className: 'cb-card-title' },
         h('span', { className: 'cb-card-title-text' }, t('spend.title')),
         h('span', { className: 'cb-card-sub' }, t('spend.sub'))),
       rows.length === 0
         ? h('div', { className: 'cb-empty' }, t('spend.empty'))
         : h('div', { className: 'cb-sidebar-platforms' }, rows.map(row => h('div', { key: row.provider, className: 'cb-sidebar-platform' },
-          h('span', { className: 'cb-sidebar-platform-name' }, row.provider),
+          // The platform's stable tint, the same one its card and dock segment carry, so the same
+          // platform is one colour everywhere.
+          h('i', { className: 'cb-sidebar-platform-dot', style: { background: platformTintOf(row.provider) } }),
+          h('span', { className: 'cb-sidebar-platform-name' }, platformNameOf(row.provider, t)),
           h('b', null, row.unit === 'credits'
             ? t('dock.creditsSpent', { n: formatCredits(row.value) })
-            : formatNativeSpend(row.value, row.currency ?? 'USD')),
-          h('span', { className: 'cb-card-sub' }, t('costStat.calls', { n: formatCount(row.calls) })))))),
+            : row.unit === 'plan'
+              ? t('plan.unit') + ' ' + formatCredits(row.value)
+              : formatNativeSpend(row.value, row.currency ?? 'USD')),
+          // Only a subscription carries a second figure worth a line (its tier); a call count beside
+          // the amount was noise, and the statistics page already reports it.
+          row.plan !== undefined && row.plan.tier !== null
+            && (row.plan.tier.creditsWeek !== null || typeof row.plan.tier.creditsMonth === 'number')
+            ? h('span', { className: 'cb-card-sub' }, `${t('plan.creditsLabel')} ${formatCredits(row.value)} · ${row.plan.tier.label}`)
+            : null)))),
     h('div', { className: 'cb-sidebar-note' }, t('dock.note'))
   )
 }
@@ -154,6 +183,13 @@ function useSessionsSnapshot(ctx: ClientContext): unknown {
   return snapshot
 }
 
+/** A platform's display name, shared so every surface labels one route identically. */
+function platformNameOf(provider: string, t: Translate): string {
+  return provider === 'deepseek-account' || provider === 'deepseek-official'
+    ? t('dock.platform.deepseek')
+    : provider
+}
+
 /** The billed tokens of a ledger (or of nothing). */
 function billedOf(ledger: { [provider: string]: { [model: string]: { peak?: { uncached: number; cacheRead: number; cacheWrite: number; output: number }; off?: { uncached: number; cacheRead: number; cacheWrite: number; output: number } } } } | null): number {
   let total = 0
@@ -170,6 +206,15 @@ function billedOf(ledger: { [provider: string]: { [model: string]: { peak?: { un
 function indexOfSeq(rows: readonly RequestRow[], seq: number): number {
   for (let index = 0; index < rows.length; index++) if (rows[index].seq === seq) return index
   return -1
+}
+
+/** Order the ranked tool list. `count` is hardest-working first; `name` is alphabetical; `size`
+ * keeps the caller's own tally order (the fold's seq order — schema definitions first). */
+function sortToolTally(tally: Map<string, number>, sort: ToolSort): Array<readonly [string, number]> {
+  const rows = [...tally] as Array<readonly [string, number]>
+  if (sort === 'name') rows.sort((left, right) => left[0].localeCompare(right[0]))
+  else if (sort === 'count') rows.sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+  return rows
 }
 
 /** The view body. */
@@ -255,7 +300,10 @@ function ContextBody(props: ContextViewProps): ReactElement {
   const activeIndex = hoverSeq !== null ? indexOfSeq(displayed, hoverSeq) : selectedSeq !== null ? indexOfSeq(displayed, selectedSeq) : displayed.length - 1
   const activeRow = activeIndex >= 0 ? displayed[activeIndex] : null
 
-  // The tools tally of the live surface, for the overview card's ranked list.
+  // The tools tally of the live surface, for the overview card's ranked list. The ranking order is
+  // the settings card's default sort preference; the card's own in-chart controls nothing here, so
+  // a changed preference reorders this list on the next read.
+  const toolSort = preferences.get().defaultToolSort
   const tools = useMemo(() => {
     const tally = new Map<string, number>()
     for (const node of head.nodes) {
@@ -263,8 +311,8 @@ function ContextBody(props: ContextViewProps): ReactElement {
       if (typeof node.tool !== 'string' || node.tool === '') continue
       tally.set(node.tool, (tally.get(node.tool) ?? 0) + 1)
     }
-    return [...tally].sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0])) as Array<readonly [string, number]>
-  }, [head.nodes])
+    return sortToolTally(tally, toolSort)
+  }, [head.nodes, toolSort])
   const family = useMemo(() => subagentCostOf(sessionsSnapshot, sessionId), [sessionsSnapshot, sessionId])
   const familyTokens = family.ledger === null && head.cost === undefined
     ? null
@@ -280,7 +328,7 @@ function ContextBody(props: ContextViewProps): ReactElement {
   // conversation tab: that column is narrow, and stacking the analysis tools into it makes both unreadable.
   if (sidebar) {
     return h('div', { className: 'cb-root', ref: root },
-      h(SidebarSummary, { t, ctx: props.ctx, snapshot: head, sessionId }),
+      h(SidebarSummary, { t, ctx: props.ctx, snapshot: head, sessionId, planTier: preferences.get().defaultPlanTier }),
       head.unsupported !== undefined
         ? h('div', { className: 'cb-gate-card' },
           h('div', { className: 'cb-gate-title' }, t('gate.title')),
@@ -298,8 +346,7 @@ function ContextBody(props: ContextViewProps): ReactElement {
         familyCount: family.count,
         tools,
         onFigureClick: (kind: 'skills' | 'answers') => { setBrowserCategory(kind === 'answers' ? 'tool' : 'skill') },
-      }),
-      h(PluginCard, { t, version: buildInfo().version, repo: buildInfo().repo })),
+      })),
     // Band 2: the token ring and the timing ring.
     h('div', { className: 'cb-cols cb-head' },
       h(TokensCard, { t, snapshot: head }),
@@ -358,6 +405,7 @@ function ContextBody(props: ContextViewProps): ReactElement {
         onPreview: (path: string) => previewer?.(path) ?? false,
         ...(opener !== undefined ? { onOpen: opener } : {}),
         onLocate: () => { setBrowserCategory('tool') },
+        preferences,
       })),
     // Band 5: the agent network.
     h(AgentNetworkBridge, { t, ctx: props.ctx, sessionId, snapshot: head, now: Date.now() }),

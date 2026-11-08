@@ -51,11 +51,11 @@ https://github.com/liaimei/dsh-cost-breakdown
 dsh plugin --profile web add github:liaimei/dsh-cost-breakdown
 
 ### 兼容与运行要求
-- DSH：desktop / web profile；客户端半区依赖 sidebarRightTabs 与
-  conversation.composer.dock 槽位，缺少右侧栏时仍渲染输入框下方的读数
+- DSH：desktop / web profile（已在 0.2.2-rc.1 上验证；兼容矩阵声明自 0.1.7-rc.2）；客户端半区依赖
+  sidebarRightTabs 与 conversation.composer.dock 槽位，缺少右侧栏时仍渲染输入框下方的读数
 - Node：^22.19.0 || >=24.0.0
 - 平台：macOS / Windows / Linux（纯 JS，无原生依赖）
-- 零运行时依赖；仓库自带编译产物，安装时无需构建
+- 运行时依赖仅 `zod@4.4.3`（宿主半区校验）；仓库自带编译产物，安装时无需构建
 
 ### 许可证
 Apache-2.0（fork 自 Apache-2.0 的 dsh-context，归属与改动见 NOTICE / FORK.md）
@@ -75,10 +75,12 @@ Apache-2.0（fork 自 Apache-2.0 的 dsh-context，归属与改动见 NOTICE / F
 3. 节假日安全回退 — 配置给不出合法日期时退回内置节假日表，而不是当成「没有节假日」；
    后者会让每个节假日按高峰价计费（静默翻倍）。
 
-权限：只读会话日志；余额优先走内置 deepseekAccount（不接触令牌）；外部网络仅
-api.deepseek.com；无本地存储、无遥测、无写操作。
+权限：只读会话日志；余额优先走内置 deepseekAccount（不接触令牌）；外部网络为
+api.deepseek.com、models.dev 价目表、中转站公开价目与订阅平台用量接口；只把上次余额写进
+localStorage；无遥测。
 
-验证：79 个单元测试 + e2e（断言 GUI 实际下发的产物）+ live 真实路由，全绿。
+验证：`pnpm run typecheck`（源码与测试两套 tsconfig）+ `pnpm test`（vitest，34 个套件、363 个用例，
+其中 bundle 套件直接加载 `lib/` 产物断言三个投影、七条路由与客户端槽位注册）。
 
 ### 提交前自查
 - [x] 仓库已公开
@@ -93,8 +95,9 @@ The name `dsh-cost-breakdown` was verified free on all three axes (npm registry,
 GitHub repository search, marketplace catalog).
 
 ```bash
+pnpm run verify      # typecheck + build + test
 npm login
-npm publish          # prepack runs `npm run build`; the build is reproducible
+npm publish          # no prepack hook: run the build explicitly first
 ```
 
 `lib/` is committed on purpose: a `github:` install runs no build step, and the
@@ -103,17 +106,14 @@ browser half is served straight from `lib/client.js`.
 ## Release checklist
 
 ```bash
-npm run build      # tsc, both halves
-npm run typecheck  # strict, both halves
-npm test           # 79 unit tests
-npm run test:e2e   # asserts the artifact the running GUI actually serves
-npm run test:live  # the two host routes over the real trust fence
-npm run test:accept
+pnpm run typecheck   # two configs: src (tsconfig.json) and tests (tsconfig.tests.json)
+pnpm run build       # tsdown -> lib/index.js + lib/client.js
+pnpm test            # vitest: core / wire / host / client / bundle
+pnpm run verify      # typecheck + build + test, in one command
 ```
 
-`test:e2e`, `test:live` and `test:accept` require a **running DSH** with this
-plugin enabled. A change to the host half (its package identity, `main`, routes,
-or `cordis.patch.yml`) needs a **DSH restart**: DSH caches host modules by URL
-and the profile's HMR config does not watch module files, so the running process
-keeps serving the code it loaded at startup. Client-half changes only need a
-page refresh.
+`bundle` 套件直接加载 `lib/` 里的构建产物，所以改完源码必须先 `pnpm run build` 再跑测试。
+没有 e2e / live 脚本：真机验证需要一台**运行中的 DSH** 与该插件已启用，那属于人工步骤。
+宿主半区的改动（包身份、`main`、路由、`cordis.patch.yml`）需要**重启 DSH**：DSH 按 URL
+缓存宿主模块，profile 的 HMR 不监听模块文件，运行中的进程会继续用它启动时加载的代码。
+客户端半区的改动只需要刷新页面。

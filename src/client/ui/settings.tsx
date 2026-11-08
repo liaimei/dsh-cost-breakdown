@@ -20,7 +20,7 @@ import type { PreferenceKey } from '../../wire/model'
 export interface SettingsCardProps {
   t: Translate
   hooks?: { preferences?: { subscribe(listener: () => void): () => void; getSnapshot(): PreferencesState } }
-  set?: (field: PreferenceKey, value: string) => void
+  set?: (field: PreferenceKey, value: unknown) => void
   /** The store itself, when the host injected it directly instead of a hook seat. */
   store?: PreferencesStore
 }
@@ -52,7 +52,7 @@ export function PluginSettingsCard(props: SettingsCardProps): ReactElement | nul
   const state = store?.get() ?? hooks?.preferences?.getSnapshot()
   // No scope, or one the host cannot serve: render nothing rather than a dead form.
   if (state === undefined || state.status === 'unavailable') return null
-  const write = (field: PreferenceKey, value: string): void => {
+  const write = (field: PreferenceKey, value: unknown): void => {
     if (set !== undefined) set(field, value)
     else store?.set(field, value)
   }
@@ -76,11 +76,6 @@ export function PluginSettingsCard(props: SettingsCardProps): ReactElement | nul
         { value: 'total', label: t('gran.total') },
         { value: 'delta', label: t('gran.delta') },
       ], next => { write('defaultTrendMode', next) }, readOnly)),
-    row(t('settings.deltaBase'),
-      segment(state.defaultDeltaBase, [
-        { value: 'step', label: t('gran.step') },
-        { value: 'turn', label: t('gran.turn') },
-      ], next => { write('defaultDeltaBase', next) }, readOnly)),
     row(t('settings.toolSort'),
       segment(state.defaultToolSort, [
         { value: 'count', label: t('tool.sort.count') },
@@ -98,6 +93,16 @@ export function PluginSettingsCard(props: SettingsCardProps): ReactElement | nul
         { value: 'show', label: t('insightsEntry.show') },
         { value: 'hide', label: t('insightsEntry.hide') },
       ], next => { write('insightsEntry', next) }, readOnly)),
+    row(t('settings.planTier'),
+      // Positional labels, not plan names: the index selects the Nth tier of whichever family a
+      // platform belongs to, and families disagree on names (Lite/Pro/Max vs Lite/Essential/Standard/Pro).
+      segment(String(state.defaultPlanTier), [
+        { value: '0', label: t('plan.tierIndex.1') },
+        { value: '1', label: t('plan.tierIndex.2') },
+        { value: '2', label: t('plan.tierIndex.3') },
+        { value: '3', label: t('plan.tierIndex.4') },
+      ], next => { write('defaultPlanTier', Number(next)) }, readOnly),
+      t('plan.tierTip')),
     row(t('settings.durationCurve'),
       segment(state.defaultDurationCurve, [
         { value: 'show', label: t('insightsEntry.show') },

@@ -21,6 +21,7 @@ import { SidebarMark } from './ui/mark'
 import { DICT_EN, DICT_ZH } from './i18n/dict'
 import type { Translate } from './i18n/dict'
 import { createPreferencesStore, SETTINGS_NAMESPACE } from './shell/preferences'
+import { readRelayTable, setRelayTableReady } from './data/relayPrices'
 import type { ConfigFormService, PreferencesStore } from './shell/preferences'
 import { watchPlacement } from './shell/placement'
 import { watchSidebarTab } from './shell/sidebar'
@@ -76,6 +77,15 @@ function apply(ctx: ClientContext): void {
   // message's full content from the durable log, anchored at one seq, which the detail window does not ship.
   watchHistoryFaces(ctx)
 
+  // (c0) The relay's published price list, read once per mount. A relay resells other vendors' models,
+  // so the public registry cannot price it; this table is what makes its models priceable without the
+  // user typing every rate. The read is independent of the settings: a failure simply leaves the relay
+  // unpriceable, which the platform card states outright.
+  ctx.effect(() => {
+    readRelayTable((value) => { setRelayTableReady(value) })
+    return () => {}
+  }, 'dsh-cost-breakdown: relay prices')
+
   // (c) User rate tables plus the settings binding, through one deferred inject: a deployment without
   // `configForms` keeps the schema defaults and the registry fallback rates.
   ctx.inject(['configForms'], (injected) => {
@@ -126,7 +136,7 @@ function apply(ctx: ClientContext): void {
   // column still shows it.
   ctx.slots.inject('conversation.composer.dock', () => ctx.slots.register(
     { name: 'conversation.composer.dock', id: DOCK_ID, order: 10, locale: NAMESPACE },
-    (props: Seat) => h(DockReadout, { ...props, t, locale: localeOf }),
+    (props: Seat) => h(DockReadout, { ...props, t, locale: localeOf, preferences }),
   ))
 
   // (g) The per-turn spend pill on the reply tail.
@@ -212,7 +222,10 @@ function watchInsightsPage(ctx: ClientContext, preferences: PreferencesStore, t:
             (props: Seat) => h(InsightsPage, { ...props, t, ctx, preferences }),
           )),
           ctx.slots.inject('sidebar.panellist', () => ctx.slots.register(
-            { name: 'sidebar.panellist', id: NAMESPACE, order: 20, locale: NAMESPACE },
+            // The shell prints this label verbatim (it never consults the plugin dictionary), so the
+            // row name must come from a function here; without it the sidebar falls back to the id,
+            // which prints the package name instead of 「统计」.
+            { name: 'sidebar.panellist', id: NAMESPACE, order: 20, locale: NAMESPACE, label: () => t('ov.title') },
             (props: Seat) => h(InsightsRow, { size: typeof props.size === 'number' ? props.size : undefined }),
           )),
         ].filter((dispose): dispose is () => void => typeof dispose === 'function')

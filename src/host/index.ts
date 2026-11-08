@@ -8,9 +8,10 @@
 
 export { name, inject, Config, apply } from './plugin'
 export type {
-  ActivityLedger, BalanceEntry, BucketTotals, CallLedger, CostLedger, FileOp, HeaderEpoch,
-  HeaderTimeline, HeaderedTool, LedgerDay, LedgerEvent, Period, PlatformBalance, Preferences,
-  RequestRow, SkillEntry, Snapshot, SurfaceEntry, SystemNode, TimelineDetail, TimingSegment,
-  TimingTotals, TurnEntry, TurnLedger,
+  ActivityLedger, BalanceEntry, BucketTotals, CallLedger, CostLedger, CreditRateTable, FileOp,
+  HeaderEpoch, HeaderTimeline, HeaderedTool, LedgerDay, LedgerEvent, Period, PlatformBalance,
+  PlanQuota, PlanQuotaTable, PlanQuotaWindow, Preferences, RelayPrice, RelayPriceTable, RequestRow,
+  SkillEntry, Snapshot, SurfaceEntry, SystemNode, TimelineDetail, TimingSegment, TimingTotals,
+  TurnEntry, TurnLedger,
 } from '../wire/model'
 export type { FoldBounds } from './settings'

@@ -14,15 +14,39 @@
 import type { CallLedger, CostLedger } from '../../wire/model'
 import { creditRateOf } from '../../core/credits'
 import { isDeepSeekRoute } from '../../core/providers'
-import { estimateByBucket, type PriceBook, type SpendCurrency } from './cost'
+import {
+  amortisedFeeOf, monthlyShareOf, planFamilyOf, planUsageOf, tierAt, type PlanFamily, type PlanTier,
+} from '../../core/plans'
+import { estimateByBucket, toCurrency, type PriceBook, type SpendCurrency } from './cost'
+import { noteRelayRoute } from './relayPrices'
 import type { ThirdPartyRates } from './thirdPartyRates'
+
+/** A subscription plan's share of one platform's ledger. Present only on a plan-billed row: the
+ * numbers describe *quota consumed*, which is not money and must never be summed with a bill. */
+export interface PlanSpend {
+  /** The vendor family (智谱 GLM Coding Plan / MiniMax M Plan / Kimi Code Plan). */
+  family: PlanFamily
+  /** The tier in force, from the preference; `null` when the family has no tier rows. */
+  tier: PlanTier | null
+  /** Credits consumed (the plan's own unit); `0` when the family does not meter credits. */
+  credits: number
+  /** Fraction of one month's quota this usage consumed; `null` when the quota is unpublished. */
+  share: number | null
+  /** The amortised part of the monthly fee this usage consumed, in CNY; `null` when unpublished. */
+  feeCny: number | null
+  /** Per-model credits, `null` for a model the plan has no coefficients for. */
+  byModel: Array<{ model: string; credits: number | null }>
+}
 
 /** One platform's spend detail. */
 export interface PlatformSpend {
   /** Display name: the ledger's provider key, which is the platform's factual identity. */
   provider: string
-  /** `money` uses the platform's own billing currency; `credits` shows the credit count as-is. */
-  unit: 'money' | 'credits'
+  /** `money` bills per token in a currency; `credits` bills per request; `plan` is a subscription
+   * whose marginal cost is zero and whose real figure is quota consumed. */
+  unit: 'money' | 'credits' | 'plan'
+  /** The subscription detail, present exactly when `unit === 'plan'`. */
+  plan?: PlanSpend
   /** Billing currency for money platforms; absent for credits (credits have no currency). */
   currency?: SpendCurrency
   /** The value (USD for money, credits for credit platforms). */
@@ -36,6 +60,10 @@ export interface PlatformSpend {
   byModel?: Record<string, number>
   /** Per-model call counts, from the same source as `byModel`. */
   callsByModel?: Record<string, number>
+  /** A plan row only: what the same ledger would cost at the platform's metered list rate, in CNY.
+   * This is the comparison figure — it is *not* a bill the user receives. `null` when the list rate
+   * cannot price these models. */
+  planMetered?: number | null
 }
 
 /** One row of the per-model table inside a platform card.
@@ -125,16 +153,53 @@ export function platformSpendsOf(
   book: PriceBook | null | undefined,
   rates: ThirdPartyRates | null | undefined,
   credits: Record<string, Record<string, number>> | null | undefined,
+  planTierIndex = 0,
 ): PlatformSpend[] {
   if (usage === null || usage === undefined) return []
   const out: PlatformSpend[] = []
   for (const provider of Object.keys(usage)) {
     const models = Object.keys(usage[provider]).sort()
     if (models.length === 0) continue
+    // Remember every relay row id the ledger carries, so its published price list can be resolved
+    // under that exact id (a rate lookup is an exact match, and the list is published once per relay).
+    noteRelayRoute(provider)
     const providerCalls = calls?.[provider]
     const callTotal = providerCalls === undefined
       ? 0
       : Object.values(providerCalls).reduce((sum, count) => sum + count, 0)
+    // A subscription route is checked **first**: its ledger carries real token counts, so any later
+    // branch would price those tokens at the list rate and report a bill the user never receives.
+    const family = planFamilyOf(provider)
+    if (family !== null) {
+      const tier = tierAt(family, planTierIndex)
+      const planUsage = planUsageOf(family, { [provider]: usage[provider] })
+      // The metered equivalent: what these same tokens would cost at the vendor's list rate. Priced
+      // through the ordinary estimator (registry rate, no period doubling for a non-DeepSeek model),
+      // then converted into the plan's own CNY space so the two figures are comparable.
+      const listCost = estimateByBucket({ [provider]: usage[provider] }, book, rates)
+      const meteredCny = listCost.any ? toCurrency(listCost.total, 'cny') : null
+      const byModel: Record<string, number> = {}
+      for (const entry of planUsage.byModel) if (entry.credits !== null) byModel[entry.model] = entry.credits
+      out.push({
+        provider,
+        unit: 'plan',
+        value: planUsage.credits,
+        calls: callTotal,
+        models,
+        byModel,
+        ...(providerCalls !== undefined ? { callsByModel: { ...providerCalls } } : {}),
+        planMetered: meteredCny,
+        plan: {
+          family,
+          tier,
+          credits: planUsage.credits,
+          share: tier === null ? null : monthlyShareOf(planUsage.credits, tier),
+          feeCny: tier === null ? null : amortisedFeeOf(planUsage.credits, tier),
+          byModel: planUsage.byModel,
+        },
+      })
+      continue
+    }
     if (isCreditBilled(provider, models, credits)) {
       // Per-model credits, so the donut and the detail rows can show where the requests went.
       const byModel: Record<string, number> = {}

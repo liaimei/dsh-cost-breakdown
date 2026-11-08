@@ -198,3 +198,57 @@ export const PLATFORM_COLORS: readonly string[] = [
   'var(--cb-ov-blue)',
   'var(--cb-ov-teal)',
 ]
+
+/**
+ * A platform's own colour, keyed by its route id.
+ *
+ * Unlike `PLATFORM_COLORS` (which cycles by position inside **one** card, so the same platform changes
+ * colour from card to card), this mapping is stable across every surface and every session: `workbuddy`
+ * is always green, `deepseek` always blue. The dashboard's rule is that a colour identifies an entity,
+ * not a slot, so the dock, the platform block and the stream all agree.
+ *
+ * A provider this table does not list takes a colour derived from its id, so a new route still gets a
+ * distinct and stable colour instead of falling back to grey.
+ */
+export const PLATFORM_TINTS: Readonly<Record<string, string>> = {
+  'deepseek-official': 'var(--cb-ov-blue)',
+  'deepseek-account': 'var(--cb-ov-blue)',
+  workbuddy: 'var(--cb-ov-green)',
+  'workbuddy-ai': 'var(--cb-ov-teal)',
+  'zai-coding-cn': 'var(--cb-ov-amber)',
+  zai: 'var(--cb-ov-orange)',
+  'qwen-token-plan': 'var(--cb-ov-purple)',
+  'qwen-token-plan-cn': 'var(--cb-ov-purple)',
+  'qwen-token-plan-individual': 'var(--cb-ov-purple)',
+  'minimax-cn': 'var(--cb-ov-pink)',
+  minimax: 'var(--cb-ov-pink)',
+  'kimi-coding': 'var(--cb-ov-indigo)',
+  moonshotai: 'var(--cb-ov-indigo)',
+  'xiaomi-token-plan-cn': 'var(--cb-ov-slate)',
+  'xiaomi-token-plan-ams': 'var(--cb-ov-slate)',
+  'xiaomi-token-plan-sgp': 'var(--cb-ov-slate)',
+}
+
+/** The unordered palette the id-hash fallback draws from. */
+const FALLBACK_TINTS: readonly string[] = [
+  'var(--cb-ov-green)', 'var(--cb-ov-amber)', 'var(--cb-ov-purple)',
+  'var(--cb-ov-pink)', 'var(--cb-ov-blue)', 'var(--cb-ov-teal)',
+  'var(--cb-ov-orange)', 'var(--cb-ov-indigo)', 'var(--cb-ov-slate)',
+]
+
+/**
+ * The colour of one platform, stable for its whole lifetime.
+ *
+ * The fallback is a hash of the route id rather than a counter: a counter would make the colour depend
+ * on which platforms happened to appear first in a session, so the same platform would change colour
+ * between sessions. A hash cannot.
+ */
+export function platformTintOf(provider: string): string {
+  const known = PLATFORM_TINTS[provider]
+  if (known !== undefined) return known
+  let hash = 0
+  for (let index = 0; index < provider.length; index++) {
+    hash = (hash * 31 + provider.charCodeAt(index)) | 0
+  }
+  return FALLBACK_TINTS[Math.abs(hash) % FALLBACK_TINTS.length] as string
+}

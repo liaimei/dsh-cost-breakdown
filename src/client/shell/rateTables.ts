@@ -14,6 +14,7 @@
 import { thirdPartyRatesOf, type ThirdPartyRates } from '../data/thirdPartyRates'
 import { creditRatesOf } from '../../core/credits'
 import type { CreditRateTable } from '../../wire/model'
+import { relayRatesOf, relayRoutes, relayTable } from '../data/relayPrices'
 
 let money: ThirdPartyRates | null = null
 let credits: CreditRateTable | null = null
@@ -24,9 +25,16 @@ export function setRateTables(next: { money?: unknown; credits?: unknown } | nul
   credits = next === null ? null : creditRatesOf(next.credits)
 }
 
-/** The user's per-million-token rates. */
+/**
+ * The per-million-token rates in force: the user's own table **over** the relay's published one.
+ *
+ * A relay publishes its own price list, so its models are priceable without the user typing every
+ * rate; a declared rate still wins per model, because the user's group multiplier is authoritative.
+ * This is the one place the two sources are combined, so every surface that prices money sees the
+ * same table.
+ */
 export function moneyRates(): ThirdPartyRates | null {
-  return money
+  return relayRatesOf(relayTable(), money, relayRoutes())
 }
 
 /** The user's per-request credit rates. */
