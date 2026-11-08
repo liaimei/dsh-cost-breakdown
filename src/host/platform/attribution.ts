@@ -213,8 +213,18 @@ export function createToolAttribution(ctx: Context): ToolAttribution {
     const tools = next()
     // Patch the stable instance, but hand the caller its own proxy back: the proxy's `this`
     // binding carries the reader's scoped registration semantics.
-    lastReader = reader.fiber.name
-    wrapInstance(rawInstanceOf(tools))
+    //
+    // Everything here is best effort. `internal/get` is a Cordis-internal waterfall (verified on
+    // cordis 4.1.0: `(ctx, name, error, next) => any`), not a public plugin extension point, so a
+    // shape change or a hostile reader must degrade to "no attribution" rather than throw inside
+    // another plugin's service read.
+    try {
+      const fiberName = reader?.fiber?.name
+      if (typeof fiberName === 'string' && fiberName !== '') lastReader = fiberName
+      wrapInstance(rawInstanceOf(tools))
+    } catch {
+      // Attribution is optional: the headers unit renders unattributed tools as such.
+    }
     return tools
   })
 
