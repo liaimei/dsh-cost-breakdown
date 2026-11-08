@@ -71,8 +71,6 @@ interface SkillEntry {
 type Granularity = 'step' | 'turn';
 /** Whether the cost curve is cumulative or per-step delta. */
 type TrendMode = 'total' | 'delta';
-/** Delta baseline: previous row, or last step of the previous turn. */
-type DeltaBase = 'step' | 'turn';
 /** File table ordering. */
 type FileSort = 'count' | 'latest' | 'path';
 /** Tool ranking ordering. */
@@ -83,16 +81,19 @@ type Placement = 'all' | 'tab' | 'sidebar';
 type InsightsEntry = 'show' | 'hide';
 /** Whether the session time strip draws the duration curve. */
 type DurationCurve = 'show' | 'hide';
+/** Which subscription tier the user pays for, as a 0-based index into the plan family's tier list.
+ * One number across families whose tier counts differ: 0 is the entry tier everywhere. */
+type PlanTierIndex = number;
 /** User preferences persisted through the settings service (host config, volatile layer). */
 interface Preferences {
   defaultPlacement: Placement;
   defaultGranularity: Granularity;
   defaultTrendMode: TrendMode;
-  defaultDeltaBase: DeltaBase;
   defaultToolSort: ToolSort;
   defaultFileSort: FileSort;
   insightsEntry: InsightsEntry;
   defaultDurationCurve: DurationCurve;
+  defaultPlanTier: PlanTierIndex;
 }
 /** The `contextTimeline` value. Collections (`requests`, `events`, `nodes`, `archive`) are
  * empty in the slim head generation and filled from `TimelineDetail`; `counts`, `last` and
@@ -361,6 +362,53 @@ interface TimingTotals {
 }
 /** Which pricing period a request was billed in. */
 type Period = 'peak' | 'off';
+/** Credit rates: provider → model → credits charged per request. Normalised by
+ * `core/credits.ts`; carried on the timeline head so the browser never guesses a rate. */
+type CreditRateTable = Record<string, Record<string, number>>;
+/** One relay price row: the relay's own published price for one model. */
+interface RelayPrice {
+  model: string;
+  platform: string;
+  group: string;
+  mode: 'token' | 'image';
+  input?: number;
+  output?: number;
+  cacheRead?: number;
+  cacheWrite?: number;
+  perImage?: number;
+  multiplier?: number;
+  tiers?: Array<{
+    minTokens: number;
+    input?: number;
+    output?: number;
+  }>;
+}
+/** A relay's published price table, plus when the host read it. */
+interface RelayPriceTable {
+  relays: Record<string, Record<string, RelayPrice>>;
+  at: number;
+}
+/** One quota window of a subscription plan, as the vendor reports it. */
+interface PlanQuotaWindow {
+  /** The vendor's own label for the window (`5h`, `weekly`, `monthly`, …), printed verbatim. */
+  label: string;
+  /** The window's ceiling. */
+  total: number;
+  /** How much of the ceiling is consumed; never above `total`. */
+  used: number;
+}
+/** One subscription plan's live quota, relayed by the host's plan-quota route. */
+interface PlanQuota {
+  /** The harness route id the quota belongs to. */
+  provider: string;
+  /** The plan family this route bills through. */
+  familyId: string;
+  windows: PlanQuotaWindow[];
+  /** When the host read it (epoch ms), so the panel can say how fresh the figure is. */
+  at: number;
+}
+/** Route id → that plan's quota. A plan the host could not read is simply absent. */
+type PlanQuotaTable = Record<string, PlanQuota>;
 //#endregion
 //#region src/host/settings.d.ts
 /**
@@ -386,7 +434,25 @@ type FoldBounds = typeof DEFAULT_BOUNDS;
  * the schema fills the rest. Consumers never read fields directly — they call
  * {@link resolveBounds}, so a field added here cannot silently miss a default.
  */
-export type Config = Partial<FoldBounds> & Partial<Preferences>;
+export type Config = Partial<FoldBounds> & Partial<Preferences> & Partial<RateTables>;
+/**
+ * Hand-declared rate tables, forwarded to the browser half as-is.
+ *
+ * Both payloads are untrusted by contract: `thirdPartyRatesOf` and `creditRatesOf` in the browser
+ * half re-validate every entry and drop a bad one, so one typo cannot fail the row load. They are
+ * `z.any()` rather than a nested schema for exactly that reason — a strict host-side schema would
+ * turn a single malformed rate into "the whole plugin refuses to load", which is the opposite of
+ * what a hand-edited `cordis.patch.yml` needs.
+ *
+ * There is no settings UI for these yet; they are edited in the profile's `cordis.patch.yml`
+ * (see README, "配置").
+ */
+interface RateTables {
+  /** `<provider>:<model>` → `{ input, output, cacheRead?, cacheWrite? }`, USD per million tokens. */
+  thirdPartyRates?: unknown;
+  /** `<provider>:<model>` → credits per request, or a nested `{ provider: { model: credits } }`. */
+  creditRates?: unknown;
+}
 /**
  * The row schema: retention bounds plus the volatile display preferences.
  *
@@ -405,11 +471,15 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
   defaultPlacement: z<"all" | "sidebar" | "tab", "all" | "sidebar" | "tab", "defined">;
   defaultGranularity: z<"step" | "turn", "step" | "turn", "defined">;
   defaultTrendMode: z<"delta" | "total", "delta" | "total", "defined">;
-  defaultDeltaBase: z<"step" | "turn", "step" | "turn", "defined">;
   defaultToolSort: z<"count" | "name" | "size", "count" | "name" | "size", "defined">;
   defaultFileSort: z<"count" | "latest" | "path", "count" | "latest" | "path", "defined">;
   insightsEntry: z<"hide" | "show", "hide" | "show", "defined">;
   defaultDurationCurve: z<"hide" | "show", "hide" | "show", "defined">;
+  /** The subscription tier index: 0 = entry tier, 1 = middle, 2 = top. Clamped per family at read
+   * time, so one number works for GLM (3 tiers) and MiniMax (3 tiers) alike. */
+  defaultPlanTier: z<number, number, "defined">;
+  thirdPartyRates: z<unknown, unknown, "plain">;
+  creditRates: z<unknown, unknown, "plain">;
 }>>, Schemastery.ObjectT<NoInfer<{
   maxRequestSteps: z<number, number, "defined">;
   maxKeptTurns: z<number, number, "defined">;
@@ -421,11 +491,15 @@ export declare const Config: z<Schemastery.ObjectS<NoInfer<{
   defaultPlacement: z<"all" | "sidebar" | "tab", "all" | "sidebar" | "tab", "defined">;
   defaultGranularity: z<"step" | "turn", "step" | "turn", "defined">;
   defaultTrendMode: z<"delta" | "total", "delta" | "total", "defined">;
-  defaultDeltaBase: z<"step" | "turn", "step" | "turn", "defined">;
   defaultToolSort: z<"count" | "name" | "size", "count" | "name" | "size", "defined">;
   defaultFileSort: z<"count" | "latest" | "path", "count" | "latest" | "path", "defined">;
   insightsEntry: z<"hide" | "show", "hide" | "show", "defined">;
   defaultDurationCurve: z<"hide" | "show", "hide" | "show", "defined">;
+  /** The subscription tier index: 0 = entry tier, 1 = middle, 2 = top. Clamped per family at read
+   * time, so one number works for GLM (3 tiers) and MiniMax (3 tiers) alike. */
+  defaultPlanTier: z<number, number, "defined">;
+  thirdPartyRates: z<unknown, unknown, "plain">;
+  creditRates: z<unknown, unknown, "plain">;
 }>>, "plain">;
 //#endregion
 //#region src/host/plugin.d.ts
@@ -452,4 +526,4 @@ export declare const inject: string[];
  */
 export declare function apply(ctx: Context, config: Config): void;
 //#endregion
-export type { ActivityLedger, BalanceEntry, BucketTotals, CallLedger, CostLedger, FileOp, FoldBounds, HeaderEpoch, HeaderTimeline, HeaderedTool, LedgerDay, LedgerEvent, Period, PlatformBalance, Preferences, RequestRow, SkillEntry, Snapshot, SurfaceEntry, SystemNode, TimelineDetail, TimingSegment, TimingTotals, TurnEntry, TurnLedger };
+export type { ActivityLedger, BalanceEntry, BucketTotals, CallLedger, CostLedger, CreditRateTable, FileOp, FoldBounds, HeaderEpoch, HeaderTimeline, HeaderedTool, LedgerDay, LedgerEvent, Period, PlanQuota, PlanQuotaTable, PlanQuotaWindow, PlatformBalance, Preferences, RelayPrice, RelayPriceTable, RequestRow, SkillEntry, Snapshot, SurfaceEntry, SystemNode, TimelineDetail, TimingSegment, TimingTotals, TurnEntry, TurnLedger };
